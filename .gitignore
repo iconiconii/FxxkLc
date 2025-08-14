@@ -1,0 +1,65 @@
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+logs/
+app.log
+application.log
+backend.log
+spring-boot.log
+startup.log
+startup_debug.log
+system_test.log
+final_test.log
+final_test_redis_fixed.log
+fixed_startup.log
+controller_fix_test.log
+role_fix_test.log
+simple_test.log
+test_after_redis_clear.log
+test_startup.log
+
+# Build artifacts
+target/
+.next/
+node_modules/
+build/
+dist/
+
+# Database backups
+*.sql.backup
+codetop_mysql_backup_*.sql
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# Temporary files
+*.tmp
+*.temp
+response.json
+
+# Documentation (auto-generated)
+docs/
+disabled_health/
+
+# Cache and build info
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test reports
+api-test-report.md
+README-TESTING.md
+PROJECT_SUMMARY.md
+
+# Claude configuration (personal)
+.claude/
