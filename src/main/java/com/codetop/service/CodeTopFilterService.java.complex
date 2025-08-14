@@ -1,0 +1,341 @@
+package com.codetop.service;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.codetop.dto.CodeTopFilterRequest;
+import com.codetop.dto.CodeTopFilterResponse;
+import com.codetop.dto.ProblemRankingDTO;
+import com.codetop.entity.*;
+import com.codetop.mapper.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * CodeTop-style filtering service for advanced problem search and ranking.
+ * 
+ * Features:
+ * - Three-level filtering: Company → Department → Position
+ * - Frequency-based ranking and trending analysis
+ * - Category-based filtering with relevance scoring
+ * - Multi-source data integration with credibility weighting
+ * 
+ * @author CodeTop Team
+ */
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class CodeTopFilterService {
+
+    private final ProblemFrequencyStatsMapper frequencyStatsMapper;
+    private final DepartmentMapper departmentMapper;
+    private final PositionMapper positionMapper;
+    private final ProblemCategoryMapper problemCategoryMapper;
+    private final ProblemMapper problemMapper;
+
+    /**
+     * Get filtered and ranked problems using CodeTop-style filtering.
+     */
+    public CodeTopFilterResponse getFilteredProblems(CodeTopFilterRequest request) {
+        log.info("Processing CodeTop filter request: {}", request);
+
+        // Build the filtering criteria
+        String scope = determineScope(request);
+        
+        // Get problems with frequency statistics
+        Page<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> problemPage = 
+            frequencyStatsMapper.searchProblemsWithFrequency(
+                new Page<>(request.getPage(), request.getSize()),
+                request.getKeyword(),
+                scope,
+                request.getCompanyId(),
+                request.getDepartmentId(),
+                request.getPositionId(),
+                request.getMinFrequencyScore(),
+                request.getDifficulty(),
+                request.getTrendFilter()
+            );
+
+        // Get filter options for UI
+        FilterOptions filterOptions = buildFilterOptions(request.getCompanyId(), request.getDepartmentId());
+
+        // Build response
+        return CodeTopFilterResponse.builder()
+                .problems(convertToRankingDTOs(problemPage.getRecords()))
+                .totalElements(problemPage.getTotal())
+                .totalPages(problemPage.getPages())
+                .currentPage(problemPage.getCurrent())
+                .pageSize(problemPage.getSize())
+                .filterOptions(filterOptions)
+                .build();
+    }
+
+    /**
+     * Get trending problems across all companies.
+     */
+    @Cacheable(value = "trending-problems", key = "#limit + '_' + #days")
+    public List<ProblemRankingDTO> getTrendingProblems(Integer limit, Integer days) {
+        LocalDate sinceDate = LocalDate.now().minusDays(days);
+        
+        List<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> trendingProblems = 
+            frequencyStatsMapper.findTrendingProblems(sinceDate, "GLOBAL", null, limit);
+        
+        return convertToRankingDTOs(trendingProblems);
+    }
+
+    /**
+     * Get hot problems (top percentile + recent activity).
+     */
+    @Cacheable(value = "hot-problems", key = "#companyId + '_' + #limit")
+    public List<ProblemRankingDTO> getHotProblems(Long companyId, Integer limit) {
+        LocalDate sinceDate = LocalDate.now().minusMonths(3);
+        String scope = companyId != null ? "COMPANY" : "GLOBAL";
+        
+        List<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> hotProblems = 
+            frequencyStatsMapper.findHotProblems(
+                new BigDecimal("80.0"), // Top 20%
+                sinceDate,
+                scope,
+                companyId,
+                limit
+            );
+        
+        return convertToRankingDTOs(hotProblems);
+    }
+
+    /**
+     * Get top problems by frequency for a specific scope.
+     */
+    public List<ProblemRankingDTO> getTopProblemsByFrequency(
+            String scope, Long companyId, Long departmentId, Long positionId, Integer limit) {
+        
+        List<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> topProblems = 
+            frequencyStatsMapper.findTopProblemsByFrequency(scope, companyId, departmentId, positionId, limit);
+        
+        return convertToRankingDTOs(topProblems);
+    }
+
+    /**
+     * Get company problem breakdown with department and position analysis.
+     */
+    public List<CompanyProblemBreakdownDTO> getCompanyProblemBreakdown(Long companyId) {
+        List<ProblemFrequencyStatsMapper.CompanyProblemBreakdown> breakdown = 
+            frequencyStatsMapper.findCompanyProblemBreakdown(companyId);
+        
+        return breakdown.stream()
+                .map(this::convertToBreakdownDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get problems by category with frequency information.
+     */
+    public Page<ProblemRankingDTO> getProblemsByCategory(Long categoryId, Integer page, Integer size) {
+        Page<ProblemCategoryMapper.ProblemCategoryWithProblem> categoryProblems = 
+            problemCategoryMapper.findProblemsByCategoryId(new Page<>(page, size), categoryId);
+        
+        // Convert to ranking DTOs and enhance with frequency data
+        List<ProblemRankingDTO> rankingDTOs = categoryProblems.getRecords().stream()
+                .map(this::convertCategoryProblemToRanking)
+                .collect(Collectors.toList());
+        
+        Page<ProblemRankingDTO> result = new Page<>(page, size);
+        result.setRecords(rankingDTOs);
+        result.setTotal(categoryProblems.getTotal());
+        result.setPages(categoryProblems.getPages());
+        
+        return result;
+    }
+
+    /**
+     * Get similar problems based on shared categories.
+     */
+    public List<ProblemRankingDTO> getSimilarProblems(Long problemId, Integer limit) {
+        List<ProblemCategoryMapper.SimilarProblem> similarProblems = 
+            problemCategoryMapper.findSimilarProblems(problemId, 2, limit); // At least 2 shared categories
+        
+        return similarProblems.stream()
+                .map(this::convertSimilarProblemToRanking)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get global problem rankings.
+     */
+    @Cacheable(value = "global-rankings", key = "#page + '_' + #size")
+    public Page<ProblemRankingDTO> getGlobalRankings(Integer page, Integer size) {
+        Page<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> rankings = 
+            frequencyStatsMapper.getGlobalRankings(new Page<>(page, size));
+        
+        List<ProblemRankingDTO> rankingDTOs = convertToRankingDTOs(rankings.getRecords());
+        
+        Page<ProblemRankingDTO> result = new Page<>(page, size);
+        result.setRecords(rankingDTOs);
+        result.setTotal(rankings.getTotal());
+        result.setPages(rankings.getPages());
+        
+        return result;
+    }
+
+    /**
+     * Get category usage statistics for insights.
+     */
+    @Cacheable(value = "category-stats")
+    public List<CategoryUsageStatsDTO> getCategoryUsageStatistics() {
+        List<ProblemCategoryMapper.CategoryUsageStats> stats = 
+            problemCategoryMapper.getCategoryUsageStatistics();
+        
+        return stats.stream()
+                .map(this::convertToCategoryStatsDTO)
+                .collect(Collectors.toList());
+    }
+
+    // Helper methods
+
+    private String determineScope(CodeTopFilterRequest request) {
+        if (request.getPositionId() != null) return "POSITION";
+        if (request.getDepartmentId() != null) return "DEPARTMENT";
+        if (request.getCompanyId() != null) return "COMPANY";
+        return "GLOBAL";
+    }
+
+    private FilterOptions buildFilterOptions(Long companyId, Long departmentId) {
+        FilterOptions options = new FilterOptions();
+        
+        // Get departments for company
+        if (companyId != null) {
+            options.setDepartments(departmentMapper.findByCompanyId(companyId));
+        } else {
+            options.setDepartments(departmentMapper.findTopLevelDepartments());
+        }
+        
+        // Get positions for department
+        if (departmentId != null) {
+            options.setPositions(positionMapper.findByDepartmentId(departmentId));
+        }
+        
+        // Get categories
+        options.setCategoryStats(getCategoryUsageStatistics());
+        
+        return options;
+    }
+
+    private List<ProblemRankingDTO> convertToRankingDTOs(
+            List<ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails> problems) {
+        
+        return problems.stream()
+                .map(this::convertToRankingDTO)
+                .collect(Collectors.toList());
+    }
+
+    private ProblemRankingDTO convertToRankingDTO(ProblemFrequencyStatsMapper.ProblemFrequencyWithDetails problem) {
+        return ProblemRankingDTO.builder()
+                .problemId(problem.getProblemId())
+                .title(problem.getProblemTitle())
+                .difficulty(problem.getProblemDifficulty())
+                .frequencyScore(problem.getTotalFrequencyScore())
+                .interviewCount(problem.getInterviewCount())
+                .frequencyRank(problem.getFrequencyRank())
+                .percentile(problem.getPercentile())
+                .lastAskedDate(problem.getLastAskedDate())
+                .trend(problem.getFrequencyTrend().name())
+                .recencyScore(problem.getRecencyScore())
+                .isHotProblem(problem.isHotProblem())
+                .isTrending(problem.isTrending())
+                .build();
+    }
+
+    private CompanyProblemBreakdownDTO convertToBreakdownDTO(
+            ProblemFrequencyStatsMapper.CompanyProblemBreakdown breakdown) {
+        
+        return CompanyProblemBreakdownDTO.builder()
+                .problemId(breakdown.getProblemId())
+                .problemTitle(breakdown.getProblemTitle())
+                .difficulty(breakdown.getProblemDifficulty())
+                .departmentName(breakdown.getDepartmentName())
+                .positionName(breakdown.getPositionName())
+                .frequencyScore(breakdown.getTotalFrequencyScore())
+                .interviewCount(breakdown.getInterviewCount())
+                .statsScope(breakdown.getStatsScope().name())
+                .build();
+    }
+
+    private ProblemRankingDTO convertCategoryProblemToRanking(
+            ProblemCategoryMapper.ProblemCategoryWithProblem categoryProblem) {
+        
+        return ProblemRankingDTO.builder()
+                .problemId(categoryProblem.getProblemId())
+                .title(categoryProblem.getProblemTitle())
+                .difficulty(categoryProblem.getProblemDifficulty())
+                .relevanceScore(categoryProblem.getRelevanceScore())
+                .isPrimary(categoryProblem.getIsPrimary())
+                .build();
+    }
+
+    private ProblemRankingDTO convertSimilarProblemToRanking(
+            ProblemCategoryMapper.SimilarProblem similarProblem) {
+        
+        return ProblemRankingDTO.builder()
+                .problemId(similarProblem.getProblemId())
+                .title(similarProblem.getTitle())
+                .difficulty(similarProblem.getDifficulty())
+                .sharedCategories(similarProblem.getSharedCategories())
+                .sharedCategoryNames(similarProblem.getSharedCategoryNames())
+                .build();
+    }
+
+    private CategoryUsageStatsDTO convertToCategoryStatsDTO(
+            ProblemCategoryMapper.CategoryUsageStats stats) {
+        
+        return CategoryUsageStatsDTO.builder()
+                .categoryId(stats.getCategoryId())
+                .categoryName(stats.getCategoryName())
+                .displayName(stats.getCategoryDisplayName())
+                .problemCount(stats.getProblemCount())
+                .primaryCount(stats.getPrimaryCount())
+                .avgRelevanceScore(stats.getAvgRelevanceScore())
+                .build();
+    }
+
+    // DTOs
+
+    @lombok.Data
+    @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
+    public static class FilterOptions {
+        private List<Department> departments;
+        private List<Position> positions;
+        private List<CategoryUsageStatsDTO> categoryStats;
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    public static class CompanyProblemBreakdownDTO {
+        private Long problemId;
+        private String problemTitle;
+        private String difficulty;
+        private String departmentName;
+        private String positionName;
+        private BigDecimal frequencyScore;
+        private Integer interviewCount;
+        private String statsScope;
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    public static class CategoryUsageStatsDTO {
+        private Long categoryId;
+        private String categoryName;
+        private String displayName;
+        private Integer problemCount;
+        private Integer primaryCount;
+        private Double avgRelevanceScore;
+    }
+}

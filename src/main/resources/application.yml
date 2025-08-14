@@ -1,0 +1,364 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+spring:
+  application:
+    name: codetop-fsrs-backend
+  
+  profiles:
+    active: dev
+    
+  # Allow circular references (for security filter chain)
+  main:
+    allow-circular-references: true
+  # Database Configuration
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      # Database Connection
+      url: jdbc:mysql://localhost:3306/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+      username: ${DB_USERNAME:root}
+      password: ${DB_PASSWORD:root}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      
+      # Connection Pool Settings
+      initial-size: 10
+      min-idle: 10
+      max-active: 200
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1 FROM DUAL
+      validation-query-timeout: 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      
+      # Performance Monitoring
+      filters: stat,wall,log4j2
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin
+      
+      # SQL Monitoring
+      web-stat-filter:
+        enabled: true
+        url-pattern: /*
+        exclusions: "*.js,*.gif,*.jpg,*.png,*.css,*.ico,/druid/*"
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: 0
+      timeout: 6000ms
+      jedis:
+        pool:
+          max-active: 100
+          max-wait: -1ms
+          max-idle: 10
+          min-idle: 5
+  
+  # Session Configuration
+  session:
+    store-type: redis
+    timeout: 24h
+  # Security Configuration - OAuth2 disabled by default in dev
+  # Uncomment and configure with environment variables to enable OAuth2
+  # security:
+  #   oauth2:
+  #     client:
+  #       registration:
+  #         github:
+  #           client-id: ${GITHUB_CLIENT_ID:}
+  #           client-secret: ${GITHUB_CLIENT_SECRET:}
+  #           scope: user:email
+  #         google:
+  #           client-id: ${GOOGLE_CLIENT_ID:}
+  #           client-secret: ${GOOGLE_CLIENT_SECRET:}
+  #           scope: openid,profile,email
+  
+  # Jackson Configuration
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# MyBatis-Plus Configuration
+mybatis-plus:
+  # Mapper XML Location
+  mapper-locations: classpath*:mapper/**/*.xml
+  
+  # Entity Package
+  type-aliases-package: com.codetop.entity
+  
+  # Configuration
+  configuration:
+    # Camel case mapping
+    map-underscore-to-camel-case: true
+    # Cache enabled
+    cache-enabled: true
+    # Lazy loading
+    lazy-loading-enabled: true
+    aggressive-lazy-loading: false
+    # Multiple result sets
+    multiple-result-sets-enabled: true
+    # Auto mapping
+    auto-mapping-behavior: partial
+    auto-mapping-unknown-column-behavior: warning
+    # SQL Logging
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  
+  # Global Configuration
+  global-config:
+    db-config:
+      # Database ID Strategy
+      id-type: auto
+      # Table name prefix
+      table-prefix: ""
+      # Logical deletion
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      # Field insertion strategy
+      insert-strategy: not_null
+      # Field update strategy
+      update-strategy: not_null
+      # Field selection strategy
+      select-strategy: not_null
+
+# JWT Configuration - REQUIRES ENVIRONMENT VARIABLES IN PRODUCTION
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration: ${JWT_EXPIRATION:86400000}  # 24 hours in milliseconds
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 days in milliseconds
+  
+# Application Security Configuration
+app:
+  security:
+    druid:
+      enabled: ${DRUID_SECURITY_ENABLED:false}
+      admin-role: ${DRUID_ADMIN_ROLE:ADMIN}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    per-user: ${RATE_LIMIT_PER_USER:100}  # requests per minute
+    per-ip: ${RATE_LIMIT_PER_IP:1000}     # requests per minute
+    window-minutes: ${RATE_LIMIT_WINDOW:1}
+
+# FSRS Configuration
+fsrs:
+  # Default FSRS Parameters (17 parameters)
+  default-parameters:
+    - 0.4     # w[0] - initial difficulty for Again rating
+    - 0.6     # w[1] - initial difficulty for Hard rating  
+    - 2.4     # w[2] - initial difficulty for Good rating
+    - 5.8     # w[3] - initial difficulty for Easy rating
+    - 4.93    # w[4] - difficulty decay
+    - 0.94    # w[5] - difficulty multiplier for Again
+    - 0.86    # w[6] - difficulty multiplier for Hard
+    - 0.01    # w[7] - difficulty multiplier for Good
+    - 1.49    # w[8] - difficulty multiplier for Easy
+    - 0.14    # w[9] - initial stability for Again rating
+    - 0.94    # w[10] - initial stability for Hard rating
+    - 2.18    # w[11] - initial stability for Good rating
+    - 0.05    # w[12] - stability multiplier for Again
+    - 0.34    # w[13] - stability multiplier for Hard
+    - 1.26    # w[14] - stability multiplier for Good
+    - 0.29    # w[15] - stability multiplier for Easy
+    - 2.61    # w[16] - retrievability threshold
+  
+  # Algorithm Settings
+  target-retention: 0.9  # 90% retention rate
+  maximum-interval: 365  # Maximum interval in days
+  minimum-interval: 1    # Minimum interval in days
+  
+  # Parameter Optimization Settings
+  optimization:
+    minimum-reviews: 50      # Minimum reviews needed for parameter optimization
+    batch-size: 1000         # Batch size for parameter optimization
+    learning-rate: 0.001     # Learning rate for gradient descent
+    epochs: 100              # Maximum epochs for optimization
+
+# Cache Configuration
+cache:
+  redis:
+    # TTL Configuration (in seconds)
+    ttl:
+      user: 3600           # 1 hour
+      problem: 7200        # 2 hours
+      review-queue: 1800   # 30 minutes
+      analytics: 3600      # 1 hour
+      leaderboard: 1800    # 30 minutes
+
+# API Documentation
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+    doc-expansion: none
+  info:
+    title: CodeTop FSRS Backend API
+    description: Intelligent algorithm problem management with FSRS spaced repetition
+    version: 1.0.0
+    contact:
+      name: CodeTop Team
+      email: support@codetop.com
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: always
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.codetop.fsrs: DEBUG
+    org.springframework.security: DEBUG
+    com.baomidou.mybatisplus: DEBUG
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/codetop-fsrs-backend.log
+    max-size: 100MB
+    max-history: 30
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+# Development CORS settings
+app:
+  cors:
+    allowed-origins: "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
+
+# Development JWT (still requires env var for security)
+jwt:
+  secret: ${JWT_SECRET:development_secret_key_minimum_256_bits_long_for_security_requirements_2024}
+  
+  # H2 for quick development (optional)
+  h2:
+    console:
+      enabled: false
+
+logging:
+  level:
+    com.codetop.fsrs: DEBUG
+    org.springframework.web: DEBUG
+
+---
+# Test Profile
+spring:
+  config:
+    activate:
+      on-profile: test
+  
+  datasource:
+    druid:
+      url: jdbc:mysql://localhost:3306/codetop_fsrs_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+  
+  data:
+    redis:
+      database: 1
+
+logging:
+  level:
+    root: WARN
+    com.codetop.fsrs: INFO
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+      
+  # Production OAuth2 configuration - REQUIRED environment variables
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope: user:email
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid,profile,email
+
+  datasource:
+    druid:
+      url: ${DATABASE_URL}
+      username: ${DATABASE_USERNAME}
+      password: ${DATABASE_PASSWORD}
+      
+      # Production pool settings
+      initial-size: 20
+      max-active: 500
+      
+      # Disable monitoring in production
+      stat-view-servlet:
+        enabled: false
+  
+  data:
+    redis:
+      host: ${REDIS_URL}
+      password: ${REDIS_PASSWORD}
+      
+      jedis:
+        pool:
+          max-active: 200
+
+# Production security settings - MUST use environment variables
+app:
+  security:
+    druid:
+      enabled: true
+      admin-role: ADMIN
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+# Production JWT configuration - MUST be set via environment
+jwt:
+  secret: ${JWT_SECRET}  # REQUIRED - Must be 256+ bits
+  expiration: ${JWT_EXPIRATION:3600000}  # 1 hour in production
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:86400000}  # 24 hours
+
+logging:
+  level:
+    root: INFO
+    com.codetop.fsrs: INFO
+  file:
+    name: /var/log/codetop-fsrs-backend.log

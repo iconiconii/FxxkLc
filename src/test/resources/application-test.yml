@@ -1,0 +1,153 @@
+spring:
+  profiles:
+    active: test
+  
+  # Test Database Configuration (will be overridden by TestContainers)
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 600000
+
+  # H2 Console for debugging (test only)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Test Redis Configuration (will be overridden by TestContainers)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 5
+          max-idle: 3
+          min-idle: 1
+
+  # JPA Configuration for Tests
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    defer-datasource-initialization: true
+
+  # Flyway Configuration for Tests
+  flyway:
+    enabled: false # Disable for most tests, enable specifically for integration tests
+
+  # Test-specific logging
+  logging:
+    level:
+      com.codetop: DEBUG
+      org.springframework.security: DEBUG
+      org.testcontainers: INFO
+      root: INFO
+
+# Security Configuration for Tests
+jwt:
+  secret-key: test-secret-key-for-unit-tests-only-minimum-256-bits-required-1234567890
+  expiration: 3600000 # 1 hour for tests
+  refresh-expiration: 7200000 # 2 hours for tests
+
+# CORS Configuration for Tests
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:8080
+  allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
+  max-age: 3600
+
+# Rate Limiting for Tests (more lenient)
+rate-limiting:
+  enabled: true
+  default-requests-per-minute: 1000 # Higher for tests
+  per-ip-requests-per-minute: 5000 # Higher for tests
+  cleanup-interval-minutes: 5 # More frequent cleanup
+
+# FSRS Configuration for Tests
+fsrs:
+  # Default parameters for testing (FSRS v4.5)
+  default-parameters:
+    w1: 0.4072   # Learning rate for initial difficulty
+    w2: 1.1829   # Learning rate for initial stability
+    w3: 3.1262   # Decay factor for retrievability
+    w4: 15.4722  # Increase factor for easy responses
+    w5: 7.2102   # Increase factor for good responses  
+    w6: 0.5316   # Increase factor for hard responses
+    w7: 1.0651   # Decay for failed reviews
+    w8: 0.0234   # Stability increase for successful review
+    w9: 1.629    # Retrievability impact on stability
+    w10: 0.135   # Difficulty increase for failed reviews
+    w11: 1.0440  # Difficulty decrease for successful reviews
+    w12: 2.1866  # Maximum interval multiplier
+    w13: 0.0661  # Minimum difficulty value
+    w14: 0.336   # Difficulty change rate
+    w15: 2.166   # Stability recovery factor
+    w16: 0.127   # Forgetting curve shape parameter
+    w17: 0.729   # Learning rate adjustment factor
+
+  # Algorithm settings
+  maximum-interval: 36500 # 100 years in days (for testing)
+  minimum-interval: 1     # 1 day minimum
+  graduation-interval: 4  # Days to graduate from learning
+  easy-interval: 7       # Easy response interval
+  
+  # Optimization settings for tests
+  optimization:
+    minimum-reviews: 100  # Lower threshold for tests
+    minimum-improvement-percent: 1.0  # Lower threshold for tests
+    maximum-iterations: 50  # Fewer iterations for faster tests
+
+# Actuator Configuration for Tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: true
+
+# Test-specific properties
+test:
+  containers:
+    mysql:
+      image: mysql:8.0
+      database: fsrs_test
+      username: test_user
+      password: test_password
+    redis:
+      image: redis:7-alpine
+  
+  data:
+    # Generate test data for performance tests
+    generate-test-data: false
+    test-users-count: 10
+    test-problems-count: 100
+    test-reviews-per-user: 50
+
+# Disable security for some tests
+security:
+  test-mode:
+    disable-csrf: true
+    disable-cors: false
+    allow-anonymous: false

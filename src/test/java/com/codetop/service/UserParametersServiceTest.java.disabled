@@ -1,0 +1,596 @@
+package com.codetop.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.codetop.algorithm.FSRSAlgorithm;
+import com.codetop.dto.FSRSParametersDTO;
+import com.codetop.entity.ReviewLog;
+import com.codetop.entity.User;
+import com.codetop.entity.UserParameters;
+import com.codetop.mapper.ReviewLogMapper;
+import com.codetop.mapper.UserMapper;
+import com.codetop.mapper.UserParametersMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Unit tests for UserParametersService - FSRS parameter optimization service.
+ * 
+ * Tests cover:
+ * - Parameter optimization algorithm validation
+ * - Caching behavior and performance
+ * - Business logic for parameter management
+ * - Edge cases and error handling
+ * 
+ * @author CodeTop Team
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("UserParametersService Tests")
+public class UserParametersServiceTest {
+
+    @Mock
+    private UserParametersMapper userParametersMapper;
+    
+    @Mock
+    private ReviewLogMapper reviewLogMapper;
+    
+    @Mock
+    private UserMapper userMapper;
+    
+    @Mock
+    private FSRSAlgorithm fsrsAlgorithm;
+    
+    @Mock
+    private CacheManager cacheManager;
+    
+    @Mock
+    private Cache cache;
+    
+    @InjectMocks
+    private UserParametersService userParametersService;
+
+    private User testUser;
+    private UserParameters testUserParameters;
+    private FSRSParametersDTO defaultParameters;
+    private List<ReviewLog> testReviewLogs;
+
+    @BeforeEach
+    void setUp() {
+        testUser = createTestUser();
+        testUserParameters = createTestUserParameters();
+        defaultParameters = createDefaultParameters();
+        testReviewLogs = createTestReviewLogs();
+        
+        // Mock cache behavior
+        when(cacheManager.getCache(anyString())).thenReturn(cache);
+    }
+
+    private User createTestUser() {
+        User user = new User();
+        user.setId(1L);
+        user.setEmail("test@example.com");
+        user.setUsername("testuser");
+        user.addRole("USER");
+        return user;
+    }
+
+    private UserParameters createTestUserParameters() {
+        UserParameters params = new UserParameters();
+        params.setId(1L);
+        params.setUserId(1L);
+        params.setRequestRetention(BigDecimal.valueOf(0.9));
+        params.setMaximumInterval(36500);
+        params.setW1(BigDecimal.valueOf(0.4072));
+        params.setW2(BigDecimal.valueOf(1.1829));
+        params.setW3(BigDecimal.valueOf(3.1262));
+        params.setW4(BigDecimal.valueOf(15.4722));
+        params.setW5(BigDecimal.valueOf(7.2102));
+        params.setW6(BigDecimal.valueOf(0.5316));
+        params.setW7(BigDecimal.valueOf(1.0651));
+        params.setW8(BigDecimal.valueOf(0.0234));
+        params.setW9(BigDecimal.valueOf(1.629));
+        params.setW10(BigDecimal.valueOf(0.135));
+        params.setW11(BigDecimal.valueOf(1.0440));
+        params.setW12(BigDecimal.valueOf(2.1866));
+        params.setW13(BigDecimal.valueOf(0.0661));
+        params.setW14(BigDecimal.valueOf(0.336));
+        params.setW15(BigDecimal.valueOf(2.166));
+        params.setW16(BigDecimal.valueOf(0.127));
+        params.setW17(BigDecimal.valueOf(0.729));
+        params.setOptimizedAt(LocalDateTime.now().minusDays(1));
+        params.setOptimizationScore(BigDecimal.valueOf(85.5));
+        return params;
+    }
+
+    private FSRSParametersDTO createDefaultParameters() {
+        FSRSParametersDTO params = new FSRSParametersDTO();
+        params.setRequestRetention(0.9);
+        params.setMaximumInterval(36500);
+        // Set all 17 parameters with default values
+        params.setW1(0.4);
+        params.setW2(1.0);
+        params.setW3(3.0);
+        params.setW4(15.0);
+        params.setW5(7.0);
+        params.setW6(0.5);
+        params.setW7(1.0);
+        params.setW8(0.02);
+        params.setW9(1.5);
+        params.setW10(0.1);
+        params.setW11(1.0);
+        params.setW12(2.0);
+        params.setW13(0.05);
+        params.setW14(0.3);
+        params.setW15(2.0);
+        params.setW16(0.1);
+        params.setW17(0.7);
+        return params;
+    }
+
+    private List<ReviewLog> createTestReviewLogs() {
+        return Arrays.asList(
+            createReviewLog(1L, 1, 5, "2024-01-01T10:00:00"),
+            createReviewLog(2L, 3, 10, "2024-01-02T10:00:00"),
+            createReviewLog(3L, 4, 15, "2024-01-03T10:00:00"),
+            createReviewLog(4L, 2, 7, "2024-01-04T10:00:00"),
+            createReviewLog(5L, 3, 12, "2024-01-05T10:00:00")
+        );
+    }
+
+    private ReviewLog createReviewLog(Long problemId, int rating, int elapsedDays, String reviewTime) {
+        ReviewLog log = new ReviewLog();
+        log.setUserId(1L);
+        log.setProblemId(problemId);
+        log.setRating(rating);
+        log.setElapsedDays(elapsedDays);
+        log.setReviewType("REVIEW");
+        log.setReviewedAt(LocalDateTime.parse(reviewTime));
+        log.setCreatedAt(LocalDateTime.parse(reviewTime));
+        return log;
+    }
+
+    @Nested
+    @DisplayName("Parameter Retrieval Tests")
+    class ParameterRetrievalTests {
+
+        @Test
+        @DisplayName("Should get user parameters from database")
+        void shouldGetUserParametersFromDatabase() {
+            // Given
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(cache.get(anyString())).thenReturn(null);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.getUserParameters(1L);
+            
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(result.getRequestRetention()).isEqualTo(0.9);
+            assertThat(result.getW1()).isEqualTo(0.4072);
+            verify(userParametersMapper).selectOne(any(QueryWrapper.class));
+        }
+
+        @Test
+        @DisplayName("Should return cached parameters when available")
+        void shouldReturnCachedParametersWhenAvailable() {
+            // Given
+            Cache.ValueWrapper valueWrapper = mock(Cache.ValueWrapper.class);
+            when(valueWrapper.get()).thenReturn(defaultParameters);
+            when(cache.get(anyString())).thenReturn(valueWrapper);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.getUserParameters(1L);
+            
+            // Then
+            assertThat(result).isEqualTo(defaultParameters);
+            verify(userParametersMapper, never()).selectOne(any());
+        }
+
+        @Test
+        @DisplayName("Should return default parameters for new user")
+        void shouldReturnDefaultParametersForNewUser() {
+            // Given
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+            when(cache.get(anyString())).thenReturn(null);
+            when(fsrsAlgorithm.getDefaultParameters()).thenReturn(defaultParameters);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.getUserParameters(1L);
+            
+            // Then
+            assertThat(result).isEqualTo(defaultParameters);
+            verify(fsrsAlgorithm).getDefaultParameters();
+        }
+
+        @Test
+        @DisplayName("Should handle database errors gracefully")
+        void shouldHandleDatabaseErrorsGracefully() {
+            // Given
+            when(userParametersMapper.selectOne(any(QueryWrapper.class)))
+                .thenThrow(new RuntimeException("Database error"));
+            when(cache.get(anyString())).thenReturn(null);
+            when(fsrsAlgorithm.getDefaultParameters()).thenReturn(defaultParameters);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.getUserParameters(1L);
+            
+            // Then
+            assertThat(result).isEqualTo(defaultParameters);
+            verify(fsrsAlgorithm).getDefaultParameters();
+        }
+    }
+
+    @Nested
+    @DisplayName("Parameter Optimization Tests")
+    class ParameterOptimizationTests {
+
+        @Test
+        @DisplayName("Should optimize parameters with sufficient review data")
+        void shouldOptimizeParametersWithSufficientReviewData() {
+            // Given
+            List<ReviewLog> sufficientLogs = createLargeReviewDataset(150);
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(sufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.optimizeParameters(eq(sufficientLogs), any(FSRSParametersDTO.class)))
+                .thenReturn(createOptimizedParameters());
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.optimizeUserParameters(1L);
+            
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(result.getW1()).isNotEqualTo(defaultParameters.getW1()); // Should be optimized
+            verify(fsrsAlgorithm).optimizeParameters(eq(sufficientLogs), any(FSRSParametersDTO.class));
+            verify(userParametersMapper).updateById(any(UserParameters.class));
+            verify(cache).evict(anyString()); // Cache should be cleared
+        }
+
+        @Test
+        @DisplayName("Should not optimize with insufficient review data")
+        void shouldNotOptimizeWithInsufficientReviewData() {
+            // Given
+            List<ReviewLog> insufficientLogs = createTestReviewLogs(); // Only 5 logs
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(insufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.optimizeUserParameters(1L);
+            
+            // Then
+            assertThat(result).isNotNull();
+            verify(fsrsAlgorithm, never()).optimizeParameters(any(), any());
+            verify(userParametersMapper, never()).updateById(any());
+        }
+
+        @Test
+        @DisplayName("Should create new parameters record for new user during optimization")
+        void shouldCreateNewParametersRecordForNewUserDuringOptimization() {
+            // Given
+            List<ReviewLog> sufficientLogs = createLargeReviewDataset(150);
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(sufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(null); // New user
+            when(fsrsAlgorithm.getDefaultParameters()).thenReturn(defaultParameters);
+            when(fsrsAlgorithm.optimizeParameters(eq(sufficientLogs), any(FSRSParametersDTO.class)))
+                .thenReturn(createOptimizedParameters());
+            when(userParametersMapper.insert(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.optimizeUserParameters(1L);
+            
+            // Then
+            assertThat(result).isNotNull();
+            verify(userParametersMapper).insert(any(UserParameters.class));
+            verify(userParametersMapper, never()).updateById(any());
+        }
+
+        @Test
+        @DisplayName("Should handle optimization errors gracefully")
+        void shouldHandleOptimizationErrorsGracefully() {
+            // Given
+            List<ReviewLog> sufficientLogs = createLargeReviewDataset(150);
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(sufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.optimizeParameters(any(), any()))
+                .thenThrow(new RuntimeException("Optimization failed"));
+            
+            // When/Then
+            assertThatThrownBy(() -> userParametersService.optimizeUserParameters(1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Optimization failed");
+        }
+
+        @Test
+        @DisplayName("Should validate optimized parameters before saving")
+        void shouldValidateOptimizedParametersBeforeSaving() {
+            // Given
+            List<ReviewLog> sufficientLogs = createLargeReviewDataset(150);
+            FSRSParametersDTO invalidOptimizedParams = createInvalidOptimizedParameters();
+            
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(sufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.optimizeParameters(any(), any())).thenReturn(invalidOptimizedParams);
+            when(fsrsAlgorithm.validateParameters(invalidOptimizedParams)).thenReturn(false);
+            when(fsrsAlgorithm.getDefaultParameters()).thenReturn(defaultParameters);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.optimizeUserParameters(1L);
+            
+            // Then - Should fall back to default parameters
+            assertThat(result).isEqualTo(defaultParameters);
+            verify(userParametersMapper, never()).updateById(any()); // Should not save invalid params
+        }
+
+        private List<ReviewLog> createLargeReviewDataset(int size) {
+            return java.util.stream.IntStream.range(0, size)
+                .mapToObj(i -> createReviewLog(
+                    (long) (i % 20 + 1), 
+                    (i % 4) + 1, 
+                    (i % 30) + 1, 
+                    LocalDateTime.now().minusDays(size - i).toString()
+                ))
+                .toList();
+        }
+
+        private FSRSParametersDTO createOptimizedParameters() {
+            FSRSParametersDTO params = createDefaultParameters();
+            params.setW1(0.45); // Slightly different from default
+            params.setW2(1.1);
+            params.setW3(3.2);
+            return params;
+        }
+
+        private FSRSParametersDTO createInvalidOptimizedParameters() {
+            FSRSParametersDTO params = createDefaultParameters();
+            params.setRequestRetention(1.5); // Invalid value
+            return params;
+        }
+    }
+
+    @Nested
+    @DisplayName("Parameter Update Tests")
+    class ParameterUpdateTests {
+
+        @Test
+        @DisplayName("Should update user parameters successfully")
+        void shouldUpdateUserParametersSuccessfully() {
+            // Given
+            FSRSParametersDTO updatedParams = createDefaultParameters();
+            updatedParams.setRequestRetention(0.85);
+            updatedParams.setMaximumInterval(10000);
+            
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.validateParameters(updatedParams)).thenReturn(true);
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.updateUserParameters(1L, updatedParams);
+            
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(result.getRequestRetention()).isEqualTo(0.85);
+            assertThat(result.getMaximumInterval()).isEqualTo(10000);
+            verify(userParametersMapper).updateById(any(UserParameters.class));
+            verify(cache).evict(anyString());
+        }
+
+        @Test
+        @DisplayName("Should reject invalid parameter updates")
+        void shouldRejectInvalidParameterUpdates() {
+            // Given
+            FSRSParametersDTO invalidParams = createDefaultParameters();
+            invalidParams.setRequestRetention(1.5); // Invalid value
+            
+            when(fsrsAlgorithm.validateParameters(invalidParams)).thenReturn(false);
+            
+            // When/Then
+            assertThatThrownBy(() -> userParametersService.updateUserParameters(1L, invalidParams))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid parameters");
+            
+            verify(userParametersMapper, never()).updateById(any());
+        }
+
+        @Test
+        @DisplayName("Should create parameters record for new user during update")
+        void shouldCreateParametersRecordForNewUserDuringUpdate() {
+            // Given
+            FSRSParametersDTO newParams = createDefaultParameters();
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+            when(fsrsAlgorithm.validateParameters(newParams)).thenReturn(true);
+            when(userParametersMapper.insert(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            FSRSParametersDTO result = userParametersService.updateUserParameters(1L, newParams);
+            
+            // Then
+            assertThat(result).isEqualTo(newParams);
+            verify(userParametersMapper).insert(any(UserParameters.class));
+            verify(userParametersMapper, never()).updateById(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Performance and Caching Tests")
+    class PerformanceAndCachingTests {
+
+        @Test
+        @DisplayName("Should use cache for repeated parameter requests")
+        void shouldUseCacheForRepeatedParameterRequests() {
+            // Given
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(cache.get(anyString())).thenReturn(null).thenReturn(mock(Cache.ValueWrapper.class));
+            Cache.ValueWrapper valueWrapper = mock(Cache.ValueWrapper.class);
+            when(valueWrapper.get()).thenReturn(defaultParameters);
+            when(cache.get(anyString())).thenReturn(valueWrapper);
+            
+            // First call - cache miss
+            FSRSParametersDTO result1 = userParametersService.getUserParameters(1L);
+            
+            // Second call - cache hit
+            FSRSParametersDTO result2 = userParametersService.getUserParameters(1L);
+            
+            // Then
+            verify(userParametersMapper, times(1)).selectOne(any()); // Only called once
+            verify(cache).put(anyString(), any()); // Cache was populated
+        }
+
+        @Test
+        @DisplayName("Should evict cache on parameter updates")
+        void shouldEvictCacheOnParameterUpdates() {
+            // Given
+            FSRSParametersDTO updatedParams = createDefaultParameters();
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.validateParameters(updatedParams)).thenReturn(true);
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            userParametersService.updateUserParameters(1L, updatedParams);
+            
+            // Then
+            verify(cache).evict(anyString());
+        }
+
+        @Test
+        @DisplayName("Should evict cache on parameter optimization")
+        void shouldEvictCacheOnParameterOptimization() {
+            // Given
+            List<ReviewLog> sufficientLogs = createLargeReviewDataset(150);
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(sufficientLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.optimizeParameters(any(), any())).thenReturn(createOptimizedParameters());
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            // When
+            userParametersService.optimizeUserParameters(1L);
+            
+            // Then
+            verify(cache).evict(anyString());
+        }
+
+        @Test
+        @DisplayName("Should handle optimization performance for large datasets")
+        void shouldHandleOptimizationPerformanceForLargeDatasets() {
+            // Given
+            List<ReviewLog> largeLogs = createLargeReviewDataset(10000);
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(largeLogs);
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.optimizeParameters(eq(largeLogs), any(FSRSParametersDTO.class)))
+                .thenReturn(createOptimizedParameters());
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            long startTime = System.nanoTime();
+            
+            // When
+            FSRSParametersDTO result = userParametersService.optimizeUserParameters(1L);
+            
+            long endTime = System.nanoTime();
+            double durationMs = (endTime - startTime) / 1_000_000.0;
+            
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(durationMs).isLessThan(10000.0); // Should complete within 10 seconds
+        }
+
+        private List<ReviewLog> createLargeReviewDataset(int size) {
+            return java.util.stream.IntStream.range(0, size)
+                .mapToObj(i -> createReviewLog(
+                    (long) (i % 100 + 1), 
+                    (i % 4) + 1, 
+                    (i % 30) + 1, 
+                    LocalDateTime.now().minusDays(size - i).toString()
+                ))
+                .toList();
+        }
+    }
+
+    @Nested
+    @DisplayName("Business Logic Tests")
+    class BusinessLogicTests {
+
+        @Test
+        @DisplayName("Should calculate optimization score correctly")
+        void shouldCalculateOptimizationScoreCorrectly() {
+            // Given
+            List<ReviewLog> reviewLogs = createTestReviewLogs();
+            when(reviewLogMapper.selectList(any(QueryWrapper.class))).thenReturn(reviewLogs);
+            
+            // When
+            double score = userParametersService.calculateOptimizationScore(1L);
+            
+            // Then
+            assertThat(score).isBetween(0.0, 100.0);
+        }
+
+        @Test
+        @DisplayName("Should determine if optimization is needed")
+        void shouldDetermineIfOptimizationIsNeeded() {
+            // Given - Recent optimization
+            testUserParameters.setOptimizedAt(LocalDateTime.now().minusDays(1));
+            testUserParameters.setOptimizationScore(BigDecimal.valueOf(95.0));
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            
+            // When
+            boolean needsOptimization = userParametersService.needsOptimization(1L);
+            
+            // Then
+            assertThat(needsOptimization).isFalse(); // Recent high-score optimization
+        }
+
+        @Test
+        @DisplayName("Should identify need for optimization with old parameters")
+        void shouldIdentifyNeedForOptimizationWithOldParameters() {
+            // Given - Old optimization
+            testUserParameters.setOptimizedAt(LocalDateTime.now().minusDays(30));
+            testUserParameters.setOptimizationScore(BigDecimal.valueOf(75.0));
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            
+            // When
+            boolean needsOptimization = userParametersService.needsOptimization(1L);
+            
+            // Then
+            assertThat(needsOptimization).isTrue(); // Old or low-score optimization
+        }
+
+        @Test
+        @DisplayName("Should handle concurrent parameter updates safely")
+        void shouldHandleConcurrentParameterUpdatesSafely() {
+            // Given
+            FSRSParametersDTO params1 = createDefaultParameters();
+            params1.setRequestRetention(0.85);
+            FSRSParametersDTO params2 = createDefaultParameters();
+            params2.setRequestRetention(0.95);
+            
+            when(userParametersMapper.selectOne(any(QueryWrapper.class))).thenReturn(testUserParameters);
+            when(fsrsAlgorithm.validateParameters(any())).thenReturn(true);
+            when(userParametersMapper.updateById(any(UserParameters.class))).thenReturn(1);
+            
+            // When - Simulate concurrent updates
+            FSRSParametersDTO result1 = userParametersService.updateUserParameters(1L, params1);
+            FSRSParametersDTO result2 = userParametersService.updateUserParameters(1L, params2);
+            
+            // Then - Both should succeed (last one wins)
+            assertThat(result1).isNotNull();
+            assertThat(result2).isNotNull();
+            verify(userParametersMapper, times(2)).updateById(any(UserParameters.class));
+            verify(cache, times(2)).evict(anyString());
+        }
+    }
+}

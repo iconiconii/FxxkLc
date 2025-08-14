@@ -1,0 +1,83 @@
+spring:
+  config:
+    activate:
+      on-profile: h2test
+  
+  # H2 In-memory Database for Testing
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      username: sa
+      password: 
+      driver-class-name: org.h2.Driver
+      
+      # Minimal pool settings for H2
+      initial-size: 1
+      min-idle: 1
+      max-active: 10
+      max-wait: 60000
+      
+      # Disable monitoring for testing
+      stat-view-servlet:
+        enabled: false
+      web-stat-filter:
+        enabled: false
+  
+  # H2 Console
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  
+  # Disable Redis for testing
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 6000ms
+  
+  # Schema initialization for H2 (MyBatis-Plus compatible)
+  # Note: MyBatis-Plus will handle entity mapping without JPA/Hibernate
+  
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+
+# MyBatis-Plus Configuration for H2
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Logging
+logging:
+  level:
+    com.codetop: DEBUG
+    root: INFO
+    org.springframework.boot.autoconfigure: INFO
+
+# Disable security for testing
+app:
+  security:
+    druid:
+      enabled: false
+  cors:
+    allowed-origins: "*"
+
+# JWT with simple config
+jwt:
+  secret: test_secret_key_for_h2_testing_only_not_for_production_use_256_bits_long
+  expiration: 86400000
+  refresh-expiration: 604800000
