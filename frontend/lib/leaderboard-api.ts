@@ -44,6 +44,25 @@ export interface UserRankInfo {
   monthlyRank: number
   accuracyRank: number
   streakRank: number
+  overallRank?: number
+  percentile?: number
+  badge?: string
+}
+
+export interface TopPerformersSummary {
+  topByVolume: LeaderboardEntry[]
+  topByAccuracy: AccuracyLeaderboardEntry[]
+  topByStreak: StreakLeaderboardEntry[]
+}
+
+export interface LeaderboardStats {
+  totalUsers: number
+  weeklyActiveUsers: number
+  usersWithStreak: number
+  averageAccuracy: number
+  maxCurrentStreak: number
+  maxLongestStreak: number
+  totalReviews: number
 }
 
 export const leaderboardApi = {
@@ -112,4 +131,12 @@ export const leaderboardApi = {
   async getUserRank(userId: number): Promise<UserRankInfo> {
     return await apiRequest<UserRankInfo>(`/leaderboard/user/${userId}/rank`)
   },
-}
+
+  /**
+   * Get leaderboard summary statistics
+   */
+  async getLeaderboardStats(): Promise<TopPerformersSummary> {
+    return await apiRequest<TopPerformersSummary>('/leaderboard/stats')
+  },
+
+  }

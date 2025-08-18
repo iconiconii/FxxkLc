@@ -11,10 +11,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -88,19 +87,19 @@ public class UserParametersService {
     }
 
     /**
-     * Update training count after user completes reviews.
+     * Update review count after user completes reviews.
      */
     @Transactional
-    public void updateTrainingCount(Long userId, int additionalReviews) {
-        int updated = userParametersMapper.incrementTrainingCount(userId, additionalReviews);
+    public void updateReviewCount(Long userId, int additionalReviews) {
+        int updated = userParametersMapper.incrementReviewCount(userId, additionalReviews);
         
         if (updated == 0) {
-            log.warn("Failed to update training count for user {}, creating default parameters", userId);
+            log.warn("Failed to update review count for user {}, creating default parameters", userId);
             createDefaultParameters(userId);
-            userParametersMapper.incrementTrainingCount(userId, additionalReviews);
+            userParametersMapper.incrementReviewCount(userId, additionalReviews);
         }
         
-        log.debug("Updated training count for user {} with {} additional reviews", userId, additionalReviews);
+        log.debug("Updated review count for user {} with {} additional reviews", userId, additionalReviews);
     }
 
     /**
@@ -115,14 +114,14 @@ public class UserParametersService {
         }
         
         // Check if user has enough reviews
-        if (parameters.getTrainingCount() < MIN_REVIEWS_FOR_OPTIMIZATION) {
+        if (parameters.getReviewCount() < MIN_REVIEWS_FOR_OPTIMIZATION) {
             return false;
         }
         
         // Check if optimization is recent enough
-        if (parameters.getOptimizedAt() != null) {
+        if (parameters.getLastOptimized() != null) {
             LocalDateTime cutoff = LocalDateTime.now().minusDays(OPTIMIZATION_DAYS_THRESHOLD);
-            if (parameters.getOptimizedAt().isAfter(cutoff)) {
+            if (parameters.getLastOptimized().isAfter(cutoff)) {
                 return false;
             }
         }
@@ -267,12 +266,16 @@ public class UserParametersService {
      * Convert UserParameters entity to DTO.
      */
     private FSRSParametersDTO convertToDTO(UserParameters entity) {
+        double[] params = entity.getParameterArray();
         return FSRSParametersDTO.builder()
-                .w0(entity.getW0()).w1(entity.getW1()).w2(entity.getW2()).w3(entity.getW3())
-                .w4(entity.getW4()).w5(entity.getW5()).w6(entity.getW6()).w7(entity.getW7())
-                .w8(entity.getW8()).w9(entity.getW9()).w10(entity.getW10()).w11(entity.getW11())
-                .w12(entity.getW12()).w13(entity.getW13()).w14(entity.getW14()).w15(entity.getW15()).w16(entity.getW16())
-                .requestRetention(entity.getRequestRetention())
+                .w0(params[0]).w1(params[1]).w2(params[2]).w3(params[3])
+                .w4(params[4]).w5(params[5]).w6(params[6]).w7(params[7])
+                .w8(params[8]).w9(params[9]).w10(params[10]).w11(params[11])
+                .w12(params[12]).w13(params[13]).w14(params[14]).w15(params[15]).w16(params[16])
+                .requestRetention(entity.getRequestRetention().doubleValue())
+                .maximumInterval(entity.getMaximumInterval())
+                .easyBonus(entity.getEasyBonus().doubleValue())
+                .hardInterval(entity.getHardInterval().doubleValue())
                 .build();
     }
 
@@ -310,26 +313,30 @@ public class UserParametersService {
      * Create optimized parameters entity from optimization result.
      */
     private UserParameters createOptimizedParameters(Long userId, UserParameters current, OptimizationResult result) {
-        Map<String, Double> paramMap = new HashMap<>();
-        
-        for (int i = 0; i < result.weights.length; i++) {
-            paramMap.put("w" + i, result.weights[i]);
-        }
-        paramMap.put("requestRetention", current.getRequestRetention());
-        
-        return UserParameters.builder()
+        UserParameters optimized = UserParameters.builder()
                 .userId(userId)
-                .parameters(paramMap)
-                .trainingCount(current.getTrainingCount())
-                .optimizedAt(LocalDateTime.now())
+                .reviewCount(current.getReviewCount())
+                .requestRetention(current.getRequestRetention())
+                .maximumInterval(current.getMaximumInterval())
+                .easyBonus(current.getEasyBonus())
+                .hardInterval(current.getHardInterval())
+                .newInterval(current.getNewInterval())
+                .graduatingInterval(current.getGraduatingInterval())
                 .isActive(true)
+                .isOptimized(true)
                 .version("FSRS-4.5")
                 .optimizationMethod("GRADIENT_DESCENT")
-                .lossValue(result.loss)
-                .iterations(result.iterations)
-                .performanceImprovement(result.improvement)
-                .notes("Optimized using " + current.getTrainingCount() + " review records")
+                .optimizationLoss(java.math.BigDecimal.valueOf(result.loss))
+                .optimizationIterations(result.iterations)
+                .optimizationAccuracy(java.math.BigDecimal.valueOf(result.accuracy))
+                .performanceImprovement(java.math.BigDecimal.valueOf(result.improvement))
+                .lastOptimized(LocalDateTime.now())
                 .build();
+        
+        // Set optimized weights
+        optimized.setParameterArray(result.weights);
+        
+        return optimized;
     }
 
     /**

@@ -8,14 +8,48 @@ export interface ProblemRankingDTO {
   problemId: number
   title: string
   difficulty: string
-  frequency: number
-  trendScore: number
-  companyCount: number
-  categoryRelevance: number
-  qualityIndicator: string
-  lastSeenDate: string
-  companies: string[]
-  categories: string[]
+  problemUrl: string
+  leetcodeId: string
+  
+  // Frequency statistics
+  frequencyScore: number
+  interviewCount: number
+  frequencyRank: number
+  percentile: number
+  lastAskedDate: string
+  trend: string
+  
+  // Analysis scores
+  recencyScore: number
+  isHotProblem: boolean
+  isTrending: boolean
+  isTopPercentile: boolean
+  
+  // Category information
+  primaryCategory: string
+  allCategories: string[]
+  relevanceScore: number
+  isPrimary: boolean
+  
+  // Similar problems data
+  sharedCategories: number
+  sharedCategoryNames: string
+  
+  // Company-specific data
+  companyName: string
+  departmentName: string
+  positionName: string
+  statsScope: string
+  
+  // Quality indicators
+  credibilityScore: number
+  verificationLevel: string
+  communityScore: number
+  
+  // Additional metadata
+  addedDate: string
+  isPremium: boolean
+  tags: string
 }
 
 export interface CodeTopFilterRequest {
@@ -43,13 +77,15 @@ export interface CodeTopFilterResponse {
   totalElements: number
   totalPages: number
   currentPage: number
-  size: number
-  filterOptions: FilterOptions
-  metadata: {
-    totalProblemsInDatabase: number
-    averageFrequency: number
-    topCategories: string[]
-    queryExecutionTime: number
+  pageSize: number
+  // Note: filterOptions removed - use getFilterOptions() API separately as needed
+  summary: {
+    totalProblems: number
+    hotProblems: number
+    trendingProblems: number
+    avgFrequencyScore: number
+    mostCommonDifficulty: string
+    mostActiveCompany: string
   }
 }
 
@@ -196,7 +232,7 @@ export const codeTopApi = {
   },
 
   /**
-   * Get global problem rankings
+   * Get global problem rankings (simple list)
    */
   async getGlobalRankings(
     page: number = 1,
@@ -208,6 +244,25 @@ export const codeTopApi = {
     })
 
     return await apiRequest<ProblemRankingDTO[]>(`/codetop/rankings/global?${params}`)
+  },
+
+  /**
+   * Get global problems with full pagination info (recommended for simple queries)
+   */
+  async getGlobalProblems(
+    page: number = 1,
+    size: number = 20,
+    sortBy: string = 'frequency_score',
+    sortOrder: string = 'desc'
+  ): Promise<CodeTopFilterResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sortBy,
+      sortOrder,
+    })
+
+    return await apiRequest<CodeTopFilterResponse>(`/codetop/problems/global?${params}`)
   },
 
   /**

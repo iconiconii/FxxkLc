@@ -114,6 +114,27 @@ public class GlobalExceptionHandler {
 
     // Authentication and authorization exceptions
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorizedException(
+            UnauthorizedException ex, HttpServletRequest request) {
+        
+        log.warn("SECURITY_EVENT: UNAUTHORIZED_ACCESS ip={} path={} message={}", 
+                getClientIp(request), request.getRequestURI(), ex.getMessage());
+        
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.UNAUTHORIZED.value())
+                .error("UNAUTHORIZED")
+                .errorCode(1102)
+                .message(ex.getMessage())
+                .correlationId(generateCorrelationId())
+                .path(request.getRequestURI())
+                .severity("MEDIUM")
+                .build();
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNAUTHORIZED);
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentialsException(
             BadCredentialsException ex, HttpServletRequest request) {

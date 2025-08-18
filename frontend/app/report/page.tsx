@@ -1,10 +1,13 @@
 import ReportForm from "@/components/report/report-form"
 import Layout from "@/components/kokonutui/layout"
+import ProtectedRoute from "@/components/auth/protected-route"
 
 export default function ReportPage() {
   return (
     <Layout>
-      <ReportForm />
+      <ProtectedRoute>
+        <ReportForm />
+      </ProtectedRoute>
     </Layout>
   )
 }

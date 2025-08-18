@@ -64,6 +64,16 @@ public class FSRSParametersDTO {
     // Target retention rate (typically 0.9 = 90%)
     @Builder.Default
     private Double requestRetention = 0.9;
+    
+    // Additional FSRS Configuration Parameters
+    @Builder.Default
+    private Integer maximumInterval = 36500;    // Maximum interval in days
+    
+    @Builder.Default
+    private Double easyBonus = 1.3;             // Bonus multiplier for "Easy" button
+    
+    @Builder.Default
+    private Double hardInterval = 1.2;          // Interval multiplier for "Hard" button
 
     /**
      * Create parameters from array.
@@ -189,6 +199,30 @@ public class FSRSParametersDTO {
                                requestRetention * 100);
         }
     }
+
+    // Individual parameter getters (for backward compatibility)
+    public double getW0() { return w0; }
+    public double getW1() { return w1; }
+    public double getW2() { return w2; }
+    public double getW3() { return w3; }
+    public double getW4() { return w4; }
+    public double getW5() { return w5; }
+    public double getW6() { return w6; }
+    public double getW7() { return w7; }
+    public double getW8() { return w8; }
+    public double getW9() { return w9; }
+    public double getW10() { return w10; }
+    public double getW11() { return w11; }
+    public double getW12() { return w12; }
+    public double getW13() { return w13; }
+    public double getW14() { return w14; }
+    public double getW15() { return w15; }
+    public double getW16() { return w16; }
+    
+    public double getRequestRetention() { return requestRetention; }
+    public int getMaximumInterval() { return maximumInterval; }
+    public double getEasyBonus() { return easyBonus; }
+    public double getHardInterval() { return hardInterval; }
 
     @Override
     public String toString() {

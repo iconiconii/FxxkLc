@@ -1,6 +1,6 @@
 package com.codetop.service;
 
-import com.codetop.controller.InterviewReportController;
+import com.codetop.dto.SubmitReportRequest;
 import com.codetop.entity.InterviewReport;
 import com.codetop.mapper.InterviewReportMapper;
 import lombok.RequiredArgsConstructor;
@@ -29,11 +29,12 @@ public class InterviewReportService {
     /**
      * Submit a new interview report.
      */
-    public InterviewReport submitReport(InterviewReportController.SubmitReportRequest request) {
-        log.info("Processing interview report submission for company: {}", request.getCompany());
+    public InterviewReport submitReport(Long userId, SubmitReportRequest request) {
+        log.info("Processing interview report submission for user {} and company: {}", userId, request.getCompany());
 
         // Create new interview report
         InterviewReport report = new InterviewReport();
+        report.setUserId(userId);
         report.setCompanyName(request.getCompany());
         report.setDepartment(request.getDepartment());
         report.setPosition(request.getPosition());

@@ -28,27 +28,27 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
      * Get active parameters for a user.
      * Returns the currently active parameter set or null if none exists.
      */
-    @Select("SELECT * FROM user_parameters WHERE user_id = #{userId} AND is_active = true ORDER BY created_at DESC LIMIT 1")
+    @Select("SELECT * FROM user_fsrs_parameters WHERE user_id = #{userId} AND is_active = true ORDER BY created_at DESC LIMIT 1")
     UserParameters getActiveParametersByUserId(@Param("userId") Long userId);
 
     /**
      * Get parameter history for a user.
      * Returns all parameter sets ordered by creation date (newest first).
      */
-    @Select("SELECT * FROM user_parameters WHERE user_id = #{userId} ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("SELECT * FROM user_fsrs_parameters WHERE user_id = #{userId} ORDER BY created_at DESC LIMIT #{limit}")
     List<UserParameters> getParameterHistory(@Param("userId") Long userId, @Param("limit") int limit);
 
     /**
      * Find users who are candidates for parameter optimization.
      * Users need at least minReviews and haven't been optimized recently.
      */
-    @Select("SELECT DISTINCT up.* FROM user_parameters up " +
+    @Select("SELECT DISTINCT up.* FROM user_fsrs_parameters up " +
             "JOIN users u ON up.user_id = u.id " +
             "LEFT JOIN review_logs rl ON up.user_id = rl.user_id " +
             "WHERE u.is_active = true AND u.deleted = 0 " +
             "AND up.is_active = true " +
-            "AND up.training_count >= #{minReviews} " +
-            "AND (up.optimized_at IS NULL OR up.optimized_at < #{cutoffDate}) " +
+            "AND up.review_count >= #{minReviews} " +
+            "AND (up.last_optimized IS NULL OR up.last_optimized < #{cutoffDate}) " +
             "GROUP BY up.user_id, up.id " +
             "HAVING COUNT(rl.id) >= #{minReviews} " +
             "ORDER BY COUNT(rl.id) DESC " +
@@ -62,7 +62,7 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
     /**
      * Get users with optimized parameters for comparison analysis.
      */
-    @Select("SELECT * FROM user_parameters WHERE is_optimized = true AND is_active = true " +
+    @Select("SELECT * FROM user_fsrs_parameters WHERE is_optimized = true AND is_active = true " +
             "AND performance_improvement IS NOT NULL " +
             "ORDER BY performance_improvement DESC " +
             "LIMIT #{limit}")
@@ -71,15 +71,15 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
     /**
      * Deactivate all existing parameters for a user (before creating new active ones).
      */
-    @Update("UPDATE user_parameters SET is_active = false, updated_at = NOW() WHERE user_id = #{userId} AND is_active = true")
+    @Update("UPDATE user_fsrs_parameters SET is_active = false, updated_at = NOW() WHERE user_id = #{userId} AND is_active = true")
     int deactivateUserParameters(@Param("userId") Long userId);
 
     /**
-     * Update training count for active parameters after new reviews.
+     * Update review count for active parameters after new reviews.
      */
-    @Update("UPDATE user_parameters SET training_count = training_count + #{additionalReviews}, updated_at = NOW() " +
+    @Update("UPDATE user_fsrs_parameters SET review_count = review_count + #{additionalReviews}, updated_at = NOW() " +
             "WHERE user_id = #{userId} AND is_active = true")
-    int incrementTrainingCount(@Param("userId") Long userId, @Param("additionalReviews") int additionalReviews);
+    int incrementReviewCount(@Param("userId") Long userId, @Param("additionalReviews") int additionalReviews);
 
     /**
      * Get statistics about parameter optimization across all users.
@@ -88,14 +88,14 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
             "COUNT(*) as total_users, " +
             "COUNT(CASE WHEN is_optimized = true THEN 1 END) as optimized_users, " +
             "AVG(CASE WHEN is_optimized = true THEN performance_improvement END) as avg_improvement, " +
-            "COUNT(CASE WHEN training_count >= #{minReviews} THEN 1 END) as ready_for_optimization " +
-            "FROM user_parameters WHERE is_active = true")
+            "COUNT(CASE WHEN review_count >= #{minReviews} THEN 1 END) as ready_for_optimization " +
+            "FROM user_fsrs_parameters WHERE is_active = true")
     OptimizationStats getOptimizationStats(@Param("minReviews") int minReviews);
 
     /**
      * Find parameters that need re-optimization due to new data.
      */
-    @Select("SELECT up.* FROM user_parameters up " +
+    @Select("SELECT up.* FROM user_fsrs_parameters up " +
             "JOIN (" +
             "  SELECT user_id, COUNT(*) as recent_reviews " +
             "  FROM review_logs " +
@@ -105,7 +105,7 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
             ") rl ON up.user_id = rl.user_id " +
             "WHERE up.is_active = true " +
             "AND up.is_optimized = true " +
-            "AND (up.optimized_at IS NULL OR up.optimized_at < #{reoptimizationCutoff}) " +
+            "AND (up.last_optimized IS NULL OR up.last_optimized < #{reoptimizationCutoff}) " +
             "ORDER BY rl.recent_reviews DESC " +
             "LIMIT #{limit}")
     List<UserParameters> findReoptimizationCandidates(
@@ -137,7 +137,7 @@ public interface UserParametersMapper extends BaseMapper<UserParameters> {
             "AVG(w15) as avg_w15, STDDEV(w15) as std_w15, " +
             "AVG(w16) as avg_w16, STDDEV(w16) as std_w16, " +
             "AVG(request_retention) as avg_retention, STDDEV(request_retention) as std_retention " +
-            "FROM user_parameters WHERE is_optimized = true AND is_active = true")
+            "FROM user_fsrs_parameters WHERE is_optimized = true AND is_active = true")
     ParameterDistributionStats getParameterDistributionStats();
 
     /**

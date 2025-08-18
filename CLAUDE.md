@@ -53,6 +53,7 @@ npm run lint
 ### Testing
 
 ```bash
+**important** 测试账号 2441933762@qq.com password: password123_
 # Run all tests
 mvn test
 
@@ -76,7 +77,8 @@ mvn clean test jacoco:report
 ```
 
 ### Database Operations
-
+redis容器: codetop-redis
+mysql容器: codetop-mysql
 ```bash
 # Run Flyway migrations
 **important** Use mysql mcp when need to change database

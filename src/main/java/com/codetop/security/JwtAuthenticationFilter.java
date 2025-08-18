@@ -3,6 +3,7 @@ package com.codetop.security;
 import com.codetop.entity.User;
 import com.codetop.service.AuthService;
 import com.codetop.util.JwtUtil;
+import com.codetop.util.UserContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,9 +49,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 
                 User user = authService.getUserById(userId);
                 if (user != null && user.getIsActive()) {
-                    // Set default roles for the user
-                    if (user.getRoles().isEmpty()) {
-                        user.getRoles().add("USER");
+                    // 设置ThreadLocal用户信息
+                    UserContext.setUserInfo(user.getId(), user.getUsername(), user.getEmail());
+                    log.debug("JwtAuthenticationFilter: 设置用户信息到ThreadLocal - userId={}, username={}, thread={}", 
+                             user.getId(), user.getUsername(), Thread.currentThread().getId());
+                    
+                    // 设置Spring Security上下文（保持兼容性）
+                    // 确保用户具有USER角色（AuthService.getUserById已经处理了这个）
+                    if (user.getRoles() == null || user.getRoles().isEmpty()) {
+                        log.warn("User {} has no roles, adding default USER role", user.getUsername());
+                        user.addRole("USER");
                     }
                     List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
                             .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
@@ -62,13 +70,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                    
+                    log.debug("设置用户认证信息: userId={}, username={}", user.getId(), user.getUsername());
                 }
             }
         } catch (Exception ex) {
             log.error("Could not set user authentication in security context", ex);
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // 请求结束后清理ThreadLocal，防止内存泄漏
+            log.debug("JwtAuthenticationFilter: 清理ThreadLocal - thread={}", Thread.currentThread().getId());
+            UserContext.clear();
+        }
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

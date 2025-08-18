@@ -1,10 +1,15 @@
 package com.codetop.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.codetop.annotation.CurrentUserId;
+import com.codetop.dto.UserProblemStatusDTO;
+import com.codetop.dto.UserProblemStatusLegacyDTO;
+import com.codetop.dto.ProblemMasteryDTO;
+import com.codetop.dto.UpdateProblemStatusRequest;
+import com.codetop.dto.ProblemStatisticsDTO;
 import com.codetop.entity.Problem;
 import com.codetop.enums.Difficulty;
 import com.codetop.mapper.ProblemMapper;
-import com.codetop.security.UserPrincipal;
 import com.codetop.service.ProblemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,7 +19,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -188,8 +192,8 @@ public class ProblemController {
      */
     @GetMapping("/statistics")
     @Operation(summary = "Get problem statistics", description = "Get overall problem statistics")
-    public ResponseEntity<ProblemService.ProblemStatistics> getStatistics() {
-        ProblemService.ProblemStatistics result = problemService.getStatistics();
+    public ResponseEntity<ProblemStatisticsDTO> getStatistics() {
+        ProblemStatisticsDTO result = problemService.getStatistics();
         return ResponseEntity.ok(result);
     }
 
@@ -209,11 +213,25 @@ public class ProblemController {
     @GetMapping("/user-progress")
     @Operation(summary = "Get user problem progress", description = "Get user's completion status for problems")
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<List<UserProblemStatus>> getUserProblemProgress(
-            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+    public ResponseEntity<List<UserProblemStatusDTO>> getUserProblemProgress(
+            @CurrentUserId Long userId) {
         
-        List<UserProblemStatus> progress = problemService.getUserProblemProgress(userPrincipal.getId());
+        List<UserProblemStatusDTO> progress = problemService.getUserProblemProgress(userId);
         return ResponseEntity.ok(progress);
+    }
+
+    /**
+     * Get user's problem status.
+     */
+    @GetMapping("/{problemId}/status")
+    @Operation(summary = "Get problem status", description = "Get user's completion status for a problem")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<UserProblemStatusLegacyDTO> getProblemStatus(
+            @PathVariable Long problemId,
+            @CurrentUserId Long userId) {
+        
+        UserProblemStatusLegacyDTO status = problemService.getProblemStatus(userId, problemId);
+        return ResponseEntity.ok(status);
     }
 
     /**
@@ -222,13 +240,13 @@ public class ProblemController {
     @PutMapping("/{problemId}/status")
     @Operation(summary = "Update problem status", description = "Update user's completion status for a problem")
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<UserProblemStatus> updateProblemStatus(
+    public ResponseEntity<UserProblemStatusLegacyDTO> updateProblemStatus(
             @PathVariable Long problemId,
-            @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @Valid @RequestBody UpdateProblemStatusRequest request) {
+            @CurrentUserId Long userId,
+            @Valid @RequestBody com.codetop.dto.UpdateProblemStatusRequest request) {
         
-        UserProblemStatus status = problemService.updateProblemStatus(
-                userPrincipal.getId(), problemId, request);
+        UserProblemStatusLegacyDTO status = problemService.updateProblemStatus(
+                userId, problemId, request);
         return ResponseEntity.ok(status);
     }
 
@@ -238,11 +256,11 @@ public class ProblemController {
     @GetMapping("/{problemId}/mastery")
     @Operation(summary = "Get problem mastery", description = "Get user's mastery level for a specific problem")
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<ProblemMastery> getProblemMastery(
+    public ResponseEntity<ProblemMasteryDTO> getProblemMastery(
             @PathVariable Long problemId,
-            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+            @CurrentUserId Long userId) {
         
-        ProblemMastery mastery = problemService.getProblemMastery(userPrincipal.getId(), problemId);
+        ProblemMasteryDTO mastery = problemService.getProblemMastery(userId, problemId);
         return ResponseEntity.ok(mastery);
     }
 

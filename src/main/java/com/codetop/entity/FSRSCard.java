@@ -77,9 +77,12 @@ public class FSRSCard extends BaseEntity {
     @TableField("next_review_at")
     private LocalDateTime nextReview;
 
-    // Generated column for date-based queries
-    @TableField(value = "due_date", select = false)
+    // Generated column for date-based queries, not allow update and insert
+    // Using @TableField(exist = false) to prevent insert/update operations
+    // This field is calculated in Java code from nextReview field
+    @TableField(exist = false)
     private LocalDate dueDate;
+
 
     @Builder.Default
     @TableField("interval_days")
@@ -102,10 +105,13 @@ public class FSRSCard extends BaseEntity {
     private Integer grade;
 
     // Computed fields for queue prioritization
+    @TableField(exist = false)
     private Double priorityScore;
 
+    @TableField(exist = false)
     private Integer daysOverdue;
 
+    @TableField(exist = false)
     private Double retentionProbability;
 
     // Derived methods

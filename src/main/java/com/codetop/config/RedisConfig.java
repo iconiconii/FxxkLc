@@ -1,18 +1,8 @@
 package com.codetop.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,32 +11,31 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
 /**
- * Simplified Redis configuration following engineering best practices.
+ * Redis配置类 - Spring Cache最佳实践
  * 
- * Features:
- * - Universal JSON serialization with type safety
- * - Configurable TTL with sensible defaults
- * - Minimal, maintainable configuration
+ * 使用自定义的序列化方案：
+ * 1. Key: String序列化器（可读性好）
+ * 2. Value: UniversalJsonRedisSerializer（增强的类型信息处理）
+ * 3. 统一配置RedisTemplate和CacheManager，避免ClassCastException
  * 
- * @author CodeTop Team
+ * @author CodeTop FSRS Team
  */
 @Configuration
 @EnableCaching
 @Slf4j
-public class RedisConfig extends CachingConfigurerSupport {
+public class RedisConfig {
 
-    @Value("${cache.redis.ttl:3600}") // 30 minutes default
+    @Value("${cache.redis.ttl:3600}") // 1 hour default
     private long defaultCacheTtl;
 
     /**
-     * Universal Redis template with optimized JSON serialization
+     * 配置RedisTemplate - 使用Spring推荐的序列化器
      */
     @Bean
     @Primary
@@ -54,60 +43,46 @@ public class RedisConfig extends CachingConfigurerSupport {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         
+        // String序列化器用于key
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        GenericJackson2JsonRedisSerializer jsonSerializer = createUniversalJsonSerializer();
         
+        // 使用自定义的UniversalJsonRedisSerializer，提供更好的类型信息处理
+        UniversalJsonRedisSerializer jsonSerializer = new UniversalJsonRedisSerializer();
+        
+        // 设置序列化器
         template.setKeySerializer(stringSerializer);
         template.setValueSerializer(jsonSerializer);
         template.setHashKeySerializer(stringSerializer);
         template.setHashValueSerializer(jsonSerializer);
         template.setDefaultSerializer(jsonSerializer);
+        
         template.afterPropertiesSet();
         
-        log.info("Redis template configured with universal JSON serialization");
+        log.info("Redis template configured with UniversalJsonRedisSerializer for enhanced type handling");
         return template;
     }
 
     /**
-     * Universal cache manager with configurable defaults
+     * 配置缓存管理器 - 与RedisTemplate使用相同的序列化策略
      */
     @Bean
     @Primary
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+        
+        // 使用与RedisTemplate相同的序列化器配置
+        UniversalJsonRedisSerializer jsonSerializer = new UniversalJsonRedisSerializer();
+        
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofSeconds(defaultCacheTtl))
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(createUniversalJsonSerializer()))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer))
                 .disableCachingNullValues();
+        
+        log.info("Cache manager configured with TTL: {}s, using UniversalJsonRedisSerializer for enhanced type handling", defaultCacheTtl);
         
         return RedisCacheManager.RedisCacheManagerBuilder
                 .fromConnectionFactory(connectionFactory)
                 .cacheDefaults(defaultConfig)
                 .build();
-    }
-
-    /**
-     * Universal JSON serializer with robust configuration
-     */
-    private GenericJackson2JsonRedisSerializer createUniversalJsonSerializer() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        // Essential configurations for robust serialization/deserialization
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-        
-        // Java Time support
-        objectMapper.registerModule(new JavaTimeModule());
-        
-        // Enable default typing for all non-final types (most permissive)
-        objectMapper.activateDefaultTyping(
-            objectMapper.getPolymorphicTypeValidator(),
-            ObjectMapper.DefaultTyping.NON_FINAL,
-            JsonTypeInfo.As.PROPERTY
-        );
-        
-        log.debug("Universal JSON serializer configured for Redis");
-        return new GenericJackson2JsonRedisSerializer(objectMapper);
     }
 }

@@ -1,7 +1,8 @@
 package com.codetop.dto;
 
 import com.codetop.service.CodeTopFilterService;
-import lombok.AllArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,7 +19,6 @@ import java.util.List;
 @Data
 @Builder
 @NoArgsConstructor
-@AllArgsConstructor
 public class CodeTopFilterResponse {
 
     // Results
@@ -30,16 +30,28 @@ public class CodeTopFilterResponse {
     private Long currentPage;
     private Long pageSize;
     
-    // Filter options for UI
-    private CodeTopFilterService.FilterOptions filterOptions;
-    
     // Aggregation info
     private FilterSummary summary;
+    
+    @JsonCreator
+    public CodeTopFilterResponse(
+            @JsonProperty("problems") List<ProblemRankingDTO> problems,
+            @JsonProperty("totalElements") Long totalElements,
+            @JsonProperty("totalPages") Long totalPages,
+            @JsonProperty("currentPage") Long currentPage,
+            @JsonProperty("pageSize") Long pageSize,
+            @JsonProperty("summary") FilterSummary summary) {
+        this.problems = problems;
+        this.totalElements = totalElements;
+        this.totalPages = totalPages;
+        this.currentPage = currentPage;
+        this.pageSize = pageSize;
+        this.summary = summary;
+    }
 
     @Data
     @Builder
     @NoArgsConstructor
-    @AllArgsConstructor
     public static class FilterSummary {
         private Integer totalProblems;
         private Integer hotProblems;
@@ -47,5 +59,21 @@ public class CodeTopFilterResponse {
         private Double avgFrequencyScore;
         private String mostCommonDifficulty;
         private String mostActiveCompany;
+        
+        @JsonCreator
+        public FilterSummary(
+                @JsonProperty("totalProblems") Integer totalProblems,
+                @JsonProperty("hotProblems") Integer hotProblems,
+                @JsonProperty("trendingProblems") Integer trendingProblems,
+                @JsonProperty("avgFrequencyScore") Double avgFrequencyScore,
+                @JsonProperty("mostCommonDifficulty") String mostCommonDifficulty,
+                @JsonProperty("mostActiveCompany") String mostActiveCompany) {
+            this.totalProblems = totalProblems;
+            this.hotProblems = hotProblems;
+            this.trendingProblems = trendingProblems;
+            this.avgFrequencyScore = avgFrequencyScore;
+            this.mostCommonDifficulty = mostCommonDifficulty;
+            this.mostActiveCompany = mostActiveCompany;
+        }
     }
 }

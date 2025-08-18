@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.codetop.mapper.FSRSCardMapper">
+
+    <!-- This mapper file is kept for future complex queries that might need XML configuration -->
+    <!-- Current simple queries are defined using annotations in the mapper interface -->
+
+</mapper>

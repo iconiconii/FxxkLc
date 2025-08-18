@@ -1,8 +1,12 @@
 package com.codetop.controller;
 
+import com.codetop.annotation.CurrentUserId;
+import com.codetop.dto.SubmissionResponse;
+import com.codetop.dto.SubmitReportRequest;
 import com.codetop.entity.InterviewReport;
 import com.codetop.service.InterviewReportService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,12 +36,15 @@ public class InterviewReportController {
      */
     @PostMapping
     @Operation(summary = "Submit interview report", description = "Submit a new interview report from community")
-    public ResponseEntity<SubmissionResponse> submitReport(@Valid @RequestBody SubmitReportRequest request) {
-        log.info("Received interview report submission: company={}, department={}, position={}", 
-                request.getCompany(), request.getDepartment(), request.getPosition());
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<SubmissionResponse> submitReport(
+            @CurrentUserId Long userId,
+            @Valid @RequestBody SubmitReportRequest request) {
+        log.info("Received interview report submission from user {}: company={}, department={}, position={}", 
+                userId, request.getCompany(), request.getDepartment(), request.getPosition());
         
         try {
-            InterviewReport report = interviewReportService.submitReport(request);
+            InterviewReport report = interviewReportService.submitReport(userId, request);
             
             SubmissionResponse response = SubmissionResponse.builder()
                     .success(true)
@@ -47,7 +54,7 @@ public class InterviewReportController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Failed to submit interview report", e);
+            log.error("Failed to submit interview report for user {}", userId, e);
             
             SubmissionResponse response = SubmissionResponse.builder()
                     .success(false)
@@ -79,27 +86,4 @@ public class InterviewReportController {
         return ResponseEntity.ok(reports);
     }
 
-    // DTOs
-
-    @lombok.Data
-    @lombok.Builder
-    public static class SubmitReportRequest {
-        private String company;
-        private String department;
-        private String position;
-        private String problemSearch;
-        private String date;
-        private String additionalNotes;
-        private Integer difficultyRating;
-        private InterviewReport.InterviewRound interviewRound;
-    }
-
-    @lombok.Data
-    @lombok.Builder
-    public static class SubmissionResponse {
-        private boolean success;
-        private Long reportId;
-        private String message;
-        private String errorCode;
-    }
-}
+  }

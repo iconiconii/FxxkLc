@@ -33,19 +33,50 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find user by email.
      */
-    @Select("SELECT * FROM users WHERE email = #{email}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE email = #{email}
+            """)
     Optional<User> findByEmail(@Param("email") String email);
 
     /**
      * Find user by username.
      */
-    @Select("SELECT * FROM users WHERE username = #{username}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE username = #{username}
+            """)
     Optional<User> findByUsername(@Param("username") String username);
 
     /**
      * Find user by email or username.
      */
-    @Select("SELECT * FROM users WHERE email = #{identifier} OR username = #{identifier}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at
+            FROM users 
+            WHERE email = #{identifier} OR username = #{identifier}
+            """)
+    @Results({
+        @Result(column = "password_hash", property = "passwordHash"),
+        @Result(column = "first_name", property = "firstName"),
+        @Result(column = "last_name", property = "lastName"),
+        @Result(column = "avatar_url", property = "avatarUrl"),
+        @Result(column = "is_active", property = "isActive"),
+        @Result(column = "is_email_verified", property = "emailVerified"),
+        @Result(column = "last_login_at", property = "lastLogin"),
+        @Result(column = "oauth_provider", property = "authProvider"),
+        @Result(column = "oauth_id", property = "providerId"),
+        @Result(column = "created_at", property = "createdAt"),
+        @Result(column = "updated_at", property = "updatedAt")
+    })
     Optional<User> findByEmailOrUsername(@Param("identifier") String identifier);
     
     // OAuth provider queries
@@ -53,14 +84,26 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find user by provider ID and auth provider.
      */
-    @Select("SELECT * FROM users WHERE oauth_id = #{providerId} AND oauth_provider = #{authProvider}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE oauth_id = #{providerId} AND oauth_provider = #{authProvider}
+            """)
     Optional<User> findByProviderIdAndAuthProvider(@Param("providerId") String providerId, 
                                                    @Param("authProvider") String authProvider);
 
     /**
      * Find users by auth provider.
      */
-    @Select("SELECT * FROM users WHERE oauth_provider = #{authProvider}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE oauth_provider = #{authProvider}
+            """)
     List<User> findByAuthProvider(@Param("authProvider") String authProvider);
     
     // Active user queries
@@ -68,13 +111,27 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find all active users.
      */
-    @Select("SELECT * FROM users WHERE is_active = true ORDER BY created_at DESC")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE is_active = true 
+            ORDER BY created_at DESC
+            """)
     List<User> findActiveUsers();
     
     /**
      * Find active users with pagination.
      */
-    @Select("SELECT * FROM users WHERE is_active = true ORDER BY created_at DESC")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE is_active = true 
+            ORDER BY created_at DESC
+            """)
     Page<User> findActiveUsersWithPagination(Page<User> page);
     
     // Email verification queries
@@ -89,7 +146,13 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find unverified users.
      */
-    @Select("SELECT * FROM users WHERE is_email_verified = false")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE is_email_verified = false
+            """)
     List<User> findUnverifiedUsers();
     
     // Password reset queries
@@ -141,7 +204,15 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find recently active users.
      */
-    @Select("SELECT * FROM users WHERE last_login_at >= #{startDate} ORDER BY last_login_at DESC LIMIT #{limit}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE last_login_at >= #{startDate} 
+            ORDER BY last_login_at DESC 
+            LIMIT #{limit}
+            """)
     List<User> findRecentlyActiveUsers(@Param("startDate") LocalDateTime startDate, @Param("limit") int limit);
     
     // Bulk operations
@@ -185,7 +256,10 @@ public interface UserMapper extends BaseMapper<User> {
      * Search active users by keyword.
      */
     @Select("""
-            SELECT * FROM users 
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
             WHERE (LOWER(username) LIKE LOWER(CONCAT('%', #{search}, '%')) OR 
                    LOWER(email) LIKE LOWER(CONCAT('%', #{search}, '%')) OR 
                    LOWER(first_name) LIKE LOWER(CONCAT('%', #{search}, '%')) OR 
@@ -245,7 +319,13 @@ public interface UserMapper extends BaseMapper<User> {
     /**
      * Find unverified users older than cutoff date.
      */
-    @Select("SELECT * FROM users WHERE is_email_verified = false AND created_at < #{cutoffDate}")
+    @Select("""
+            SELECT id, username, email, password_hash, first_name, last_name, avatar_url,
+                   is_active, is_email_verified, last_login_at, timezone, oauth_provider, oauth_id,
+                   preferences, created_at, updated_at, deleted
+            FROM users 
+            WHERE is_email_verified = false AND created_at < #{cutoffDate}
+            """)
     List<User> findUnverifiedUsersOlderThan(@Param("cutoffDate") LocalDateTime cutoffDate);
 
     // Reset token functionality disabled - columns don't exist in current DB schema
@@ -370,7 +450,7 @@ public interface UserMapper extends BaseMapper<User> {
                    ROW_NUMBER() OVER (ORDER BY 
                        CASE WHEN COUNT(rl.id) > 0 THEN 
                            SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id)
-                       ELSE 0 END DESC) as rank
+                       ELSE 0 END DESC) as `rank`
             FROM users u
             LEFT JOIN fsrs_cards fc ON u.id = fc.user_id
             LEFT JOIN review_logs rl ON fc.id = rl.card_id AND rl.reviewed_at >= #{startDate}
@@ -421,7 +501,7 @@ public interface UserMapper extends BaseMapper<User> {
      * Get user's global rank.
      */
     @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as rank
+            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
             FROM (
                 SELECT u.id, 
                        ROW_NUMBER() OVER (ORDER BY COALESCE(COUNT(rl.id), 0) DESC) as user_rank
@@ -439,7 +519,7 @@ public interface UserMapper extends BaseMapper<User> {
      * Get user's weekly rank.
      */
     @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as rank
+            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
             FROM (
                 SELECT u.id, 
                        ROW_NUMBER() OVER (ORDER BY COALESCE(COUNT(rl.id), 0) DESC) as user_rank
@@ -457,7 +537,7 @@ public interface UserMapper extends BaseMapper<User> {
      * Get user's monthly rank.
      */
     @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as rank
+            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
             FROM (
                 SELECT u.id, 
                        ROW_NUMBER() OVER (ORDER BY COALESCE(COUNT(rl.id), 0) DESC) as user_rank
@@ -475,7 +555,7 @@ public interface UserMapper extends BaseMapper<User> {
      * Get user's accuracy rank.
      */
     @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as rank
+            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
             FROM (
                 SELECT u.id,
                        ROW_NUMBER() OVER (ORDER BY 
@@ -497,7 +577,7 @@ public interface UserMapper extends BaseMapper<User> {
      * Get user's streak rank.
      */
     @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as rank
+            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
             FROM (
                 SELECT u.id, 
                        ROW_NUMBER() OVER (ORDER BY u.created_at DESC) as user_rank

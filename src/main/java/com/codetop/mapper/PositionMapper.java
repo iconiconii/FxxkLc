@@ -87,7 +87,6 @@ public interface PositionMapper extends BaseMapper<Position> {
             WHERE cd.company_id = #{companyId} 
             AND dp.department_id = #{departmentId}
             AND p.is_active = true AND p.deleted = 0
-            ORDER BY dp.is_primary DESC, dp.demand_level DESC
             """)
     List<Position> findByCompanyAndDepartment(@Param("companyId") Long companyId, @Param("departmentId") Long departmentId);
 

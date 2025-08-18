@@ -2,11 +2,8 @@
 -- Using logical foreign keys only (no physical foreign key constraints)
 -- Compatible with MyBatis-Plus requirements
 
--- Create database if not exists
-CREATE DATABASE IF NOT EXISTS codetop_fsrs 
-DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE codetop_fsrs;
+-- Note: Database creation and selection is handled by the application
+-- CREATE DATABASE and USE statements are removed for compatibility with TestContainers
 
 -- ===================================
 -- 1. Users Table

@@ -361,7 +361,6 @@ public class FSRSWorkflowIntegrationTest extends AbstractIntegrationTest {
                     reviewLog.setElapsedDays((j % 30) + 1);
                     reviewLog.setReviewType(ReviewType.SCHEDULED);
                     reviewLog.setReviewedAt(startDate.plusDays(j));
-                    reviewLog.setCreatedAt(startDate.plusDays(j));
                     
                     reviewLogMapper.insert(reviewLog);
                 }

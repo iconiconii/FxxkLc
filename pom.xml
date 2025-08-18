@@ -171,13 +171,13 @@
             <version>${springdoc.version}</version>
         </dependency>
         
-        <!-- Development Tools -->
-        <dependency>
+        <!-- Development Tools - DevTools removed to avoid classloader conflicts -->
+        <!-- <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
             <scope>runtime</scope>
             <optional>true</optional>
-        </dependency>
+        </dependency> -->
         
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -230,6 +230,13 @@
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-suite</artifactId>
             <scope>test</scope>
+        </dependency>
+        
+        <!-- Logstash Logback Encoder for JSON logging -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
         </dependency>
     </dependencies>
     

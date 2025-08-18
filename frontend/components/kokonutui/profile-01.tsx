@@ -1,6 +1,7 @@
 import { LogOut, MoveUpRight, Settings, CreditCard, FileText } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 interface MenuItem {
   label: string
@@ -15,6 +16,7 @@ interface Profile01Props {
   role: string
   avatar: string
   subscription?: string
+  onLogout?: () => void
 }
 
 const defaultProfile = {
@@ -29,7 +31,25 @@ export default function Profile01({
   role = defaultProfile.role,
   avatar = defaultProfile.avatar,
   subscription = defaultProfile.subscription,
+  onLogout,
 }: Partial<Profile01Props> = defaultProfile) {
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      // Call the parent's onLogout which handles the actual logout and redirect
+      if (onLogout) {
+        await onLogout()
+      } else {
+        // Fallback: just redirect to login if no onLogout provided
+        router.push('/login')
+      }
+    } catch (error) {
+      console.error('Logout failed:', error)
+      // Even if logout fails, redirect to login
+      router.push('/login')
+    }
+  }
   const menuItems: MenuItem[] = [
     {
       label: "Subscription",
@@ -96,6 +116,7 @@ export default function Profile01({
 
             <button
               type="button"
+              onClick={handleLogout}
               className="w-full flex items-center justify-between p-2 
                                 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 
                                 rounded-lg transition-colors duration-200"

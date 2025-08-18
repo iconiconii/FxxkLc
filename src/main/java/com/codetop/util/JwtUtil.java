@@ -1,8 +1,10 @@
 package com.codetop.util;
 
 import com.codetop.entity.User;
+import com.codetop.service.TokenBlacklistService;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -20,6 +22,7 @@ import java.util.Map;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class JwtUtil {
 
     @Value("${jwt.secret}")
@@ -30,6 +33,8 @@ public class JwtUtil {
 
     @Value("${jwt.refresh-expiration}")
     private Long refreshExpiration;
+    
+    private final TokenBlacklistService tokenBlacklistService;
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
@@ -81,6 +86,12 @@ public class JwtUtil {
      */
     public boolean validateAccessToken(String token) {
         try {
+            // First check if token is blacklisted
+            if (tokenBlacklistService.isTokenBlacklisted(token)) {
+                log.debug("Token is blacklisted");
+                return false;
+            }
+            
             Claims claims = getClaimsFromToken(token);
             String tokenType = (String) claims.get("type");
             return "access".equals(tokenType) && !isTokenExpired(claims);

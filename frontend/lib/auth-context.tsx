@@ -36,44 +36,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
   
   // Check for existing authentication on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        if (authApi.isAuthenticated()) {
+        console.log('AuthContext: Starting authentication check')
+        
+        // Check if we have tokens in localStorage
+        const hasAccessToken = typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
+        const hasRefreshToken = typeof window !== 'undefined' && !!localStorage.getItem('refreshToken')
+        
+        console.log('AuthContext: Token status - access:', hasAccessToken, 'refresh:', hasRefreshToken)
+        
+        if (hasAccessToken) {
+          // Try to get user info from stored data first
           const currentUser = authApi.getCurrentUser()
           if (currentUser) {
             // Valid token and user data found
             setUser(currentUser)
             setIsAuthenticated(true)
-            console.log('Auth check successful:', currentUser)
+            console.log('AuthContext: Authentication restored from storage:', currentUser.username)
           } else {
-            // Token exists but user data invalid, try to refresh
-            try {
-              const response = await authApi.refreshToken()
-              setUser(response.user)
-              setIsAuthenticated(true)
-              console.log('Token refresh successful:', response.user)
-            } catch (refreshError) {
-              console.error('Token refresh failed:', refreshError)
-              // Refresh failed, clear tokens
-              await authApi.logout()
-              setUser(null)
-              setIsAuthenticated(false)
-            }
+            console.log('AuthContext: Token exists but user data invalid, clearing auth')
+            await authApi.logout()
+            setUser(null)
+            setIsAuthenticated(false)
+          }
+        } else if (hasRefreshToken) {
+          // No access token but have refresh token, try to refresh
+          try {
+            console.log('AuthContext: Attempting token refresh')
+            const response = await authApi.refreshToken()
+            setUser(response.user)
+            setIsAuthenticated(true)
+            console.log('AuthContext: Token refresh successful:', response.user.username)
+          } catch (refreshError) {
+            console.error('AuthContext: Token refresh failed:', refreshError)
+            // Refresh failed, clear all tokens
+            await authApi.logout()
+            setUser(null)
+            setIsAuthenticated(false)
           }
         } else {
-          console.log('No valid token found')
+          console.log('AuthContext: No tokens found, user not authenticated')
           setUser(null)
           setIsAuthenticated(false)
         }
       } catch (error) {
-        console.error('Auth check failed:', error)
+        console.error('AuthContext: Auth check failed:', error)
+        // On any error, clear authentication state
+        await authApi.logout()
         setUser(null)
         setIsAuthenticated(false)
       } finally {
         setLoading(false)
+        setInitialCheckDone(true)
+        console.log('AuthContext: Authentication check completed')
       }
     }
 
@@ -81,11 +101,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [])
 
   const login = async (credentials: { identifier: string; password: string }) => {
+    // Prevent race condition: don't override if already authenticated with same user
+    if (isAuthenticated && user?.id) {
+      console.log('AuthContext: User already authenticated, skipping redundant login')
+      return
+    }
+
+    console.log('AuthContext: Attempting login for:', credentials.identifier)
+    
     const response = await authApi.login(credentials)
+    
+    // Update state immediately
     setUser(response.user)
     setIsAuthenticated(true)
-    // Force re-render to update isAuthenticated state
     setLoading(false)
+    
+    console.log('AuthContext: Login successful for:', response.user.username)
   }
 
   const register = async (userData: {
@@ -95,11 +126,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     firstName?: string
     lastName?: string
   }) => {
+    // Prevent race condition: don't override if already authenticated
+    if (isAuthenticated && user?.id) {
+      console.log('AuthContext: User already authenticated, skipping redundant register')
+      return
+    }
+
+    console.log('AuthContext: Attempting registration for:', userData.username)
+    
     const response = await authApi.register(userData)
+    
+    // Update state immediately
     setUser(response.user)
     setIsAuthenticated(true)
-    // Force re-render to update isAuthenticated state
     setLoading(false)
+    
+    console.log('AuthContext: Registration successful for:', response.user.username)
   }
 
   const logout = async () => {
@@ -110,7 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     user,
-    loading,
+    loading: loading && !initialCheckDone, // Only show loading during initial check
     login,
     register,
     logout,

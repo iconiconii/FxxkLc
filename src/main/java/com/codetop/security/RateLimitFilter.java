@@ -1,6 +1,7 @@
 package com.codetop.security;
 
-import com.codetop.util.JwtUtil;
+import com.codetop.util.UserContext;
+import com.codetop.security.UserPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -10,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -37,11 +40,7 @@ import java.util.Map;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitService rateLimitService;
-    private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
-
-    private static final String AUTHORIZATION_HEADER = "Authorization";
-    private static final String BEARER_PREFIX = "Bearer ";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
@@ -126,21 +125,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private Long extractUserIdFromToken(HttpServletRequest request) {
-        try {
-            String authHeader = request.getHeader(AUTHORIZATION_HEADER);
-            
-            if (StringUtils.hasText(authHeader) && authHeader.startsWith(BEARER_PREFIX)) {
-                String token = authHeader.substring(BEARER_PREFIX.length());
-                
-                if (jwtUtil.validateAccessToken(token)) {
-                    return jwtUtil.getUserIdFromAccessToken(token);
-                }
-            }
-        } catch (Exception e) {
-            // Token validation failed, treat as unauthenticated
-            log.debug("Failed to extract user ID from token: {}", e.getMessage());
+        // Try to get user ID from UserContext (set by JwtAuthenticationFilter)
+        Long userId = UserContext.getCurrentUserId();
+        
+        if (userId != null) {
+            log.debug("Found user ID from UserContext: {}", userId);
+            return userId;
         }
         
+        // Fallback: try to get from SecurityContext
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() 
+            && authentication.getPrincipal() instanceof UserPrincipal) {
+            UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+            log.debug("Found user ID from SecurityContext: {}", userPrincipal.getId());
+            return userPrincipal.getId();
+        }
+        
+        // No authenticated user found
         return null;
     }
 

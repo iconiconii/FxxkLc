@@ -9,6 +9,13 @@ spring:
   profiles:
     active: dev
     
+  # Disable DevTools restart to avoid classloader conflicts
+  devtools:
+    restart:
+      enabled: true
+    livereload:
+      enabled: true
+    
   # Allow circular references (for security filter chain)
   main:
     allow-circular-references: true
@@ -62,6 +69,14 @@ spring:
           max-wait: -1ms
           max-idle: 10
           min-idle: 5
+  
+  # Cache Configuration
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000  # 1 hour default TTL
+      cache-null-values: false
+      key-prefix: "codetop:cache:"
   
   # Session Configuration
   session:
@@ -240,16 +255,22 @@ management:
 logging:
   level:
     root: INFO
-    com.codetop.fsrs: DEBUG
-    org.springframework.security: DEBUG
+    com.codetop: DEBUG
+    com.codetop.security: INFO
+    com.codetop.service.AuthService: INFO
+    com.codetop.util.JwtUtil: INFO
+    com.codetop.logging: DEBUG
+    com.codetop.controller: INFO
+    com.codetop.service: INFO
+    com.codetop.algorithm: DEBUG
+    com.codetop.mapper: DEBUG
+    org.springframework.security: WARN
+    org.springframework.web: WARN
     com.baomidou.mybatisplus: DEBUG
-  pattern:
-    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: logs/codetop-fsrs-backend.log
-    max-size: 100MB
-    max-history: 30
+    org.apache.ibatis: DEBUG
+    org.redisson: WARN
+    com.alibaba.druid: WARN
+  config: classpath:logback-spring.xml
 
 ---
 # Development Profile
@@ -261,7 +282,7 @@ spring:
 # Development CORS settings
 app:
   cors:
-    allowed-origins: "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
+    allowed-origins: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000"
 
 # Development JWT (still requires env var for security)
 jwt:

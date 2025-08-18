@@ -78,6 +78,12 @@ public class CacheKeyBuilder {
         return buildKey("user", "progress", String.valueOf(userId));
     }
     
+    public static String userProblemStatus(Long userId, Long problemId) {
+        return buildKey("user", "status", 
+                "userId" + PARAM_DELIMITER + userId,
+                "problemId" + PARAM_DELIMITER + problemId);
+    }
+    
     public static String userProblemMastery(Long userId, Long problemId) {
         return buildKey("user", "mastery", 
                 "userId" + PARAM_DELIMITER + userId,

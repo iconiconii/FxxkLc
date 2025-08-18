@@ -23,15 +23,24 @@ export default function ProblemAssessmentModal({
 }: ProblemAssessmentModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, user, loading } = useAuth()
 
   const handleDifficultySubmit = async (difficulty: string) => {
     setIsSubmitting(true)
     setError(null)
     
-    // 更稳健的登录判断：仅依赖 isAuthenticated，避免用户对象延迟导致误判
-    if (!isAuthenticated) {
-      console.log('Authentication check failed:', { isAuthenticated, user })
+    // 等待认证状态加载完成
+    if (loading) {
+      setIsSubmitting(false)
+      setError("正在验证登录状态，请稍候...")
+      return
+    }
+    
+    // 更稳健的登录判断：同时检查token和认证状态
+    const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
+    
+    if (!isAuthenticated && !hasToken) {
+      console.log('Authentication check failed:', { isAuthenticated, hasToken, user, loading })
       setError("请先登录后再进行操作")
       setTimeout(() => {
         window.location.href = '/login'
@@ -70,8 +79,13 @@ export default function ProblemAssessmentModal({
       
       if (error instanceof ApiError) {
         if (error.status === 401) {
-          errorMessage = "请先登录后再进行操作"
-          // Optionally redirect to login
+          errorMessage = "登录已过期，请重新登录"
+          // Clear local tokens on 401
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('accessToken')
+            localStorage.removeItem('refreshToken')
+            localStorage.removeItem('userInfo')
+          }
           setTimeout(() => {
             window.location.href = '/login'
           }, 2000)

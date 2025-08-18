@@ -4,8 +4,6 @@ import com.codetop.dto.CodeTopFilterRequest;
 import com.codetop.dto.CodeTopFilterResponse;
 import com.codetop.dto.ProblemRankingDTO;
 import com.codetop.service.CodeTopFilterService;
-import com.codetop.service.CodeTopFilterService.CompanyProblemBreakdownDTO;
-import com.codetop.service.CodeTopFilterService.CategoryUsageStatsDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -183,6 +181,26 @@ public class CodeTopFilterController {
     }
 
     @Operation(
+        summary = "Get global problems with pagination",
+        description = "Get global frequency-based problem rankings with full pagination info (alternative to complex filter)"
+    )
+    @GetMapping("/problems/global")
+    public ResponseEntity<CodeTopFilterResponse> getGlobalProblems(
+            @Parameter(description = "Page number (1-based)") 
+            @RequestParam(defaultValue = "1") Integer page,
+            @Parameter(description = "Page size") 
+            @RequestParam(defaultValue = "20") Integer size,
+            @Parameter(description = "Sort field") 
+            @RequestParam(defaultValue = "frequency_score") String sortBy,
+            @Parameter(description = "Sort order") 
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        
+        CodeTopFilterResponse response = codeTopFilterService.getGlobalProblems(page, size, sortBy, sortOrder);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
         summary = "Get category usage statistics",
         description = "Get statistics about category usage across all problems"
     )
@@ -196,28 +214,28 @@ public class CodeTopFilterController {
         return ResponseEntity.ok(stats);
     }
 
-    @Operation(
-        summary = "Get filter options",
-        description = "Get available filter options for building dynamic UI filters"
-    )
-    @GetMapping("/filter-options")
-    @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<CodeTopFilterService.FilterOptions> getFilterOptions(
-            @Parameter(description = "Company ID to get departments for") 
-            @RequestParam(required = false) Long companyId,
-            @Parameter(description = "Department ID to get positions for") 
-            @RequestParam(required = false) Long departmentId) {
-        
-        // Create a basic request to get filter options
-        CodeTopFilterRequest request = new CodeTopFilterRequest();
-        request.setCompanyId(companyId);
-        request.setDepartmentId(departmentId);
-        request.setSize(1); // We only need the filter options, not actual results
-        
-        CodeTopFilterResponse response = codeTopFilterService.getFilteredProblems(request);
-        
-        return ResponseEntity.ok(response.getFilterOptions());
-    }
+//    @Operation(
+//        summary = "Get filter options",
+//        description = "Get available filter options for building dynamic UI filters"
+//    )
+//    @GetMapping("/filter-options")
+//    @PreAuthorize("hasRole('USER')")
+//    public ResponseEntity<CodeTopFilterService.FilterOptions> getFilterOptions(
+//            @Parameter(description = "Company ID to get departments for")
+//            @RequestParam(required = false) Long companyId,
+//            @Parameter(description = "Department ID to get positions for")
+//            @RequestParam(required = false) Long departmentId) {
+//
+//        // Create a basic request to get filter options
+//        CodeTopFilterRequest request = new CodeTopFilterRequest();
+//        request.setCompanyId(companyId);
+//        request.setDepartmentId(departmentId);
+//        request.setSize(1); // We only need the filter options, not actual results
+//
+//        CodeTopFilterResponse response = codeTopFilterService.getFilteredProblems(request);
+//
+//        return ResponseEntity.ok(response.getFilterOptions());
+//    }
 
     // Health check endpoint for monitoring
     @Operation(

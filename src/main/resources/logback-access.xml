@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    
+    <!-- 访问日志文件 -->
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/codetop-fsrs-access.log</file>
+        <encoder>
+            <pattern>%h %l %u %t "%r" %s %b "%i{Referer}" "%i{User-Agent}" %D "%i{X-Trace-Id}"</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/codetop-fsrs-access.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>100MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 访问日志控制台输出（仅开发环境） -->
+    <appender name="ACCESS_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} ACCESS - %h "%r" %s %b %D ms [%i{X-Trace-Id}]</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 异步访问日志 -->
+    <appender name="ASYNC_ACCESS_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="ACCESS_FILE"/>
+        <queueSize>1024</queueSize>
+        <discardingThreshold>205</discardingThreshold>
+        <maxFlushTime>1000</maxFlushTime>
+        <neverBlock>true</neverBlock>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+
+    <!-- 根配置 -->
+    <root>
+        <appender-ref ref="ASYNC_ACCESS_FILE"/>
+        <!-- 仅在开发环境启用控制台输出 -->
+        <!-- <appender-ref ref="ACCESS_CONSOLE"/> -->
+    </root>
+    
+</configuration>

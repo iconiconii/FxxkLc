@@ -1,6 +1,7 @@
 package com.codetop.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.codetop.dto.*;
 import com.codetop.entity.Problem;
 import com.codetop.enums.Difficulty;
 import com.codetop.mapper.ProblemMapper;
@@ -13,9 +14,11 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.codetop.logging.TraceContext;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,7 +51,31 @@ public class ProblemService {
      */
     @Cacheable(value = "codetop-problem-single", key = "T(com.codetop.service.CacheKeyBuilder).problemSingle(#problemId)")
     public Optional<Problem> findById(Long problemId) {
-        return Optional.ofNullable(problemMapper.selectById(problemId));
+        TraceContext.setOperation("PROBLEM_FIND_BY_ID");
+        
+        long startTime = System.currentTimeMillis();
+        log.debug("Finding problem by ID: problemId={}", problemId);
+        
+        try {
+            Optional<Problem> result = Optional.ofNullable(problemMapper.selectById(problemId));
+            long duration = System.currentTimeMillis() - startTime;
+            
+            if (result.isPresent()) {
+                Problem problem = result.get();
+                log.debug("Problem found: problemId={}, title='{}', difficulty={}, duration={}ms", 
+                        problemId, problem.getTitle(), problem.getDifficulty(), duration);
+            } else {
+                log.debug("Problem not found: problemId={}, duration={}ms", problemId, duration);
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to find problem: problemId={}, duration={}ms, error={}", 
+                    problemId, duration, e.getMessage(), e);
+            throw e;
+        }
     }
 
     /**
@@ -56,15 +83,48 @@ public class ProblemService {
      */
     @Cacheable(value = "codetop-problem-list", key = "T(com.codetop.service.CacheKeyBuilder).problemList(#difficulty, #page.current, #page.size, #search)")
     public Page<Problem> findAllProblems(Page<Problem> page, String difficulty, String search) {
-        if (difficulty != null && !difficulty.trim().isEmpty()) {
-            if (search != null && !search.trim().isEmpty()) {
-                return problemMapper.findByDifficultyAndSearch(page, difficulty, search.trim());
+        TraceContext.setOperation("PROBLEM_FIND_ALL");
+        
+        long startTime = System.currentTimeMillis();
+        log.debug("Finding all problems: page={}, size={}, difficulty='{}', search='{}'", 
+                page.getCurrent(), page.getSize(), difficulty, search);
+        
+        try {
+            Page<Problem> result;
+            String queryType;
+            
+            if (difficulty != null && !difficulty.trim().isEmpty()) {
+                if (search != null && !search.trim().isEmpty()) {
+                    queryType = "difficulty_and_search";
+                    result = problemMapper.findByDifficultyAndSearch(page, difficulty, search.trim());
+                } else {
+                    queryType = "difficulty_only";
+                    result = problemMapper.findByDifficultyWithPagination(page, difficulty);
+                }
+            } else if (search != null && !search.trim().isEmpty()) {
+                queryType = "search_only";
+                result = problemMapper.searchProblems(page, search.trim());
+            } else {
+                queryType = "all_problems";
+                result = problemMapper.selectPage(page, null);
             }
-            return problemMapper.findByDifficultyWithPagination(page, difficulty);
-        } else if (search != null && !search.trim().isEmpty()) {
-            return problemMapper.searchProblems(page, search.trim());
+            
+            long duration = System.currentTimeMillis() - startTime;
+            
+            log.info("Problems query completed: queryType={}, page={}, size={}, " +
+                    "totalResults={}, actualResults={}, duration={}ms", 
+                    queryType, page.getCurrent(), page.getSize(), 
+                    result.getTotal(), result.getRecords().size(), duration);
+            
+            return result;
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to find problems: page={}, size={}, difficulty='{}', search='{}', " +
+                    "duration={}ms, error={}", 
+                    page.getCurrent(), page.getSize(), difficulty, search, duration, e.getMessage(), e);
+            throw e;
         }
-        return problemMapper.selectPage(page, null);
     }
 
     /**
@@ -148,14 +208,14 @@ public class ProblemService {
      * Get problem statistics.
      */
     @Cacheable(value = "codetop-problem-stats", key = "T(com.codetop.service.CacheKeyBuilder).problemStatistics()")
-    public ProblemStatistics getStatistics() {
+    public ProblemStatisticsDTO getStatistics() {
         Long totalProblems = problemMapper.countActiveProblems();
         Long easyCount = problemMapper.countByDifficulty(Difficulty.EASY.name());
         Long mediumCount = problemMapper.countByDifficulty(Difficulty.MEDIUM.name());
         Long hardCount = problemMapper.countByDifficulty(Difficulty.HARD.name());
         Long premiumCount = problemMapper.countPremiumProblems();
 
-        return ProblemStatistics.builder()
+        return ProblemStatisticsDTO.builder()
                 .totalProblems(totalProblems)
                 .easyCount(easyCount)
                 .mediumCount(mediumCount)
@@ -246,6 +306,8 @@ public class ProblemService {
 
     @lombok.Data
     @lombok.Builder
+    @lombok.NoArgsConstructor
+    @lombok.AllArgsConstructor
     public static class ProblemStatistics {
         private Long totalProblems;
         private Long easyCount;
@@ -283,16 +345,73 @@ public class ProblemService {
     // User problem status methods
 
     /**
+     * Get user's status for a specific problem.
+     */
+    public UserProblemStatusLegacyDTO getProblemStatus(Long userId, Long problemId) {
+        Problem problem = problemMapper.selectById(problemId);
+        if (problem == null) {
+            throw new IllegalArgumentException("Problem not found");
+        }
+        
+        try {
+            // Get or create FSRS card for this user-problem combination
+            FSRSCard card = fsrsService.getOrCreateCard(userId, problemId);
+            
+            // Determine status based on FSRS card state and metrics
+            String status = determineStatusFromCard(card);
+            Integer mastery = calculateMasteryLevel(card);
+            Double accuracy = calculateAccuracyFromFSRS(card);
+            
+            // Format dates for response
+            String lastAttemptDate = card.getLastReview() != null ? 
+                    card.getLastReview().toString() : null;
+            String lastConsideredDate = card.getNextReview() != null ? 
+                    card.getNextReview().toString() : lastAttemptDate;
+            
+            return UserProblemStatusLegacyDTO.builder()
+                    .problemId(problemId)
+                    .title(problem.getTitle())
+                    .difficulty(problem.getDifficulty())
+                    .status(status)
+                    .mastery(mastery)
+                    .lastAttemptDate(lastAttemptDate)
+                    .lastConsideredDate(lastConsideredDate)
+                    .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
+                    .accuracy(accuracy)
+                    .notes(String.format("FSRS State: %s, Stability: %.1f days", 
+                            card.getState().name(), card.getStabilityAsDouble()))
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Failed to get FSRS status for user {} problem {}: {}", userId, problemId, e.getMessage());
+            
+            // Fallback to basic response for new problems
+            return UserProblemStatusLegacyDTO.builder()
+                    .problemId(problemId)
+                    .title(problem.getTitle())
+                    .difficulty(problem.getDifficulty())
+                    .status("not_done")
+                    .mastery(0)
+                    .lastAttemptDate(null)
+                    .lastConsideredDate(null)
+                    .attemptCount(0)
+                    .accuracy(0.0)
+                    .notes("New problem - no attempts yet")
+                    .build();
+        }
+    }
+
+    /**
      * Get user's problem progress for all problems.
      */
     @Cacheable(value = "codetop-user-progress", key = "T(com.codetop.service.CacheKeyBuilder).userProblemProgress(#userId)")
-    public List<com.codetop.controller.ProblemController.UserProblemStatus> getUserProblemProgress(Long userId) {
+    public List<UserProblemStatusDTO> getUserProblemProgress(Long userId) {
         // This is a simplified implementation - would typically query user's FSRS cards and review logs
         List<Problem> problems = problemMapper.selectList(null);
         
         return problems.stream()
                 .limit(10) // Limit for demo purposes
-                .map(problem -> com.codetop.controller.ProblemController.UserProblemStatus.builder()
+                .map(problem -> UserProblemStatusDTO.builder()
                         .problemId(problem.getId())
                         .title(problem.getTitle())
                         .difficulty(problem.getDifficulty())
@@ -304,15 +423,15 @@ public class ProblemService {
                         .accuracy(0.0)
                         .notes("")
                         .build())
-                .toList();
+                .collect(Collectors.toList());
     }
 
     /**
      * Update problem status for user.
      */
     @Transactional
-    public com.codetop.controller.ProblemController.UserProblemStatus updateProblemStatus(
-            Long userId, Long problemId, com.codetop.controller.ProblemController.UpdateProblemStatusRequest request) {
+    public UserProblemStatusLegacyDTO updateProblemStatus(
+            Long userId, Long problemId, UpdateProblemStatusRequest request) {
         
         Problem problem = problemMapper.selectById(problemId);
         if (problem == null) {
@@ -324,7 +443,7 @@ public class ProblemService {
             Integer fsrsRating = convertMasteryToFSRSRating(request.getMastery(), request.getStatus());
             
             // Process FSRS review to update card state and scheduling
-            FSRSService.ReviewResult reviewResult = fsrsService.processReview(
+            FSRSReviewResultDTO reviewResult = fsrsService.processReview(
                     userId, problemId, fsrsRating, 
                     determineReviewType(request.getStatus())
             );
@@ -337,7 +456,7 @@ public class ProblemService {
             log.info("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
                     problemId, request.getStatus(), userId, fsrsRating, reviewResult.getNextReviewTime());
             
-            return com.codetop.controller.ProblemController.UserProblemStatus.builder()
+            return UserProblemStatusLegacyDTO.builder()
                     .problemId(problemId)
                     .title(problem.getTitle())
                     .difficulty(problem.getDifficulty())
@@ -355,7 +474,7 @@ public class ProblemService {
             log.error("Failed to update FSRS status for user {} problem {}: {}", userId, problemId, e.getMessage());
             
             // Fallback to basic status update without FSRS integration
-            return com.codetop.controller.ProblemController.UserProblemStatus.builder()
+            return UserProblemStatusLegacyDTO.builder()
                     .problemId(problemId)
                     .title(problem.getTitle())
                     .difficulty(problem.getDifficulty())
@@ -374,7 +493,7 @@ public class ProblemService {
      * Get problem mastery level for user with FSRS integration.
      */
     @Cacheable(value = "codetop-user-mastery", key = "T(com.codetop.service.CacheKeyBuilder).userProblemMastery(#userId, #problemId)")
-    public com.codetop.controller.ProblemController.ProblemMastery getProblemMastery(Long userId, Long problemId) {
+    public ProblemMasteryDTO getProblemMastery(Long userId, Long problemId) {
         Problem problem = problemMapper.selectById(problemId);
         if (problem == null) {
             throw new IllegalArgumentException("Problem not found");
@@ -396,7 +515,7 @@ public class ProblemService {
             String nextReviewDate = card.getNextReview() != null ? 
                     card.getNextReview().toString() : null;
             
-            return com.codetop.controller.ProblemController.ProblemMastery.builder()
+            return ProblemMasteryDTO.builder()
                     .problemId(problemId)
                     .masteryLevel(masteryLevel)
                     .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
@@ -415,7 +534,7 @@ public class ProblemService {
             log.error("Failed to get FSRS mastery for user {} problem {}: {}", userId, problemId, e.getMessage());
             
             // Fallback to basic response
-            return com.codetop.controller.ProblemController.ProblemMastery.builder()
+            return ProblemMasteryDTO.builder()
                     .problemId(problemId)
                     .masteryLevel(0)
                     .attemptCount(0)
@@ -649,6 +768,30 @@ public class ProblemService {
         
         // Ensure bounds [0.0, 1.0] and convert to percentage
         return Math.max(0.0, Math.min(1.0, accuracy)) * 100.0;
+    }
+
+    /**
+     * Determine status string based on FSRS card state and metrics.
+     */
+    private String determineStatusFromCard(FSRSCard card) {
+        if (card == null || card.getReviewCount() == null || card.getReviewCount() == 0) {
+            return "not_done";
+        }
+        
+        double stability = card.getStabilityAsDouble();
+        int reviewCount = card.getReviewCount();
+        
+        // Consider reviewed if has multiple reviews and good stability
+        if (reviewCount >= 3 && stability >= 7.0) {
+            return "reviewed";
+        }
+        
+        // Consider done if has at least one review
+        if (reviewCount >= 1) {
+            return "done";
+        }
+        
+        return "not_done";
     }
 
     /**

@@ -40,11 +40,11 @@ public class ReviewController {
      */
     @GetMapping("/queue")
     @Operation(summary = "Get review queue", description = "Get personalized review queue using FSRS algorithm")
-    public ResponseEntity<FSRSService.ReviewQueue> getReviewQueue(
+    public ResponseEntity<com.codetop.dto.FSRSReviewQueueDTO> getReviewQueue(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam(defaultValue = "20") int limit) {
         
-        FSRSService.ReviewQueue queue = fsrsService.generateReviewQueue(
+        com.codetop.dto.FSRSReviewQueueDTO queue = fsrsService.generateReviewQueue(
                 userPrincipal.getId(), Math.min(limit, 50));
         return ResponseEntity.ok(queue);
     }
@@ -54,13 +54,13 @@ public class ReviewController {
      */
     @PostMapping("/submit")
     @Operation(summary = "Submit review", description = "Submit review result and update FSRS scheduling")
-    public ResponseEntity<FSRSService.ReviewResult> submitReview(
+    public ResponseEntity<com.codetop.dto.FSRSReviewResultDTO> submitReview(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @Valid @RequestBody SubmitReviewRequest request) {
         
         ReviewType reviewType = ReviewType.valueOf(request.getReviewType().toUpperCase());
         
-        FSRSService.ReviewResult result = fsrsService.processReview(
+        com.codetop.dto.FSRSReviewResultDTO result = fsrsService.processReview(
                 userPrincipal.getId(), 
                 request.getProblemId(),
                 request.getRating(),

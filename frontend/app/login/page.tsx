@@ -1,5 +1,6 @@
 import AuthLayout from "@/components/auth/auth-layout"
 import LoginForm from "@/components/auth/login-form"
+import ProtectedRoute from "@/components/auth/protected-route"
 
 export const metadata = {
   title: "登录 - CodeTop",
@@ -8,8 +9,10 @@ export const metadata = {
 
 export default function LoginPage() {
   return (
-    <AuthLayout>
-      <LoginForm />
-    </AuthLayout>
+    <ProtectedRoute requiredAuth={false}>
+      <AuthLayout>
+        <LoginForm />
+      </AuthLayout>
+    </ProtectedRoute>
   )
 }

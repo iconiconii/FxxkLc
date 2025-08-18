@@ -1,8 +1,10 @@
 package com.codetop.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.codetop.dto.UserCacheDTO;
 import com.codetop.entity.User;
 import com.codetop.enums.AuthProvider;
+import com.codetop.logging.TraceContext;
 import com.codetop.mapper.UserMapper;
 import com.codetop.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -38,58 +40,91 @@ public class AuthService {
     private final UserMapper userMapper;
     private final @Lazy PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * Authenticate user with email/username and password.
      */
     @Transactional
     public AuthResult authenticate(String identifier, String password) {
-        log.debug("Authenticating user: {}", identifier);
+        TraceContext.setOperation("USER_AUTHENTICATE");
+        log.info("Authentication attempt for identifier: {} - TraceId: {}", 
+            identifier, TraceContext.getTraceId());
         
-        Optional<User> userOpt = userMapper.findByEmailOrUsername(identifier);
-        if (userOpt.isEmpty()) {
-            throw new IllegalArgumentException("Account does not exist");
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            Optional<User> userOpt = userMapper.findByEmailOrUsername(identifier);
+            if (userOpt.isEmpty()) {
+                log.warn("Authentication failed: Account does not exist for identifier: {} - TraceId: {}", 
+                    identifier, TraceContext.getTraceId());
+                throw new IllegalArgumentException("Account does not exist");
+            }
+            
+            User user = userOpt.get();
+            TraceContext.setUserId(user.getId());
+            
+            log.debug("Found user account: {} (ID: {}) - TraceId: {}", 
+                user.getUsername(), user.getId(), TraceContext.getTraceId());
+            
+            // Account locking functionality disabled - column doesn't exist in current DB schema
+            // Check if account is locked
+            // if (user.isAccountLocked()) {
+            //     log.warn("Authentication failed: Account locked for user: {} - TraceId: {}", 
+            //         user.getUsername(), TraceContext.getTraceId());
+            //     throw new BadCredentialsException("Account is temporarily locked");
+            // }
+            
+            // Check if account is active
+            if (!user.getIsActive()) {
+                log.warn("Authentication failed: Account disabled for user: {} - TraceId: {}", 
+                    user.getUsername(), TraceContext.getTraceId());
+                throw new BadCredentialsException("Account is disabled");
+            }
+            
+            // Validate password
+            if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+                log.warn("Authentication failed: Incorrect password for user: {} - TraceId: {}", 
+                    user.getUsername(), TraceContext.getTraceId());
+                // Login attempts tracking disabled - column doesn't exist in current DB schema
+                // user.incrementLoginAttempts();
+                // userMapper.updateById(user);
+                throw new BadCredentialsException("Incorrect password");
+            }
+            
+            // Successful login - reset attempts and update login time
+            log.debug("Password validation successful for user: {} - TraceId: {}", 
+                user.getUsername(), TraceContext.getTraceId());
+            
+            user.updateLastLogin();
+            
+            // Assign default USER role for all authenticated users
+            user.addRole("USER");
+            
+            userMapper.updateById(user);
+            log.debug("Updated last login time for user: {} - TraceId: {}", 
+                user.getUsername(), TraceContext.getTraceId());
+            
+            String accessToken = jwtUtil.generateAccessToken(user);
+            String refreshToken = jwtUtil.generateRefreshToken(user);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("User {} authenticated successfully - Duration: {}ms - TraceId: {}", 
+                user.getUsername(), duration, TraceContext.getTraceId());
+            
+            return AuthResult.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .user(user)
+                    .expiresIn(jwtUtil.getAccessTokenExpiration())
+                    .build();
+                    
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Authentication failed for identifier: {} - Duration: {}ms - Error: {} - TraceId: {}", 
+                identifier, duration, e.getMessage(), TraceContext.getTraceId());
+            throw e;
         }
-        
-        User user = userOpt.get();
-        
-        // Account locking functionality disabled - column doesn't exist in current DB schema
-        // Check if account is locked
-        // if (user.isAccountLocked()) {
-        //     throw new BadCredentialsException("Account is temporarily locked");
-        // }
-        
-        // Check if account is active
-        if (!user.getIsActive()) {
-            throw new BadCredentialsException("Account is disabled");
-        }
-        
-        // Validate password
-        if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            // Login attempts tracking disabled - column doesn't exist in current DB schema
-            // user.incrementLoginAttempts();
-            // userMapper.updateById(user);
-            throw new BadCredentialsException("Incorrect password");
-        }
-        
-        // Successful login - reset attempts and update login time
-        user.updateLastLogin();
-        
-        // Assign default USER role for all authenticated users
-        user.addRole("USER");
-        
-        userMapper.updateById(user);
-        
-        String accessToken = jwtUtil.generateAccessToken(user);
-        String refreshToken = jwtUtil.generateRefreshToken(user);
-        
-        log.info("User {} authenticated successfully", user.getUsername());
-        return AuthResult.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .user(user)
-                .expiresIn(jwtUtil.getAccessTokenExpiration())
-                .build();
     }
 
     /**
@@ -222,16 +257,35 @@ public class AuthService {
     }
 
     /**
-     * Get user by ID with caching.
+     * Get user by ID with caching using UserCacheDTO.
+     * 
+     * This approach uses a dedicated DTO for caching to avoid serialization
+     * issues with complex entity objects that have transient fields.
      */
     @Cacheable(value = "codetop-user-profile", key = "T(com.codetop.service.CacheKeyBuilder).userProfile(#userId)")
-    public User getUserById(Long userId) {
+    public UserCacheDTO getUserCacheDTOById(Long userId) {
+        log.info("Cache MISS - Loading user from database for userId: {}", userId);
         User user = userMapper.selectById(userId);
         if (user != null) {
             // Assign default USER role for all users
             user.addRole("USER");
+            return UserCacheDTO.fromUser(user);
         }
-        return user;
+        return null;
+    }
+    
+    /**
+     * Get user by ID, using cache when possible.
+     */
+    public User getUserById(Long userId) {
+        log.info("Getting user by ID: {} - checking cache first", userId);
+        UserCacheDTO cachedUser = getUserCacheDTOById(userId);
+        if (cachedUser != null) {
+            log.info("Cache HIT for userId: {}", userId);
+        } else {
+            log.warn("Cache returned null for userId: {}", userId);
+        }
+        return cachedUser != null ? cachedUser.toUser() : null;
     }
 
     /**
@@ -239,8 +293,28 @@ public class AuthService {
      */
     @Transactional
     public void logout(String accessToken) {
-        // Add token to blacklist (if implementing token blacklist)
-        log.info("User logged out");
+        TraceContext.setOperation("USER_LOGOUT");
+        
+        long startTime = System.currentTimeMillis();
+        String userId = TraceContext.getUserId();
+        
+        log.info("Logout attempt for user: {} - TraceId: {}", 
+            userId != null ? userId : "unknown", TraceContext.getTraceId());
+        
+        try {
+            // Add token to blacklist to prevent further use
+            tokenBlacklistService.blacklistToken(accessToken);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("User {} logged out successfully - Duration: {}ms - TraceId: {}", 
+                userId != null ? userId : "unknown", duration, TraceContext.getTraceId());
+                
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Logout failed for user: {} - Duration: {}ms - Error: {} - TraceId: {}", 
+                userId != null ? userId : "unknown", duration, e.getMessage(), TraceContext.getTraceId());
+            throw e;
+        }
     }
 
     /**

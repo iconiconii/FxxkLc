@@ -6,22 +6,21 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * User Parameters entity for storing personalized FSRS algorithm parameters.
  * 
  * Features:
  * - Personalized FSRS parameters optimized for individual users
- * - Parameter history tracking for A/B testing
- * - Optimization metadata (training count, optimization timestamp)
- * - JSON storage for flexible parameter structure
- * - Support for multiple parameter sets per user
+ * - 17 weight parameters (w0-w16) for FSRS algorithm
+ * - Additional FSRS configuration parameters
+ * - Optimization metadata and performance tracking
  * 
  * @author CodeTop Team
  */
-@TableName("user_parameters")
+@TableName("user_fsrs_parameters")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,144 +32,234 @@ public class UserParameters extends BaseEntity {
     @TableField("user_id")
     private Long userId;
 
-    @TableField("parameters")
-    private Map<String, Double> parameters;
-
+    // FSRS Weight Parameters (w0-w16)
+    @TableField("w0")
     @Builder.Default
-    @TableField("optimized_at")
-    private LocalDateTime optimizedAt = LocalDateTime.now();
+    private BigDecimal w0 = BigDecimal.valueOf(0.4);
 
+    @TableField("w1")
     @Builder.Default
-    @TableField("training_count")
-    private Integer trainingCount = 0;
+    private BigDecimal w1 = BigDecimal.valueOf(0.6);
 
+    @TableField("w2")
     @Builder.Default
-    @TableField("is_active")
-    private Boolean isActive = true;
+    private BigDecimal w2 = BigDecimal.valueOf(2.4);
 
-    @TableField("version")
-    private String version; // e.g., "FSRS-4.5"
+    @TableField("w3")
+    @Builder.Default
+    private BigDecimal w3 = BigDecimal.valueOf(5.8);
+
+    @TableField("w4")
+    @Builder.Default
+    private BigDecimal w4 = BigDecimal.valueOf(4.93);
+
+    @TableField("w5")
+    @Builder.Default
+    private BigDecimal w5 = BigDecimal.valueOf(0.94);
+
+    @TableField("w6")
+    @Builder.Default
+    private BigDecimal w6 = BigDecimal.valueOf(0.86);
+
+    @TableField("w7")
+    @Builder.Default
+    private BigDecimal w7 = BigDecimal.valueOf(0.01);
+
+    @TableField("w8")
+    @Builder.Default
+    private BigDecimal w8 = BigDecimal.valueOf(1.49);
+
+    @TableField("w9")
+    @Builder.Default
+    private BigDecimal w9 = BigDecimal.valueOf(0.14);
+
+    @TableField("w10")
+    @Builder.Default
+    private BigDecimal w10 = BigDecimal.valueOf(0.94);
+
+    @TableField("w11")
+    @Builder.Default
+    private BigDecimal w11 = BigDecimal.valueOf(2.18);
+
+    @TableField("w12")
+    @Builder.Default
+    private BigDecimal w12 = BigDecimal.valueOf(0.05);
+
+    @TableField("w13")
+    @Builder.Default
+    private BigDecimal w13 = BigDecimal.valueOf(0.34);
+
+    @TableField("w14")
+    @Builder.Default
+    private BigDecimal w14 = BigDecimal.valueOf(1.26);
+
+    @TableField("w15")
+    @Builder.Default
+    private BigDecimal w15 = BigDecimal.valueOf(0.29);
+
+    @TableField("w16")
+    @Builder.Default
+    private BigDecimal w16 = BigDecimal.valueOf(2.61);
+
+    // FSRS Configuration Parameters
+    @TableField("request_retention")
+    @Builder.Default
+    private BigDecimal requestRetention = BigDecimal.valueOf(0.9);
+
+    @TableField("maximum_interval")
+    @Builder.Default
+    private Integer maximumInterval = 36500;
+
+    @TableField("easy_bonus")
+    @Builder.Default
+    private BigDecimal easyBonus = BigDecimal.valueOf(1.3);
+
+    @TableField("hard_interval")
+    @Builder.Default
+    private BigDecimal hardInterval = BigDecimal.valueOf(1.2);
+
+    @TableField("new_interval")
+    @Builder.Default
+    private BigDecimal newInterval = BigDecimal.valueOf(0.0);
+
+    @TableField("graduating_interval")
+    @Builder.Default
+    private Integer graduatingInterval = 1;
+
+    // Optimization Tracking
+    @TableField("review_count")
+    @Builder.Default
+    private Integer reviewCount = 0;
+
+    @TableField("optimization_accuracy")
+    private BigDecimal optimizationAccuracy;
 
     @TableField("optimization_method")
-    private String optimizationMethod; // e.g., "GRADIENT_DESCENT", "LBFGS"
+    @Builder.Default
+    private String optimizationMethod = "DEFAULT";
 
-    @TableField("loss_value")
-    private Double lossValue; // Final loss value from optimization
+    @TableField("optimization_iterations")
+    private Integer optimizationIterations;
 
-    @TableField("iterations")
-    private Integer iterations; // Number of optimization iterations
-
-    @TableField("convergence_threshold")
-    private Double convergenceThreshold;
+    @TableField("optimization_loss")
+    private BigDecimal optimizationLoss;
 
     @TableField("learning_rate")
-    private Double learningRate;
+    private BigDecimal learningRate;
 
     @TableField("regularization")
-    private Double regularization;
+    private BigDecimal regularization;
 
-    @TableField("optimization_metadata")
-    private Map<String, Object> optimizationMetadata;
+    @TableField("convergence_threshold")
+    private BigDecimal convergenceThreshold;
 
     @TableField("performance_improvement")
-    private Double performanceImprovement; // Percentage improvement over default
+    private BigDecimal performanceImprovement;
 
-    @TableField("notes")
-    private String notes;
+    @TableField("confidence_score")
+    private BigDecimal confidenceScore;
+
+    // Status Fields
+    @TableField("is_active")
+    @Builder.Default
+    private Boolean isActive = true;
+
+    @TableField("is_optimized")
+    @Builder.Default
+    private Boolean isOptimized = false;
+
+    @TableField("version")
+    @Builder.Default
+    private String version = "FSRS-4.5";
+
+    @TableField("last_optimized")
+    private LocalDateTime lastOptimized;
 
     // Association (not mapped to database in MyBatis-Plus)
     @TableField(exist = false)
     @JsonIgnore
     private User user;
 
-    // FSRS parameter getters with defaults
-    public double getW0() {
-        return parameters != null ? parameters.getOrDefault("w0", 0.4) : 0.4;
+    // Utility Methods
+    
+    /**
+     * Get parameter array for FSRS calculations.
+     */
+    public double[] getParameterArray() {
+        return new double[]{
+            w0.doubleValue(), w1.doubleValue(), w2.doubleValue(), w3.doubleValue(),
+            w4.doubleValue(), w5.doubleValue(), w6.doubleValue(), w7.doubleValue(),
+            w8.doubleValue(), w9.doubleValue(), w10.doubleValue(), w11.doubleValue(),
+            w12.doubleValue(), w13.doubleValue(), w14.doubleValue(), w15.doubleValue(),
+            w16.doubleValue()
+        };
     }
 
-    public double getW1() {
-        return parameters != null ? parameters.getOrDefault("w1", 0.6) : 0.6;
+    /**
+     * Set parameter array from FSRS calculations.
+     */
+    public void setParameterArray(double[] params) {
+        if (params == null || params.length != 17) {
+            throw new IllegalArgumentException("Parameter array must contain exactly 17 values");
+        }
+        
+        w0 = BigDecimal.valueOf(params[0]);
+        w1 = BigDecimal.valueOf(params[1]);
+        w2 = BigDecimal.valueOf(params[2]);
+        w3 = BigDecimal.valueOf(params[3]);
+        w4 = BigDecimal.valueOf(params[4]);
+        w5 = BigDecimal.valueOf(params[5]);
+        w6 = BigDecimal.valueOf(params[6]);
+        w7 = BigDecimal.valueOf(params[7]);
+        w8 = BigDecimal.valueOf(params[8]);
+        w9 = BigDecimal.valueOf(params[9]);
+        w10 = BigDecimal.valueOf(params[10]);
+        w11 = BigDecimal.valueOf(params[11]);
+        w12 = BigDecimal.valueOf(params[12]);
+        w13 = BigDecimal.valueOf(params[13]);
+        w14 = BigDecimal.valueOf(params[14]);
+        w15 = BigDecimal.valueOf(params[15]);
+        w16 = BigDecimal.valueOf(params[16]);
     }
 
-    public double getW2() {
-        return parameters != null ? parameters.getOrDefault("w2", 2.4) : 2.4;
+    /**
+     * Get default FSRS parameters.
+     */
+    public static double[] getDefaultParameters() {
+        return new double[]{
+            0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61
+        };
     }
 
-    public double getW3() {
-        return parameters != null ? parameters.getOrDefault("w3", 5.8) : 5.8;
-    }
-
-    public double getW4() {
-        return parameters != null ? parameters.getOrDefault("w4", 4.93) : 4.93;
-    }
-
-    public double getW5() {
-        return parameters != null ? parameters.getOrDefault("w5", 0.94) : 0.94;
-    }
-
-    public double getW6() {
-        return parameters != null ? parameters.getOrDefault("w6", 0.86) : 0.86;
-    }
-
-    public double getW7() {
-        return parameters != null ? parameters.getOrDefault("w7", 0.01) : 0.01;
-    }
-
-    public double getW8() {
-        return parameters != null ? parameters.getOrDefault("w8", 1.49) : 1.49;
-    }
-
-    public double getW9() {
-        return parameters != null ? parameters.getOrDefault("w9", 0.14) : 0.14;
-    }
-
-    public double getW10() {
-        return parameters != null ? parameters.getOrDefault("w10", 0.94) : 0.94;
-    }
-
-    public double getW11() {
-        return parameters != null ? parameters.getOrDefault("w11", 2.18) : 2.18;
-    }
-
-    public double getW12() {
-        return parameters != null ? parameters.getOrDefault("w12", 0.05) : 0.05;
-    }
-
-    public double getW13() {
-        return parameters != null ? parameters.getOrDefault("w13", 0.34) : 0.34;
-    }
-
-    public double getW14() {
-        return parameters != null ? parameters.getOrDefault("w14", 1.26) : 1.26;
-    }
-
-    public double getW15() {
-        return parameters != null ? parameters.getOrDefault("w15", 0.29) : 0.29;
-    }
-
-    public double getW16() {
-        return parameters != null ? parameters.getOrDefault("w16", 2.61) : 2.61;
-    }
-
-    public double getRequestRetention() {
-        return parameters != null ? parameters.getOrDefault("requestRetention", 0.9) : 0.9;
+    /**
+     * Create default parameters for a user.
+     */
+    public static UserParameters createDefault(Long userId) {
+        return UserParameters.builder()
+                .userId(userId)
+                .version("FSRS-4.5")
+                .optimizationMethod("DEFAULT")
+                .reviewCount(0)
+                .isActive(true)
+                .isOptimized(false)
+                .build();
     }
 
     // Derived methods
-    public boolean isOptimized() {
-        return trainingCount >= 30 && parameters != null && !parameters.isEmpty();
-    }
-
     public boolean needsReoptimization() {
-        return optimizedAt.isBefore(LocalDateTime.now().minusDays(30)) && trainingCount > 0;
+        return lastOptimized != null && 
+               lastOptimized.isBefore(LocalDateTime.now().minusDays(30)) && 
+               reviewCount > 0;
     }
 
     public boolean isPerformingWell() {
-        return performanceImprovement != null && performanceImprovement > 5.0; // 5% improvement
+        return performanceImprovement != null && 
+               performanceImprovement.compareTo(BigDecimal.valueOf(5.0)) > 0; // 5% improvement
     }
 
     public int getDaysSinceOptimization() {
-        return (int) java.time.Duration.between(optimizedAt, LocalDateTime.now()).toDays();
+        if (lastOptimized == null) return Integer.MAX_VALUE;
+        return (int) java.time.Duration.between(lastOptimized, LocalDateTime.now()).toDays();
     }
 
     /**
@@ -188,24 +277,21 @@ public class UserParameters extends BaseEntity {
     }
 
     /**
-     * Update training count after new reviews.
+     * Update review count after new reviews.
      */
-    public void incrementTrainingCount(int newReviews) {
-        this.trainingCount += newReviews;
+    public void incrementReviewCount(int newReviews) {
+        this.reviewCount += newReviews;
     }
 
     /**
      * Check if parameters are significantly different from defaults.
      */
     public boolean isDifferentFromDefaults() {
-        if (parameters == null || parameters.isEmpty()) return false;
-        
-        double[] defaultParams = {0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61};
+        double[] defaultParams = getDefaultParameters();
+        double[] currentParams = getParameterArray();
         
         for (int i = 0; i < defaultParams.length; i++) {
-            String key = "w" + i;
-            Double value = parameters.get(key);
-            if (value != null && Math.abs(value - defaultParams[i]) > 0.1) {
+            if (Math.abs(currentParams[i] - defaultParams[i]) > 0.1) {
                 return true;
             }
         }
@@ -214,50 +300,14 @@ public class UserParameters extends BaseEntity {
     }
 
     /**
-     * Get parameter array for FSRS calculations.
+     * Mark as optimized with optimization metadata.
      */
-    public double[] getParameterArray() {
-        if (parameters == null) return getDefaultParameters();
-        
-        double[] params = new double[17];
-        for (int i = 0; i < 17; i++) {
-            String key = "w" + i;
-            params[i] = parameters.getOrDefault(key, getDefaultParameters()[i]);
-        }
-        
-        return params;
-    }
-
-    /**
-     * Get default FSRS parameters.
-     */
-    public static double[] getDefaultParameters() {
-        return new double[]{
-            0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61
-        };
-    }
-
-    /**
-     * Create default parameters for a user.
-     */
-    public static UserParameters createDefault(Long userId) {
-        double[] defaultParams = getDefaultParameters();
-        Map<String, Double> paramMap = new java.util.HashMap<>();
-        
-        for (int i = 0; i < defaultParams.length; i++) {
-            paramMap.put("w" + i, defaultParams[i]);
-        }
-        paramMap.put("requestRetention", 0.9);
-        
-        return UserParameters.builder()
-                .userId(userId)
-                .parameters(paramMap)
-                .version("FSRS-4.5")
-                .optimizationMethod("DEFAULT")
-                .trainingCount(0)
-                .isActive(true)
-                .notes("Default FSRS parameters")
-                .build();
+    public void markAsOptimized(BigDecimal accuracy, Integer iterations, BigDecimal loss) {
+        this.isOptimized = true;
+        this.optimizationAccuracy = accuracy;
+        this.optimizationIterations = iterations;
+        this.optimizationLoss = loss;
+        this.lastOptimized = LocalDateTime.now();
     }
 
     @Override
@@ -266,9 +316,10 @@ public class UserParameters extends BaseEntity {
                 "id=" + getId() +
                 ", userId=" + userId +
                 ", version='" + version + '\'' +
-                ", trainingCount=" + trainingCount +
+                ", reviewCount=" + reviewCount +
                 ", isActive=" + isActive +
-                ", optimizedAt=" + optimizedAt +
+                ", isOptimized=" + isOptimized +
+                ", lastOptimized=" + lastOptimized +
                 ", performanceImprovement=" + performanceImprovement +
                 '}';
     }

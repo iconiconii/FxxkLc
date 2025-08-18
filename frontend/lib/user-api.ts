@@ -150,6 +150,13 @@ export const userApi = {
   },
 
   /**
+   * Get problem status
+   */
+  async getProblemStatus(problemId: number): Promise<UserProblemStatus> {
+    return await apiRequest<UserProblemStatus>(`/problems/${problemId}/status`)
+  },
+
+  /**
    * Update problem status
    */
   async updateProblemStatus(

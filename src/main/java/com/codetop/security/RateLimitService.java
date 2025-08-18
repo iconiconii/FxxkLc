@@ -3,7 +3,7 @@ package com.codetop.security;
 import com.codetop.config.RateLimitConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class RateLimitService {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final RateLimitConfig.RateLimitProperties rateLimitProperties;
 
     private static final String USER_PREFIX = "rate_limit:user:";

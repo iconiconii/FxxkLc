@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Calendar, Zap, Building2, Users, Briefcase, Search, Send, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { reportApi, type SubmitReportRequest } from "@/lib/report-api"
+import { filterApi, type Company, type Department, type Position } from "@/lib/filter-api"
 
 export default function ReportForm() {
   const [reportForm, setReportForm] = useState({
@@ -17,8 +18,80 @@ export default function ReportForm() {
     date: new Date().toISOString().split('T')[0] // Today's date in YYYY-MM-DD format
   })
   
+  // State for dynamic data
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [positions, setPositions] = useState<Position[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null)
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Load companies on component mount
+  useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        setIsLoading(true)
+        const companiesData = await filterApi.getCompanies()
+        setCompanies(companiesData)
+      } catch (error) {
+        console.error('Failed to load companies:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadCompanies()
+  }, [])
+
+  // Load departments when company changes
+  useEffect(() => {
+    const loadDepartments = async () => {
+      if (selectedCompany) {
+        try {
+          const departmentsData = await filterApi.getDepartmentsByCompany(selectedCompany.id)
+          setDepartments(departmentsData)
+          // Reset department and position when company changes
+          setSelectedDepartment(null)
+          setPositions([])
+          handleReportFormChange('department', '')
+          handleReportFormChange('position', '')
+        } catch (error) {
+          console.error('Failed to load departments:', error)
+        }
+      } else {
+        setDepartments([])
+        setPositions([])
+      }
+    }
+    
+    loadDepartments()
+  }, [selectedCompany])
+
+  // Load positions when department changes
+  useEffect(() => {
+    const loadPositions = async () => {
+      if (selectedDepartment && selectedCompany) {
+        try {
+          const positionsData = await filterApi.getPositionsByCompanyAndDepartment(
+            selectedCompany.id, 
+            selectedDepartment.id
+          )
+          setPositions(positionsData)
+          // Reset position when department changes
+          handleReportFormChange('position', '')
+        } catch (error) {
+          console.error('Failed to load positions:', error)
+        }
+      } else {
+        setPositions([])
+      }
+    }
+    
+    loadPositions()
+  }, [selectedDepartment])
 
   const handleReportSubmit = async () => {
     // Basic validation
@@ -31,10 +104,12 @@ export default function ReportForm() {
     setSubmitStatus("idle")
     
     try {
+      const selectedPosition = positions.find(p => p.id.toString() === reportForm.position)
+      
       const submitRequest: SubmitReportRequest = {
-        company: reportForm.company,
-        department: reportForm.department,
-        position: reportForm.position,
+        company: selectedCompany?.displayName || selectedCompany?.name || reportForm.company,
+        department: selectedDepartment?.displayName || selectedDepartment?.name || reportForm.department,
+        position: selectedPosition?.displayName || selectedPosition?.name || reportForm.position,
         problemSearch: reportForm.problemSearch,
         date: reportForm.date,
         interviewRound: 'OTHER', // Default value, could be made configurable
@@ -70,6 +145,19 @@ export default function ReportForm() {
       ...prev,
       [field]: value
     }))
+    
+    // Handle company selection
+    if (field === 'company') {
+      const company = companies.find(c => c.id.toString() === value)
+      setSelectedCompany(company || null)
+    }
+    
+    // Handle department selection
+    if (field === 'department') {
+      const department = departments.find(d => d.id.toString() === value)
+      setSelectedDepartment(department || null)
+    }
+    
     // Clear error status when user starts typing
     if (submitStatus === "error") {
       setSubmitStatus("idle")
@@ -84,6 +172,10 @@ export default function ReportForm() {
       problemSearch: "",
       date: new Date().toISOString().split('T')[0]
     })
+    setSelectedCompany(null)
+    setSelectedDepartment(null)
+    setDepartments([])
+    setPositions([])
     setSubmitStatus("idle")
   }
 
@@ -118,27 +210,17 @@ export default function ReportForm() {
               <Select 
                 value={reportForm.company} 
                 onValueChange={(value) => handleReportFormChange('company', value)}
+                disabled={isLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="请选择面试公司" />
+                  <SelectValue placeholder={isLoading ? "加载中..." : "请选择面试公司"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="alibaba">阿里巴巴</SelectItem>
-                  <SelectItem value="tencent">腾讯</SelectItem>
-                  <SelectItem value="bytedance">字节跳动</SelectItem>
-                  <SelectItem value="baidu">百度</SelectItem>
-                  <SelectItem value="meituan">美团</SelectItem>
-                  <SelectItem value="didi">滴滴出行</SelectItem>
-                  <SelectItem value="jd">京东</SelectItem>
-                  <SelectItem value="netease">网易</SelectItem>
-                  <SelectItem value="xiaomi">小米</SelectItem>
-                  <SelectItem value="huawei">华为</SelectItem>
-                  <SelectItem value="bilibili">哔哩哔哩</SelectItem>
-                  <SelectItem value="kuaishou">快手</SelectItem>
-                  <SelectItem value="pinduoduo">拼多多</SelectItem>
-                  <SelectItem value="douyin">抖音</SelectItem>
-                  <SelectItem value="weibo">微博</SelectItem>
-                  <SelectItem value="other">其他</SelectItem>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.displayName || company.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -152,23 +234,21 @@ export default function ReportForm() {
               <Select 
                 value={reportForm.department} 
                 onValueChange={(value) => handleReportFormChange('department', value)}
+                disabled={!selectedCompany || departments.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="请选择面试部门" />
+                  <SelectValue placeholder={
+                    !selectedCompany ? "请先选择公司" : 
+                    departments.length === 0 ? "该公司暂无部门数据" : 
+                    "请选择面试部门"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="backend">后端</SelectItem>
-                  <SelectItem value="client">客户端</SelectItem>
-                  <SelectItem value="algorithm">算法</SelectItem>
-                  <SelectItem value="frontend">前端</SelectItem>
-                  <SelectItem value="data">数据研发</SelectItem>
-                  <SelectItem value="test">测试</SelectItem>
-                  <SelectItem value="ai">人工智能</SelectItem>
-                  <SelectItem value="infra">基础架构</SelectItem>
-                  <SelectItem value="security">安全</SelectItem>
-                  <SelectItem value="product">产品</SelectItem>
-                  <SelectItem value="design">设计</SelectItem>
-                  <SelectItem value="other">其他</SelectItem>
+                  {departments.map((department) => (
+                    <SelectItem key={department.id} value={department.id.toString()}>
+                      {department.displayName || department.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -182,18 +262,21 @@ export default function ReportForm() {
               <Select 
                 value={reportForm.position} 
                 onValueChange={(value) => handleReportFormChange('position', value)}
+                disabled={!selectedDepartment || positions.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="请选择应聘岗位" />
+                  <SelectValue placeholder={
+                    !selectedDepartment ? "请先选择部门" : 
+                    positions.length === 0 ? "该部门暂无岗位数据" : 
+                    "请选择应聘岗位"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="backend">后端</SelectItem>
-                  <SelectItem value="frontend">前端</SelectItem>
-                  <SelectItem value="algorithm">算法</SelectItem>
-                  <SelectItem value="client">客户端</SelectItem>
-                  <SelectItem value="data">数据研发</SelectItem>
-                  <SelectItem value="test">测试</SelectItem>
-                  <SelectItem value="software-engineer">Software Engineer</SelectItem>
+                  {positions.map((position) => (
+                    <SelectItem key={position.id} value={position.id.toString()}>
+                      {position.displayName || position.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -10,12 +10,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import ProblemAssessmentModal from "@/components/modals/problem-assessment-modal"
-import { problemsApi, type Problem, type PaginatedResponse } from "@/lib/problems-api"
 import { filterApi, type Company, type Department, type Position } from "@/lib/filter-api"
+import { codeTopApi, type ProblemRankingDTO, type CodeTopFilterRequest, type CodeTopFilterResponse } from "@/lib/codetop-api"
+import { userApi, type UserProblemStatus } from "@/lib/user-api"
+import { useAuth } from "@/lib/auth-context"
 
-interface DisplayProblem extends Omit<Problem, 'difficulty'> {
+interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
   difficulty: "easy" | "medium" | "hard"
-  lastConsideredDate?: string
   mastery: number
   status: "not_done" | "done" | "reviewed"
 }
@@ -34,6 +35,7 @@ const difficultyLabels = {
 
 export default function CodeTopPage() {
   const id = useId()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedProblem, setSelectedProblem] = useState<DisplayProblem | null>(null)
@@ -76,15 +78,34 @@ export default function CodeTopPage() {
     pages: 0,
   })
 
-  // Transform API Problem to DisplayProblem
-  const transformProblem = useCallback((apiProblem: Problem): DisplayProblem => {
+  // Transform API ProblemRankingDTO to DisplayProblem
+  const transformProblem = useCallback((apiProblem: ProblemRankingDTO): DisplayProblem => {
     return {
       ...apiProblem,
       difficulty: apiProblem.difficulty.toLowerCase() as "easy" | "medium" | "hard",
-      lastConsideredDate: new Date().toISOString().split('T')[0],
       mastery: 0,
       status: "not_done",
     }
+  }, [])
+
+  // Merge user status with problems
+  const mergeUserStatusWithProblems = useCallback((
+    problems: ProblemRankingDTO[], 
+    userStatuses: UserProblemStatus[]
+  ): DisplayProblem[] => {
+    const statusMap = new Map(
+      userStatuses.map(status => [status.problemId, status])
+    )
+    
+    return problems.map(problem => {
+      const userStatus = statusMap.get(problem.problemId)
+      return {
+        ...problem,
+        difficulty: problem.difficulty.toLowerCase() as "easy" | "medium" | "hard",
+        mastery: userStatus?.mastery || 0,
+        status: userStatus?.status || "not_done",
+      }
+    })
   }, [])
 
   // Load companies on component mount
@@ -184,30 +205,59 @@ export default function CodeTopPage() {
     fetchProblems(1, {})
   }
 
-  // Fetch problems data
-  const fetchProblems = useCallback(async (page: number = 1, filters: Record<string, unknown> = {}, keyword?: string) => {
+  // Fetch problems data using CodeTop API
+  const fetchProblems = useCallback(async (page: number = 1, filters: Record<string, unknown> = {}) => {
     try {
       setLoading(true)
       setError(null)
       
-      let response: PaginatedResponse<Problem>
+      // Check if any filters are applied
+      const hasFilters = filters.companyId || filters.departmentId || filters.positionId
       
-      // If we have filters applied, use the filter API
-      if (filters.companyId || filters.departmentId || filters.positionId) {
-        response = await problemsApi.filterProblems(filters, page, pagination.size)
-      } else if (keyword || searchTerm) {
-        response = await problemsApi.searchProblems(keyword || searchTerm, page, pagination.size)
+      let response: CodeTopFilterResponse
+      
+      if (hasFilters) {
+        // Use complex filter API for specific filtering
+        const request: CodeTopFilterRequest = {
+          companyId: filters.companyId as number,
+          departmentId: filters.departmentId as number,
+          positionId: filters.positionId as number,
+          page: page,
+          size: pagination.size,
+        }
+        response = await codeTopApi.getFilteredProblems(request)
       } else {
-        response = await problemsApi.searchProblems(undefined, page, pagination.size)
+        // Use simple global API for basic queries (no duplicates)
+        response = await codeTopApi.getGlobalProblems(
+          page,
+          pagination.size,
+          'frequency_score',
+          'desc'
+        )
       }
       
-      const displayProblems = response.records.map(transformProblem)
+      let displayProblems: DisplayProblem[]
+      
+      if (isAuthenticated) {
+        // For logged-in users, merge with personal status
+        try {
+          const userStatuses = await userApi.getUserProblemProgress()
+          displayProblems = mergeUserStatusWithProblems(response.problems, userStatuses)
+        } catch (userErr) {
+          console.warn('Failed to load user status, using default values:', userErr)
+          displayProblems = response.problems.map(transformProblem)
+        }
+      } else {
+        // For anonymous users, use default values
+        displayProblems = response.problems.map(transformProblem)
+      }
+      
       setProblems(displayProblems)
       setPagination({
-        current: response.current,
-        size: response.size,
-        total: response.total,
-        pages: response.pages,
+        current: response.currentPage,
+        size: response.pageSize,
+        total: response.totalElements,
+        pages: response.totalPages,
       })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '加载题目失败')
@@ -215,26 +265,26 @@ export default function CodeTopPage() {
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, pagination.size, transformProblem])
+  }, [pagination.size, transformProblem, mergeUserStatusWithProblems, isAuthenticated])
 
-  // Load initial data on component mount
+  // Load companies on component mount (only once)
   useEffect(() => {
-    const loadInitialData = async () => {
-      await Promise.all([
-        loadCompanies(),
-        fetchProblems(1, {}) // Load all problems initially
-      ])
+    loadCompanies()
+  }, []) // No dependencies - only run once on mount
+
+  // Load initial problems on component mount and when auth state stabilizes
+  useEffect(() => {
+    if (!authLoading) {
+      fetchProblems(1, {}) // Load all problems initially
     }
-    
-    loadInitialData()
-  }, [fetchProblems])
+  }, [fetchProblems, authLoading]) // Only run when auth loading completes
 
   // Handle search with debounce
   useEffect(() => {
     if (!searchTerm) return // Don't search for empty terms
     
     const timeoutId = setTimeout(() => {
-      fetchProblems(1, appliedFilters, searchTerm)
+      fetchProblems(1, appliedFilters)
     }, 500)
 
     return () => clearTimeout(timeoutId)
@@ -285,6 +335,7 @@ export default function CodeTopPage() {
   const totalCount = filteredProblems.length
 
   const handleNotDoneClick = (problem: DisplayProblem) => {
+    // 现在只有已登录用户能看到操作按钮，所以直接打开模态框
     setSelectedProblem(problem)
     setModalOpen(true)
   }
@@ -302,11 +353,27 @@ export default function CodeTopPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeTop</h1>
           <span className="text-2xl">🔥</span>
         </div>
-        {pagination.total > 0 && (
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            共 {pagination.total} 道题目
-          </div>
-        )}
+        <div className="flex items-center gap-4">
+          {/* 登录状态指示器 */}
+          {!authLoading && (
+            <div className="flex items-center gap-2">
+              {isAuthenticated ? (
+                <Badge className="bg-green-500 hover:bg-green-600">
+                  ✓ 已登录
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-gray-500">
+                  未登录
+                </Badge>
+              )}
+            </div>
+          )}
+          {pagination.total > 0 && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              共 {pagination.total} 道题目
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error Message */}
@@ -653,20 +720,26 @@ export default function CodeTopPage() {
 
           {/* Progress Statistics */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Badge className="bg-blue-500 hover:bg-blue-600 px-3 py-1">
-                总计 {completedCount}/{totalCount}
-              </Badge>
-              <Badge className="bg-green-500 hover:bg-green-600 px-3 py-1">
-                简单 {easyCompletedCount}
-              </Badge>
-              <Badge className="bg-orange-500 hover:bg-orange-600 px-3 py-1">
-                中等 {mediumCompletedCount}
-              </Badge>
-              <Badge className="bg-red-500 hover:bg-red-600 px-3 py-1">
-                困难 {hardCompletedCount}
-              </Badge>
-            </div>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <Badge className="bg-blue-500 hover:bg-blue-600 px-3 py-1">
+                  总计 {completedCount}/{totalCount}
+                </Badge>
+                <Badge className="bg-green-500 hover:bg-green-600 px-3 py-1">
+                  简单 {easyCompletedCount}
+                </Badge>
+                <Badge className="bg-orange-500 hover:bg-orange-600 px-3 py-1">
+                  中等 {mediumCompletedCount}
+                </Badge>
+                <Badge className="bg-red-500 hover:bg-red-600 px-3 py-1">
+                  困难 {hardCompletedCount}
+                </Badge>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <span>💡 登录后查看个人进度统计</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -700,27 +773,31 @@ export default function CodeTopPage() {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
                   频度
                 </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  掌握程度
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  操作
-                </th>
+                {isAuthenticated && (
+                  <>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
+                      掌握程度
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
+                      操作
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800">
               {filteredProblems.map((problem) => (
-                <tr key={problem.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
+                <tr key={problem.problemId} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">
                       <div className="font-medium text-gray-900 dark:text-gray-100">
                         <a 
-                          href={problem.problemUrl || `https://leetcode.cn/problems/problem-${problem.id}/`}
+                          href={problem.problemUrl || `https://leetcode.cn/problems/problem-${problem.problemId}/`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
                         >
-                          {problem.id}. {problem.title}
+                          {problem.problemId}. {problem.title}
                         </a>
                       </div>
                     </div>
@@ -733,63 +810,70 @@ export default function CodeTopPage() {
                     </Badge>
                   </td>
                   <td className="px-6 py-5 text-sm text-gray-600 dark:text-gray-400">
-                    {problem.lastConsideredDate}
+                    {problem.lastAskedDate}
                   </td>
                   <td className="px-6 py-5">
                     <Badge variant="outline" className="font-normal">
-                      {problem.frequency}
+                      {problem.frequencyScore}
                     </Badge>
                   </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3].map((star) => (
-                        <Star
-                          key={star}
-                          className={`h-4 w-4 ${
-                            star <= problem.mastery
-                              ? "text-yellow-500 fill-yellow-500"
-                              : "text-gray-300 dark:text-gray-600"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-2">
-                      {problem.status === "not_done" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 h-8"
-                          onClick={() => handleNotDoneClick(problem)}
-                        >
-                          未做
-                        </Button>
-                      ) : problem.status === "done" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20 h-8"
-                          onClick={() => handleNotDoneClick(problem)}
-                        >
-                          已完成
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8"
-                          onClick={() => handleNotDoneClick(problem)}
-                        >
-                          已复习
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 h-8">
-                        <BookOpen className="h-4 w-4 mr-1" />
-                        笔记
-                      </Button>
-                    </div>
-                  </td>
+                  {isAuthenticated && (
+                    <>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-4 w-4 ${
+                                star <= problem.mastery
+                                  ? "text-yellow-500 fill-yellow-500"
+                                  : "text-gray-300 dark:text-gray-600"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-2">
+                          {problem.status === "not_done" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 h-8"
+                              onClick={() => handleNotDoneClick(problem)}
+                              title="点击记录做题状态"
+                            >
+                              未做
+                            </Button>
+                          ) : problem.status === "done" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20 h-8"
+                              onClick={() => handleNotDoneClick(problem)}
+                              title="点击更新做题状态"
+                            >
+                              已完成
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8"
+                              onClick={() => handleNotDoneClick(problem)}
+                              title="点击更新做题状态"
+                            >
+                              已复习
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 h-8">
+                            <BookOpen className="h-4 w-4 mr-1" />
+                            笔记
+                          </Button>
+                        </div>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -803,8 +887,12 @@ export default function CodeTopPage() {
         <ProblemAssessmentModal
           isOpen={modalOpen}
           onClose={handleModalClose}
-          problemId={selectedProblem.id}
+          problemId={selectedProblem.problemId}
           problemTitle={selectedProblem.title}
+          onStatusUpdate={() => {
+            // Refresh the current page data after status update
+            fetchProblems(pagination.current, appliedFilters, searchTerm)
+          }}
         />
       )}
     </div>

@@ -145,7 +145,13 @@ export const authApi = {
    */
   isAuthenticated(): boolean {
     if (typeof window === 'undefined') return false
-    return !!localStorage.getItem('accessToken')
+    
+    const accessToken = localStorage.getItem('accessToken')
+    const refreshToken = localStorage.getItem('refreshToken')
+    
+    // Consider authenticated if we have either token
+    // Access token takes priority, but refresh token can be used to get new access token
+    return !!(accessToken || refreshToken)
   },
 
   /**

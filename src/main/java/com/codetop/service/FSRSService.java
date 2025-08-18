@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.codetop.algorithm.FSRSAlgorithm;
 import com.codetop.dto.FSRSCalculationResult;
 import com.codetop.dto.FSRSParametersDTO;
+import com.codetop.dto.FSRSReviewResultDTO;
+import com.codetop.dto.FSRSReviewQueueDTO;
 import com.codetop.entity.FSRSCard;
 import com.codetop.entity.Problem;
 import com.codetop.entity.ReviewLog;
@@ -20,6 +22,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.codetop.logging.TraceContext;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -56,119 +59,191 @@ public class FSRSService {
      */
     @Transactional
     public FSRSCard getOrCreateCard(Long userId, Long problemId) {
-        Optional<FSRSCard> existingCard = fsrsCardMapper.findByUserIdAndProblemId(userId, problemId);
+        TraceContext.setOperation("FSRS_GET_OR_CREATE_CARD");
+        TraceContext.setUserId(userId);
         
-        if (existingCard.isPresent()) {
-            return existingCard.get();
+        long startTime = System.currentTimeMillis();
+        log.debug("Getting or creating FSRS card: userId={}, problemId={}", userId, problemId);
+        
+        try {
+            Optional<FSRSCard> existingCard = fsrsCardMapper.findByUserIdAndProblemId(userId, problemId);
+            
+            if (existingCard.isPresent()) {
+                long duration = System.currentTimeMillis() - startTime;
+                log.debug("Found existing FSRS card: cardId={}, duration={}ms", existingCard.get().getId(), duration);
+                return existingCard.get();
+            }
+
+            // Create new card
+            FSRSCard card = FSRSCard.builder()
+                    .userId(userId)
+                    .problemId(problemId)
+                    .state(FSRSState.NEW)
+                    .difficulty(BigDecimal.ZERO)
+                    .stability(BigDecimal.ZERO)
+                    .reviewCount(0)
+                    .lapses(0)
+                    .intervalDays(0)
+                    .easeFactor(new BigDecimal("2.5000"))
+                    .reps(0)
+                    .build();
+
+            fsrsCardMapper.insert(card);
+            long duration = System.currentTimeMillis() - startTime;
+            
+            log.info("FSRS card created successfully: userId={}, problemId={}, cardId={}, duration={}ms", 
+                    userId, problemId, card.getId(), duration);
+            return card;
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to get or create FSRS card: userId={}, problemId={}, duration={}ms, error={}", 
+                    userId, problemId, duration, e.getMessage(), e);
+            throw e;
         }
-
-        // Create new card
-        FSRSCard card = FSRSCard.builder()
-                .userId(userId)
-                .problemId(problemId)
-                .state(FSRSState.NEW)
-                .difficulty(BigDecimal.ZERO)
-                .stability(BigDecimal.ZERO)
-                .reviewCount(0)
-                .lapses(0)
-                .intervalDays(0)
-                .easeFactor(new BigDecimal("2.5000"))
-                .reps(0)
-                .build();
-
-        fsrsCardMapper.insert(card);
-        log.info("Created new FSRS card for user {} and problem {}", userId, problemId);
-        return card;
     }
 
     /**
      * Process review and update card using FSRS algorithm.
      */
     @Transactional
-    public ReviewResult processReview(Long userId, Long problemId, Integer rating, ReviewType reviewType) {
-        log.debug("Processing review for user {} problem {} rating {}", userId, problemId, rating);
-
-        FSRSCard card = getOrCreateCard(userId, problemId);
-        User user = userMapper.selectById(userId);
-        Problem problem = problemMapper.selectById(problemId);
-
-        if (user == null || problem == null) {
-            throw new IllegalArgumentException("User or problem not found");
-        }
-
-        // Get user-specific FSRS parameters (or default)
-        FSRSParametersDTO parameters = getUserFSRSParameters(userId);
+    public FSRSReviewResultDTO processReview(Long userId, Long problemId, Integer rating, ReviewType reviewType) {
+        TraceContext.setOperation("FSRS_PROCESS_REVIEW");
+        TraceContext.setUserId(userId);
         
-        // Store old values for logging
-        FSRSState oldState = card.getState();
-        BigDecimal oldDifficulty = card.getDifficulty();
-        BigDecimal oldStability = card.getStability();
-        LocalDateTime oldNextReview = card.getNextReview();
+        long startTime = System.currentTimeMillis();
+        log.info("Processing FSRS review: userId={}, problemId={}, rating={}, reviewType={}", 
+                userId, problemId, rating, reviewType);
 
-        // Calculate new values using FSRS algorithm
-        FSRSCalculationResult result = fsrsAlgorithm.calculateNextReview(card, rating, parameters);
+        try {
+            // Validate input parameters
+            if (rating < 1 || rating > 4) {
+                log.warn("Invalid review rating: userId={}, problemId={}, rating={}", userId, problemId, rating);
+                throw new IllegalArgumentException("Rating must be between 1-4");
+            }
 
-        // Update card with new values
-        card.setState(result.getNewState());
-        card.setDifficulty(result.getNewDifficulty());
-        card.setStability(result.getNewStability());
-        card.setLastReview(LocalDateTime.now());
-        card.setNextReview(result.getNextReviewTime());
-        card.setIntervalDays(result.getIntervalDays());
-        card.setElapsedDays(result.getElapsedDays());
-        card.setReviewCount(card.getReviewCount() + 1);
-        card.setGrade(rating);
+            FSRSCard card = getOrCreateCard(userId, problemId);
+            User user = userMapper.selectById(userId);
+            Problem problem = problemMapper.selectById(problemId);
 
-        // Count lapse if rating was "Again"
-        if (rating == 1) {
-            card.setLapses(card.getLapses() + 1);
+            if (user == null || problem == null) {
+                log.error("User or problem not found: userId={}, problemId={}, userExists={}, problemExists={}", 
+                        userId, problemId, user != null, problem != null);
+                throw new IllegalArgumentException("User or problem not found");
+            }
+
+            // Get user-specific FSRS parameters (or default)
+            FSRSParametersDTO parameters = getUserFSRSParameters(userId);
+            log.debug("Using FSRS parameters for user {}: isDefault={}", userId, 
+                    parameters.isDefault());
+            
+            // Store old values for logging and audit
+            FSRSState oldState = card.getState();
+            BigDecimal oldDifficulty = card.getDifficulty();
+            BigDecimal oldStability = card.getStability();
+            LocalDateTime oldNextReview = card.getNextReview();
+            int oldReviewCount = card.getReviewCount();
+
+            long algorithmStartTime = System.currentTimeMillis();
+            // Calculate new values using FSRS algorithm
+            FSRSCalculationResult result = fsrsAlgorithm.calculateNextReview(card, rating, parameters);
+            long algorithmDuration = System.currentTimeMillis() - algorithmStartTime;
+            
+            log.debug("FSRS algorithm calculation completed: userId={}, duration={}ms, " +
+                    "oldState={}, newState={}, oldDifficulty={}, newDifficulty={}, " +
+                    "oldStability={}, newStability={}, intervalDays={}", 
+                    userId, algorithmDuration, oldState, result.getNewState(), 
+                    oldDifficulty, result.getNewDifficulty(), oldStability, result.getNewStability(), 
+                    result.getIntervalDays());
+
+            // Update card with new values
+            card.setState(result.getNewState());
+            card.setDifficulty(result.getNewDifficulty());
+            card.setStability(result.getNewStability());
+            card.setLastReview(LocalDateTime.now());
+            card.setNextReview(result.getNextReviewTime());
+            card.setIntervalDays(result.getIntervalDays());
+            card.setElapsedDays(result.getElapsedDays());
+            card.setReviewCount(card.getReviewCount() + 1);
+            card.setGrade(rating);
+
+            // Count lapse if rating was "Again"
+            boolean isLapse = rating == 1;
+            if (isLapse) {
+                card.setLapses(card.getLapses() + 1);
+                log.info("Lapse recorded: userId={}, problemId={}, totalLapses={}", 
+                        userId, problemId, card.getLapses());
+            }
+
+            // Update card in database
+            long dbStartTime = System.currentTimeMillis();
+            fsrsCardMapper.updateById(card);
+            long dbUpdateDuration = System.currentTimeMillis() - dbStartTime;
+
+            // Create review log for audit trail
+            ReviewLog reviewLog = ReviewLog.builder()
+                    .userId(userId)
+                    .problemId(problemId)
+                    .cardId(card.getId())
+                    .rating(rating)
+                    .reviewType(reviewType)
+                    .oldState(oldState)
+                    .newState(result.getNewState())
+                    .oldDifficulty(oldDifficulty)
+                    .newDifficulty(result.getNewDifficulty())
+                    .oldStability(oldStability)
+                    .newStability(result.getNewStability())
+                    .elapsedDays(result.getElapsedDays())
+                    .newIntervalDays(result.getIntervalDays())
+                    .build();
+
+            reviewLogMapper.insert(reviewLog);
+
+            // Update user parameters review count
+            userParametersService.updateReviewCount(userId, 1);
+
+            // Clear cache for user's review queue
+            clearUserReviewQueueCache(userId);
+
+            long totalDuration = System.currentTimeMillis() - startTime;
+            
+            // Business metrics logging
+            log.info("FSRS review completed successfully: userId={}, problemId={}, cardId={}, " +
+                    "rating={}, reviewType={}, oldState={}, newState={}, isLapse={}, " +
+                    "nextReview={}, intervalDays={}, totalDuration={}ms, algorithmDuration={}ms, dbDuration={}ms", 
+                    userId, problemId, card.getId(), rating, reviewType, oldState, 
+                    result.getNewState(), isLapse, result.getNextReviewTime(), result.getIntervalDays(),
+                    totalDuration, algorithmDuration, dbUpdateDuration);
+
+            return FSRSReviewResultDTO.builder()
+                    .card(card)
+                    .nextReviewTime(result.getNextReviewTime())
+                    .intervalDays(result.getIntervalDays())
+                    .newState(result.getNewState())
+                    .difficulty(result.getNewDifficulty())
+                    .stability(result.getNewStability())
+                    .build();
+                    
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to process FSRS review: userId={}, problemId={}, rating={}, " +
+                    "reviewType={}, duration={}ms, error={}", 
+                    userId, problemId, rating, reviewType, duration, e.getMessage(), e);
+            throw e;
         }
-
-        fsrsCardMapper.updateById(card);
-
-        // Create review log
-        ReviewLog reviewLog = ReviewLog.builder()
-                .userId(userId)
-                .problemId(problemId)
-                .cardId(card.getId())
-                .rating(rating)
-                .reviewType(reviewType)
-                .oldState(oldState)
-                .newState(result.getNewState())
-                .oldDifficulty(oldDifficulty)
-                .newDifficulty(result.getNewDifficulty())
-                .oldStability(oldStability)
-                .newStability(result.getNewStability())
-                .elapsedDays(result.getElapsedDays())
-                .newIntervalDays(result.getIntervalDays())
-                .build();
-
-        reviewLogMapper.insert(reviewLog);
-
-        // Update user parameters training count
-        userParametersService.updateTrainingCount(userId, 1);
-
-        // Clear cache for user's review queue
-        clearUserReviewQueueCache(userId);
-
-        log.info("Review processed: user={}, problem={}, rating={}, newState={}, nextReview={}", 
-                userId, problemId, rating, result.getNewState(), result.getNextReviewTime());
-
-        return ReviewResult.builder()
-                .card(card)
-                .nextReviewTime(result.getNextReviewTime())
-                .intervalDays(result.getIntervalDays())
-                .newState(result.getNewState())
-                .difficulty(result.getNewDifficulty())
-                .stability(result.getNewStability())
-                .build();
     }
 
     /**
      * Generate review queue for user.
      */
     @Cacheable(value = "codetop-fsrs-queue", key = "T(com.codetop.service.CacheKeyBuilder).fsrsReviewQueue(#userId, #limit)")
-    public ReviewQueue generateReviewQueue(Long userId, int limit) {
+    public FSRSReviewQueueDTO generateReviewQueue(Long userId, int limit) {
+        TraceContext.setOperation("FSRS_GENERATE_REVIEW_QUEUE");
+        TraceContext.setUserId(userId);
+        
+        long startTime = System.currentTimeMillis();
+        log.info("Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
+        
         try {
             LocalDateTime now = LocalDateTime.now();
             
@@ -176,31 +251,61 @@ public class FSRSService {
             int newLimit = Math.min(limit / 3, 10); // Limit new cards
             int learningLimit = Math.min(limit / 2, 20); // Prioritize learning cards
             int reviewLimit = limit; // Fill remaining with review cards
+            
+            log.debug("Queue generation limits: userId={}, newLimit={}, learningLimit={}, reviewLimit={}", 
+                    userId, newLimit, learningLimit, reviewLimit);
 
+            long dbStartTime = System.currentTimeMillis();
             List<FSRSCardMapper.ReviewQueueCard> cards = fsrsCardMapper.generateOptimalReviewQueue(
                     userId, now, newLimit, learningLimit, reviewLimit);
+            long dbDuration = System.currentTimeMillis() - dbStartTime;
 
             // Get user learning statistics (handle null gracefully)
             FSRSCardMapper.UserLearningStats stats;
             try {
+                long statsStartTime = System.currentTimeMillis();
                 stats = fsrsCardMapper.getUserLearningStats(userId, now);
+                long statsDuration = System.currentTimeMillis() - statsStartTime;
+                
                 if (stats == null) {
+                    log.debug("No learning stats found for user {}, using empty stats", userId);
                     stats = createEmptyUserLearningStats();
+                } else {
+                    log.debug("Retrieved learning stats: userId={}, totalCards={}, dueCards={}, duration={}ms", 
+                            userId, stats.getTotalCards(), stats.getDueCards(), statsDuration);
                 }
             } catch (Exception e) {
-                log.warn("Failed to get user learning stats for user {}, returning empty stats", userId);
+                log.warn("Failed to get user learning stats for user {}, returning empty stats: {}", 
+                        userId, e.getMessage());
                 stats = createEmptyUserLearningStats();
             }
 
-            return ReviewQueue.builder()
+            int actualCardCount = cards != null ? cards.size() : 0;
+            long totalDuration = System.currentTimeMillis() - startTime;
+            
+            // Business metrics logging
+            log.info("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
+                    "totalDuration={}ms, dbDuration={}ms, cacheHit={}", 
+                    userId, limit, actualCardCount, totalDuration, dbDuration, false);
+            
+            if (actualCardCount < limit) {
+                log.debug("Generated fewer cards than requested: userId={}, requested={}, actual={}, " +
+                        "possibleReasons=[insufficient_due_cards, learning_cards_prioritized]", 
+                        userId, limit, actualCardCount);
+            }
+
+            return FSRSReviewQueueDTO.builder()
                     .cards(cards != null ? cards : List.of())
-                    .totalCount(cards != null ? cards.size() : 0)
+                    .totalCount(actualCardCount)
                     .stats(stats)
                     .generatedAt(now)
                     .build();
+                    
         } catch (Exception e) {
-            log.error("Error generating review queue for user {}: {}", userId, e.getMessage(), e);
-            return ReviewQueue.builder()
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to generate review queue: userId={}, limit={}, duration={}ms, error={}", 
+                    userId, limit, duration, e.getMessage(), e);
+            return FSRSReviewQueueDTO.builder()
                     .cards(List.of())
                     .totalCount(0)
                     .stats(createEmptyUserLearningStats())

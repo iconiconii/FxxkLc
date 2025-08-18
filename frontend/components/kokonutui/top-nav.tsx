@@ -6,6 +6,7 @@ import Image from "next/image"
 import { Bell, ChevronRight } from "lucide-react"
 import Profile01 from "./profile-01"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ThemeToggle } from "../theme-toggle"
 import { useAuth } from "@/lib/auth-context"
 
@@ -20,7 +21,20 @@ export default function TopNav() {
     { label: "dashboard", href: "#" },
   ]
 
-  const { isAuthenticated, user, loading } = useAuth()
+  const { isAuthenticated, user, loading, logout } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      // Redirect to login page after successful logout
+      router.push('/login')
+    } catch (error) {
+      console.error('Logout failed:', error)
+      // Even if logout fails, clear tokens and redirect
+      router.push('/login')
+    }
+  }
 
   if (loading) {
     return (
@@ -79,7 +93,12 @@ export default function TopNav() {
                 sideOffset={8}
                 className="w-[280px] sm:w-80 bg-background border-border rounded-lg shadow-lg"
               >
-                <Profile01 avatar={user?.avatarUrl || "https://ferf1mheo22r9ira.public.blob.vercel-storage.com/avatar-01-n0x8HFv8EUetf9z6ht0wScJKoTHqf8.png"} />
+                <Profile01 
+                  avatar={user?.avatarUrl || "https://ferf1mheo22r9ira.public.blob.vercel-storage.com/avatar-01-n0x8HFv8EUetf9z6ht0wScJKoTHqf8.png"}
+                  name={user?.username || ""}
+                  role={user?.email || ""}
+                  onLogout={handleLogout}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
           </>

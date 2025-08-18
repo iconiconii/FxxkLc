@@ -53,40 +53,30 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(authz -> authz
-                        // Public endpoints
+                        // Public endpoints - ONLY the three required by user
                         .requestMatchers("/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/filter/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/codetop/problems/global").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/filter/companies").permitAll()
+                        
+                        // Development endpoints (keep for dev environment)
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/codetop/health").permitAll()
-                        .requestMatchers("/druid/**").hasRole("ADMIN")
 
-                        // Problem endpoints with fine-grained rules
-                        // User-specific reads must be authenticated
-                        .requestMatchers(HttpMethod.GET, "/problems/user-progress").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/problems/*/mastery").authenticated()
-                        // Public read-only access for general problem browsing
-                        .requestMatchers(HttpMethod.GET, "/problems/**").permitAll()
-                        // Allow regular users to update their own problem status
-                        .requestMatchers(HttpMethod.PUT, "/problems/*/status").authenticated()
-                        // Admin-only for other problem modifications
+                        // Admin endpoints
+                        .requestMatchers("/druid/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/problems/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/problems/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/problems/**").hasRole("ADMIN")
 
-                        // Other protected endpoints
-                        .requestMatchers("/review/**").authenticated()
-                        .requestMatchers("/analytics/**").authenticated()
-                        .requestMatchers("/leaderboard/**").authenticated()
-                        .requestMatchers("/codetop/**").authenticated()
-
+                        // ALL other endpoints require authentication (per user requirements)
                         .anyRequest().authenticated());
 
         // Add JWT filter before UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-        // Add rate limit filter before JWT filter
-        http.addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class);
+        // Add rate limit filter after JWT filter
+        // This ensures authentication happens before rate limiting
+        http.addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

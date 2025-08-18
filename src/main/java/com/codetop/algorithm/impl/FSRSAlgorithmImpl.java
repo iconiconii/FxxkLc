@@ -159,7 +159,18 @@ public class FSRSAlgorithmImpl implements FSRSAlgorithm {
             double[] optimizedParams = gradientDescentOptimization(reviewLogs, currentParams);
 
             FSRSParametersDTO optimized = FSRSParametersDTO.fromArray(optimizedParams);
-            optimized.setRequestRetention(currentParameters.getRequestRetention());
+            // Create a new DTO with all parameters including retention
+            optimized = FSRSParametersDTO.builder()
+                    .w0(optimizedParams[0]).w1(optimizedParams[1]).w2(optimizedParams[2]).w3(optimizedParams[3])
+                    .w4(optimizedParams[4]).w5(optimizedParams[5]).w6(optimizedParams[6]).w7(optimizedParams[7])
+                    .w8(optimizedParams[8]).w9(optimizedParams[9]).w10(optimizedParams[10]).w11(optimizedParams[11])
+                    .w12(optimizedParams[12]).w13(optimizedParams[13]).w14(optimizedParams[14]).w15(optimizedParams[15])
+                    .w16(optimizedParams[16])
+                    .requestRetention(currentParameters.getRequestRetention())
+                    .maximumInterval(currentParameters.getMaximumInterval())
+                    .easyBonus(currentParameters.getEasyBonus())
+                    .hardInterval(currentParameters.getHardInterval())
+                    .build();
 
             log.info("Parameter optimization completed successfully");
             return optimized;

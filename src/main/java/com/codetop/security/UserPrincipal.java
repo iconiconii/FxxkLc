@@ -1,6 +1,5 @@
 package com.codetop.security;
 
-import lombok.Data;
 import org.springframework.security.core.GrantedAuthority;
 
 import java.util.Collection;
@@ -10,7 +9,6 @@ import java.util.Collection;
  * 
  * @author CodeTop Team
  */
-@Data
 public class UserPrincipal implements com.codetop.controller.UserPrincipal, org.springframework.security.core.userdetails.UserDetails {
     private Long id;
     private String username;
@@ -42,7 +40,46 @@ public class UserPrincipal implements com.codetop.controller.UserPrincipal, org.
         this.credentialsNonExpired = true;
         this.enabled = true;
     }
-    
+
+    // Getters for the interface
+    @Override
+    public Long getId() {
+        return id;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public void setAuthorities(Collection<? extends GrantedAuthority> authorities) {
+        this.authorities = authorities;
+    }
+
+    public void setAccountNonExpired(boolean accountNonExpired) {
+        this.accountNonExpired = accountNonExpired;
+    }
+
+    public void setAccountNonLocked(boolean accountNonLocked) {
+        this.accountNonLocked = accountNonLocked;
+    }
+
+    public void setCredentialsNonExpired(boolean credentialsNonExpired) {
+        this.credentialsNonExpired = credentialsNonExpired;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public String getPassword() {
         return password;
@@ -71,5 +108,29 @@ public class UserPrincipal implements com.codetop.controller.UserPrincipal, org.
     @Override
     public boolean isEnabled() {
         return enabled;
+    }
+
+    // Basic toString implementation to avoid circular references
+    @Override
+    public String toString() {
+        return "UserPrincipal{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                ", enabled=" + enabled +
+                '}';
+    }
+
+    // Basic equals implementation
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserPrincipal that = (UserPrincipal) o;
+        return id != null ? id.equals(that.id) : that.id == null;
+    }
+
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
     }
 }

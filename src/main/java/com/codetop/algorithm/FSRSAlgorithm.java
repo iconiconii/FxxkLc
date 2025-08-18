@@ -62,12 +62,14 @@ public interface FSRSAlgorithm {
 
     /**
      * Calculate retrievability (probability of successful recall) for a card.
-     * 
-     * @param card The FSRS card
+     *
+     * @param card       The FSRS card
      * @param parameters User's FSRS parameters
      * @return Retrievability between 0.0 and 1.0
      */
-    double calculateRetrievability(FSRSCard card, FSRSParametersDTO parameters);
+    default double calculateRetrievability(FSRSCard card, FSRSParametersDTO parameters) {
+        return 0;
+    }
 
     /**
      * Optimize FSRS parameters based on user's review history.

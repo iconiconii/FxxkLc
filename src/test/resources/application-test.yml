@@ -1,6 +1,4 @@
 spring:
-  profiles:
-    active: test
   
   # Test Database Configuration (will be overridden by TestContainers)
   datasource:

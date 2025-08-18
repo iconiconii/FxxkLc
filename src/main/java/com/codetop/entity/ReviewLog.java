@@ -1,6 +1,8 @@
 package com.codetop.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.codetop.enums.FSRSState;
 import com.codetop.enums.ReviewType;
@@ -37,7 +39,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ReviewLog extends BaseEntity {
+public class ReviewLog {
+
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     @NotNull
     @TableField("user_id")
@@ -69,10 +74,10 @@ public class ReviewLog extends BaseEntity {
     @TableField("new_state")
     private FSRSState newState;
 
-    @TableField("stability_change")
+    @TableField(exist = false)
     private BigDecimal stabilityChange;
 
-    @TableField("difficulty_change")
+    @TableField(exist = false)
     private BigDecimal difficultyChange;
 
     @Builder.Default
@@ -83,41 +88,45 @@ public class ReviewLog extends BaseEntity {
     @TableField("review_type")
     private ReviewType reviewType = ReviewType.SCHEDULED;
 
-    // Previous FSRS values for analytics
-    @TableField("old_difficulty")
+    // Previous FSRS values for analytics  
+    @TableField("difficulty_before")
     private BigDecimal oldDifficulty;
 
-    @TableField("new_difficulty")
+    @TableField("difficulty_after")
     private BigDecimal newDifficulty;
 
-    @TableField("old_stability")
+    @TableField("stability_before")
     private BigDecimal oldStability;
 
-    @TableField("new_stability")
+    @TableField("stability_after")
     private BigDecimal newStability;
 
-    @TableField("old_interval_days")
+    @TableField("interval_before_days")
     private Integer oldIntervalDays;
 
-    @TableField("new_interval_days")
+    @TableField("interval_after_days")
     private Integer newIntervalDays;
 
-    @TableField("elapsed_days")
+    @TableField(exist = false)
     private Integer elapsedDays;
 
-    @TableField("scheduled_days")
+    @TableField(exist = false)
     private Integer scheduledDays;
 
-    @TableField("review_duration_ms")
+    @TableField(exist = false)
     private Integer reviewDurationMs;
 
     // Associations (not mapped to database)
+    @TableField(exist = false)
     private User user;
 
+    @TableField(exist = false)
     private Problem problem;
 
+    @TableField(exist = false)
     private FSRSCard fsrsCard;
 
+    @TableField(exist = false)
     private Object reviewSession;
 
     // Derived methods
@@ -232,6 +241,55 @@ public class ReviewLog extends BaseEntity {
     }
 
     /**
+     * Get old stability (for backward compatibility with algorithm).
+     */
+    public BigDecimal getOldStability() {
+        return oldStability;
+    }
+
+    /**
+     * Get new stability (for backward compatibility with algorithm).
+     */
+    public BigDecimal getNewStability() {
+        return newStability;
+    }
+
+    /**
+     * Get old difficulty (for backward compatibility with algorithm).
+     */
+    public BigDecimal getOldDifficulty() {
+        return oldDifficulty;
+    }
+
+    /**
+     * Get new difficulty (for backward compatibility with algorithm).
+     */
+    public BigDecimal getNewDifficulty() {
+        return newDifficulty;
+    }
+
+    /**
+     * Get elapsed days (for backward compatibility with algorithm).
+     */
+    public Integer getElapsedDays() {
+        return elapsedDays;
+    }
+
+    /**
+     * Get ID (for backward compatibility).
+     */
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * Set ID.
+     */
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    /**
      * Create review log from FSRS card update.
      */
     public static ReviewLog fromCardUpdate(FSRSCard oldCard, FSRSCard newCard, Integer rating, 
@@ -261,7 +319,7 @@ public class ReviewLog extends BaseEntity {
     @Override
     public String toString() {
         return "ReviewLog{" +
-                "id=" + getId() +
+                "id=" + id +
                 ", userId=" + userId +
                 ", problemId=" + problemId +
                 ", cardId=" + cardId +

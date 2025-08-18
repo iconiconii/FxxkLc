@@ -7,13 +7,16 @@ import com.codetop.dto.CodeTopFilterResponse;
 import com.codetop.dto.ProblemRankingDTO;
 import com.codetop.entity.*;
 import com.codetop.mapper.*;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -41,11 +44,11 @@ public class CodeTopFilterService {
     private final CompanyMapper companyMapper;
     private final DepartmentMapper departmentMapper;
     private final PositionMapper positionMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     /**
      * Get filtered and ranked problems using CodeTop-style filtering.
      */
-    @Cacheable(value = "codetop-filter-results", key = "T(com.codetop.service.CacheKeyBuilder).codetopFilter(#request.companyId, #request.departmentId, #request.positionId, #request.keyword, #request.page, #request.size, #request.sortBy)")
     public CodeTopFilterResponse getFilteredProblems(CodeTopFilterRequest request) {
         log.info("Processing CodeTop filter request: company={}, department={}, position={}, keyword={}", 
                 request.getCompanyId(), request.getDepartmentId(), request.getPositionId(), request.getKeyword());
@@ -60,9 +63,6 @@ public class CodeTopFilterService {
             // Convert to ProblemRankingDTO list
             List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(statsPage.getRecords(), request);
             
-            // Build filter options for UI
-            FilterOptions filterOptions = buildFilterOptions(request);
-            
             // Build summary statistics
             CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(statsPage.getRecords());
             
@@ -72,7 +72,6 @@ public class CodeTopFilterService {
                 .currentPage((long) request.getPage())
                 .pageSize((long) request.getSize())
                 .totalPages(statsPage.getPages())
-                .filterOptions(filterOptions)
                 .summary(summary)
                 .build();
             
@@ -88,7 +87,6 @@ public class CodeTopFilterService {
                 .currentPage((long) request.getPage())
                 .pageSize((long) request.getSize())
                 .totalPages(0L)
-                .filterOptions(new FilterOptions())
                 .build();
         }
     }
@@ -242,7 +240,7 @@ public class CodeTopFilterService {
                     .statsScope(String.valueOf(stat.getStatsScope()))
                     .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
                     .isPremium(problem.getIsPremium())
-                    .tags(problem.getTags() != null ? String.join(", ", problem.getTags()) : null)
+                    .tags(problem.getTags())
                     .build();
                     
             } catch (Exception e) {
@@ -558,7 +556,7 @@ public class CodeTopFilterService {
                     .leetcodeId(problem.getLeetcodeId())
                     .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
                     .isPremium(problem.getIsPremium())
-                    .tags(problem.getTags() != null ? String.join(", ", problem.getTags()) : null)
+                    .tags(problem.getTags())
                     .build()
             ).collect(Collectors.toList());
             
@@ -604,6 +602,101 @@ public class CodeTopFilterService {
     }
 
     /**
+     * Get global problems with full pagination info.
+     * Only returns GLOBAL scope statistics to avoid duplicates.
+     */
+    public CodeTopFilterResponse getGlobalProblems(Integer page, Integer size, String sortBy, String sortOrder) {
+        log.info("Getting global problems: page={}, size={}, sortBy={}, sortOrder={}", page, size, sortBy, sortOrder);
+        
+        // Generate cache key
+        String cacheKey = "codetop-global-problems::global:page_" + page + ":size_" + size + ":sort_" + sortBy + "_" + sortOrder;
+        
+        // Try to get from cache first
+        try {
+            Object cachedResult = redisTemplate.opsForValue().get(cacheKey);
+            if (cachedResult instanceof CodeTopFilterResponse) {
+                log.info("Cache HIT for global problems: {}", cacheKey);
+                return (CodeTopFilterResponse) cachedResult;
+            }
+            log.info("Cache MISS for global problems: {}", cacheKey);
+        } catch (Exception e) {
+            log.warn("Error reading from cache: {}", e.getMessage());
+        }
+        
+        try {
+            // Create pagination
+            Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
+            
+            // Build query for GLOBAL scope only
+            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("stats_scope", "GLOBAL");
+            
+            // Sorting
+            boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
+            switch (sortBy) {
+                case "frequency_score":
+                    if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
+                    else queryWrapper.orderByAsc("total_frequency_score");
+                    break;
+                case "interview_count":
+                    if (isDesc) queryWrapper.orderByDesc("interview_count");
+                    else queryWrapper.orderByAsc("interview_count");
+                    break;
+                case "last_asked_date":
+                    if (isDesc) queryWrapper.orderByDesc("last_asked_date");
+                    else queryWrapper.orderByAsc("last_asked_date");
+                    break;
+                default:
+                    queryWrapper.orderByDesc("total_frequency_score");
+            }
+            
+            // Secondary sort by frequency rank
+            queryWrapper.orderByAsc("frequency_rank");
+            
+            Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
+            
+            // Convert to ProblemRankingDTO list
+            CodeTopFilterRequest emptyRequest = new CodeTopFilterRequest();
+            List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(globalStats.getRecords(), emptyRequest);
+            
+            // Build summary statistics
+            CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
+            
+            CodeTopFilterResponse response = CodeTopFilterResponse.builder()
+                .problems(problemRankings)
+                .totalElements(globalStats.getTotal())
+                .currentPage((long) page)
+                .pageSize((long) size)
+                .totalPages(globalStats.getPages())
+                .summary(summary)
+                .build();
+            
+            log.info("Global problems query completed: found {} problems", problemRankings.size());
+            
+            // Store in cache with TTL (1 hour)
+            try {
+                redisTemplate.opsForValue().set(cacheKey, response, Duration.ofHours(1));
+                log.info("Cached global problems result: {}", cacheKey);
+            } catch (Exception e) {
+                log.warn("Error storing to cache: {}", e.getMessage());
+            }
+            
+            return response;
+            
+        } catch (Exception e) {
+            log.error("Error getting global problems: {}", e.getMessage(), e);
+            // Return empty response on error
+            return CodeTopFilterResponse.builder()
+                .problems(Collections.emptyList())
+                .totalElements(0L)
+                .currentPage((long) page)
+                .pageSize((long) size)
+                .totalPages(0L)
+                .build();
+        }
+    }
+
+    /**
      * Get category usage statistics.
      */
     public List<CategoryUsageStatsDTO> getCategoryUsageStatistics() {
@@ -623,44 +716,33 @@ public class CodeTopFilterService {
 
     // Helper classes for API compatibility
 
+    @Setter
+    @Getter
     public static class CompanyProblemBreakdownDTO {
+        // Getters and setters
         private Long problemId;
         private String problemTitle;
         private String departmentName;
         private String positionName;
         private Double frequencyScore;
-        
-        // Getters and setters
-        public Long getProblemId() { return problemId; }
-        public void setProblemId(Long problemId) { this.problemId = problemId; }
-        public String getProblemTitle() { return problemTitle; }
-        public void setProblemTitle(String problemTitle) { this.problemTitle = problemTitle; }
-        public String getDepartmentName() { return departmentName; }
-        public void setDepartmentName(String departmentName) { this.departmentName = departmentName; }
-        public String getPositionName() { return positionName; }
-        public void setPositionName(String positionName) { this.positionName = positionName; }
-        public Double getFrequencyScore() { return frequencyScore; }
-        public void setFrequencyScore(Double frequencyScore) { this.frequencyScore = frequencyScore; }
+
     }
 
+    @Setter
+    @Getter
     public static class CategoryUsageStatsDTO {
+        // Getters and setters
         private Long categoryId;
         private String categoryName;
         private Long problemCount;
         private Double avgFrequencyScore;
-        
-        // Getters and setters
-        public Long getCategoryId() { return categoryId; }
-        public void setCategoryId(Long categoryId) { this.categoryId = categoryId; }
-        public String getCategoryName() { return categoryName; }
-        public void setCategoryName(String categoryName) { this.categoryName = categoryName; }
-        public Long getProblemCount() { return problemCount; }
-        public void setProblemCount(Long problemCount) { this.problemCount = problemCount; }
-        public Double getAvgFrequencyScore() { return avgFrequencyScore; }
-        public void setAvgFrequencyScore(Double avgFrequencyScore) { this.avgFrequencyScore = avgFrequencyScore; }
+
     }
 
+    @Setter
+    @Getter
     public static class FilterOptions {
+        // Getters and setters
         private List<Company> companies;
         private List<Department> departments; 
         private List<Position> positions;
@@ -676,19 +758,6 @@ public class CodeTopFilterService {
             this.difficulties = Arrays.asList("EASY", "MEDIUM", "HARD");
             this.trends = Arrays.asList("INCREASING", "STABLE", "DECREASING", "NEW");
         }
-        
-        // Getters and setters
-        public List<Company> getCompanies() { return companies; }
-        public void setCompanies(List<Company> companies) { this.companies = companies; }
-        public List<Department> getDepartments() { return departments; }
-        public void setDepartments(List<Department> departments) { this.departments = departments; }
-        public List<Position> getPositions() { return positions; }
-        public void setPositions(List<Position> positions) { this.positions = positions; }
-        public List<String> getCategories() { return categories; }
-        public void setCategories(List<String> categories) { this.categories = categories; }
-        public List<String> getDifficulties() { return difficulties; }
-        public void setDifficulties(List<String> difficulties) { this.difficulties = difficulties; }
-        public List<String> getTrends() { return trends; }
-        public void setTrends(List<String> trends) { this.trends = trends; }
+
     }
 }
