@@ -9,6 +9,7 @@ import com.codetop.enums.FSRSState;
 import com.codetop.exception.FSRSCalculationException;
 import com.codetop.exception.InvalidRatingException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -39,11 +40,16 @@ import java.util.List;
 @Slf4j
 public class FSRSAlgorithmImpl implements FSRSAlgorithm {
 
+    // FSRS Configuration from application.yml
+    @Value("${fsrs.maximum-interval:365}")
+    private int maximumIntervalDays;
+    
+    @Value("${fsrs.target-retention:0.9}")
+    private double targetRetention;
+
     // FSRS Constants
     private static final double DEFAULT_REQUEST_RETENTION = 0.9;
-    private static final int MAXIMUM_INTERVAL_DAYS = 36500; // 100 years
     private static final double MINIMUM_STABILITY = 0.01;
-    private static final double MAXIMUM_STABILITY = 36500.0;
     private static final double MINIMUM_DIFFICULTY = 1.0;
     private static final double MAXIMUM_DIFFICULTY = 10.0;
     
@@ -190,7 +196,7 @@ public class FSRSAlgorithmImpl implements FSRSAlgorithm {
         // Calculate interval for target retention: interval = stability * ln(retention) / ln(0.9)
         double interval = stability * Math.log(targetRetention) / Math.log(0.9);
         
-        return Math.max(1.0, Math.min(interval, MAXIMUM_INTERVAL_DAYS));
+        return Math.max(1.0, Math.min(interval, maximumIntervalDays));
     }
 
     @Override
@@ -370,7 +376,7 @@ public class FSRSAlgorithmImpl implements FSRSAlgorithm {
 
     private int calculateIntervalDays(double stability, double requestRetention) {
         double interval = predictOptimalInterval(stability, requestRetention);
-        return Math.max(1, Math.min((int) Math.round(interval), MAXIMUM_INTERVAL_DAYS));
+        return Math.max(1, Math.min((int) Math.round(interval), maximumIntervalDays));
     }
 
     private int calculateElapsedDays(FSRSCard card) {
@@ -381,7 +387,9 @@ public class FSRSAlgorithmImpl implements FSRSAlgorithm {
     }
 
     private double constrainStability(double stability) {
-        return Math.max(MINIMUM_STABILITY, Math.min(stability, MAXIMUM_STABILITY));
+        // Stability should not exceed the maximum interval days to prevent overflow
+        double maxStability = maximumIntervalDays * 2.0; // Allow some headroom
+        return Math.max(MINIMUM_STABILITY, Math.min(stability, maxStability));
     }
 
     private double constrainDifficulty(double difficulty) {

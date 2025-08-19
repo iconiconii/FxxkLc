@@ -1,5 +1,6 @@
 package com.codetop.controller;
 
+import com.codetop.annotation.CurrentUserId;
 import com.codetop.dto.CodeTopFilterRequest;
 import com.codetop.dto.CodeTopFilterResponse;
 import com.codetop.dto.ProblemRankingDTO;
@@ -236,6 +237,29 @@ public class CodeTopFilterController {
 //
 //        return ResponseEntity.ok(response.getFilterOptions());
 //    }
+
+    @Operation(
+        summary = "Get global problems with user status",
+        description = "Get global frequency-based problem rankings with integrated user progress status"
+    )
+    @GetMapping("/problems/global/with-user-status")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<CodeTopFilterResponse> getGlobalProblemsWithUserStatus(
+            @CurrentUserId Long userId,
+            @Parameter(description = "Page number (1-based)") 
+            @RequestParam(defaultValue = "1") Integer page,
+            @Parameter(description = "Page size") 
+            @RequestParam(defaultValue = "20") Integer size,
+            @Parameter(description = "Sort field") 
+            @RequestParam(defaultValue = "frequency_score") String sortBy,
+            @Parameter(description = "Sort order") 
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        
+        CodeTopFilterResponse response = codeTopFilterService.getGlobalProblemsWithUserStatus(
+                userId, page, size, sortBy, sortOrder);
+        
+        return ResponseEntity.ok(response);
+    }
 
     // Health check endpoint for monitoring
     @Operation(

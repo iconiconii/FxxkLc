@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import ProblemAssessmentModal from "@/components/modals/problem-assessment-modal"
 import { filterApi, type Company, type Department, type Position } from "@/lib/filter-api"
-import { codeTopApi, type ProblemRankingDTO, type CodeTopFilterRequest, type CodeTopFilterResponse } from "@/lib/codetop-api"
-import { userApi, type UserProblemStatus } from "@/lib/user-api"
+import { problemsApi, type EnhancedSearchRequest } from "@/lib/problems-api"
+import { codeTopApi, type ProblemRankingDTO, type OliverFilterRequest, type OliverFilterResponse } from "@/lib/codetop-api"
 import { useAuth } from "@/lib/auth-context"
 
 interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
@@ -33,7 +33,7 @@ const difficultyLabels = {
   hard: "困难",
 }
 
-export default function CodeTopPage() {
+export default function OliverPage() {
   const id = useId()
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
@@ -78,34 +78,18 @@ export default function CodeTopPage() {
     pages: 0,
   })
 
-  // Transform API ProblemRankingDTO to DisplayProblem
-  const transformProblem = useCallback((apiProblem: ProblemRankingDTO): DisplayProblem => {
+  // Transform API Problem to DisplayProblem
+  const transformProblem = useCallback((apiProblem: any): DisplayProblem => {
     return {
       ...apiProblem,
-      difficulty: apiProblem.difficulty.toLowerCase() as "easy" | "medium" | "hard",
-      mastery: 0,
-      status: "not_done",
+      problemId: apiProblem.id || apiProblem.problemId,
+      difficulty: (apiProblem.difficulty || 'MEDIUM').toLowerCase() as "easy" | "medium" | "hard",
+      mastery: apiProblem.mastery || 0,
+      status: apiProblem.status || "not_done",
+      frequencyScore: apiProblem.frequency || apiProblem.frequencyScore || 0,
+      lastAskedDate: apiProblem.lastAskedDate || apiProblem.updatedAt?.split('T')[0] || '2024-01-01',
+      problemUrl: apiProblem.problemUrl || `https://leetcode.cn/problems/problem-${apiProblem.id || apiProblem.problemId}/`,
     }
-  }, [])
-
-  // Merge user status with problems
-  const mergeUserStatusWithProblems = useCallback((
-    problems: ProblemRankingDTO[], 
-    userStatuses: UserProblemStatus[]
-  ): DisplayProblem[] => {
-    const statusMap = new Map(
-      userStatuses.map(status => [status.problemId, status])
-    )
-    
-    return problems.map(problem => {
-      const userStatus = statusMap.get(problem.problemId)
-      return {
-        ...problem,
-        difficulty: problem.difficulty.toLowerCase() as "easy" | "medium" | "hard",
-        mastery: userStatus?.mastery || 0,
-        status: userStatus?.status || "not_done",
-      }
-    })
   }, [])
 
   // Load companies on component mount
@@ -178,6 +162,117 @@ export default function CodeTopPage() {
     setSelectedPosition(id)
   }
 
+  // Enhanced search with difficulty, status, and tag filters
+  const executeEnhancedSearch = useCallback(async (page: number = 1) => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Check if we have any advanced filters to apply
+      const hasAdvancedFilters = difficultyFilters.length > 0 || 
+                                 statusFilters.length > 0 || 
+                                 tagFilters.length > 0 || 
+                                 (searchTerm && searchTerm.trim())
+      
+      if (hasAdvancedFilters) {
+        // Use enhanced search API with advanced filters
+        const request: EnhancedSearchRequest = {
+          search: searchTerm || undefined,
+          difficulties: difficultyFilters.length > 0 ? difficultyFilters : undefined,
+          statuses: statusFilters.length > 0 ? statusFilters : undefined,
+          tags: tagFilters.length > 0 ? tagFilters : undefined,
+          userId: isAuthenticated ? 1 : undefined, // TODO: Get actual user ID
+        }
+        
+        const response = await problemsApi.enhancedSearch(request, page, pagination.size)
+        
+        // Transform problems directly (enhanced search already includes user status)
+        const displayProblems: DisplayProblem[] = response.records.map(transformProblem)
+        
+        setProblems(displayProblems)
+        setPagination({
+          current: response.current,
+          size: response.size,
+          total: response.total,
+          pages: response.pages,
+        })
+      } else {
+        // Fall back to basic company/department/position filtering using CodeTop API
+        try {
+          const hasFilters = appliedFilters.companyId || appliedFilters.departmentId || appliedFilters.positionId
+          let response: any
+          
+          if (hasFilters) {
+            // Use complex filter API for specific filtering
+            const request = {
+              companyId: appliedFilters.companyId as number,
+              departmentId: appliedFilters.departmentId as number,
+              positionId: appliedFilters.positionId as number,
+              page: page,
+              size: pagination.size,
+            }
+            response = await codeTopApi.getFilteredProblems(request)
+          } else {
+            // Use new unified API based on authentication status
+            if (isAuthenticated) {
+              response = await codeTopApi.getGlobalProblemsWithUserStatus(
+                page,
+                pagination.size,
+                'frequency_score',
+                'desc'
+              )
+            } else {
+              response = await codeTopApi.getGlobalProblems(
+                page,
+                pagination.size,
+                'frequency_score',
+                'desc'
+              )
+            }
+          }
+          
+          // Transform problems directly (no need for merging anymore)
+          const displayProblems: DisplayProblem[] = response.problems.map(transformProblem)
+          
+          setProblems(displayProblems)
+          setPagination({
+            current: response.currentPage,
+            size: response.pageSize,
+            total: response.totalElements,
+            pages: response.totalPages,
+          })
+          
+        } catch (fallbackErr) {
+          setError(fallbackErr instanceof Error ? fallbackErr.message : '加载题目失败')
+          setProblems([])
+        }
+      }
+      
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '筛选搜索失败')
+      setProblems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [difficultyFilters, statusFilters, tagFilters, searchTerm, isAuthenticated, pagination.size, 
+      appliedFilters, transformProblem])
+
+  // Apply advanced filters
+  const handleApplyAdvancedFilters = async () => {
+    await executeEnhancedSearch(1)
+  }
+
+  // Clear advanced filters
+  const handleClearAdvancedFilters = async () => {
+    setDifficultyFilters([])
+    setStatusFilters([])
+    setTagFilters([])
+    setSearchTerm("")
+    // After clearing advanced filters, show results based on current company/department/position filters
+    // If no company/department/position filters are applied, show all problems
+    await fetchProblems(1, appliedFilters)
+  }
+
   // Apply filters and fetch problems
   const handleApplyFilters = async () => {
     const filters = {
@@ -191,7 +286,7 @@ export default function CodeTopPage() {
   }
 
   // Reset all filters
-  const handleResetFilters = () => {
+  const handleResetFilters = async () => {
     setSelectedCompany(null)
     setSelectedDepartment(null)
     setSelectedPosition(null)
@@ -201,8 +296,8 @@ export default function CodeTopPage() {
     setPositionEnabled(false)
     setAppliedFilters({})
     
-    // Fetch all problems
-    fetchProblems(1, {})
+    // Fetch all problems after resetting filters
+    await fetchProblems(1, {})
   }
 
   // Fetch problems data using CodeTop API
@@ -214,11 +309,11 @@ export default function CodeTopPage() {
       // Check if any filters are applied
       const hasFilters = filters.companyId || filters.departmentId || filters.positionId
       
-      let response: CodeTopFilterResponse
+      let response: OliverFilterResponse
       
       if (hasFilters) {
         // Use complex filter API for specific filtering
-        const request: CodeTopFilterRequest = {
+        const request: OliverFilterRequest = {
           companyId: filters.companyId as number,
           departmentId: filters.departmentId as number,
           positionId: filters.positionId as number,
@@ -227,30 +322,28 @@ export default function CodeTopPage() {
         }
         response = await codeTopApi.getFilteredProblems(request)
       } else {
-        // Use simple global API for basic queries (no duplicates)
-        response = await codeTopApi.getGlobalProblems(
-          page,
-          pagination.size,
-          'frequency_score',
-          'desc'
-        )
-      }
-      
-      let displayProblems: DisplayProblem[]
-      
-      if (isAuthenticated) {
-        // For logged-in users, merge with personal status
-        try {
-          const userStatuses = await userApi.getUserProblemProgress()
-          displayProblems = mergeUserStatusWithProblems(response.problems, userStatuses)
-        } catch (userErr) {
-          console.warn('Failed to load user status, using default values:', userErr)
-          displayProblems = response.problems.map(transformProblem)
+        // Use new unified API based on authentication status
+        if (isAuthenticated) {
+          // For authenticated users, use API with integrated user status
+          response = await codeTopApi.getGlobalProblemsWithUserStatus(
+            page,
+            pagination.size,
+            'frequency_score',
+            'desc'
+          )
+        } else {
+          // For anonymous users, use standard API
+          response = await codeTopApi.getGlobalProblems(
+            page,
+            pagination.size,
+            'frequency_score',
+            'desc'
+          )
         }
-      } else {
-        // For anonymous users, use default values
-        displayProblems = response.problems.map(transformProblem)
       }
+      
+      // Transform problems directly (no need for merging anymore)
+      const displayProblems: DisplayProblem[] = response.problems.map(transformProblem)
       
       setProblems(displayProblems)
       setPagination({
@@ -265,7 +358,7 @@ export default function CodeTopPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.size, transformProblem, mergeUserStatusWithProblems, isAuthenticated])
+  }, [pagination.size, transformProblem, isAuthenticated])
 
   // Load companies on component mount (only once)
   useEffect(() => {
@@ -281,14 +374,18 @@ export default function CodeTopPage() {
 
   // Handle search with debounce
   useEffect(() => {
-    if (!searchTerm) return // Don't search for empty terms
+    // Only trigger search if there are advanced filters or search term
+    // Company/department/position filters are handled separately through appliedFilters
+    if (!searchTerm && difficultyFilters.length === 0 && statusFilters.length === 0 && tagFilters.length === 0) {
+      return // Don't search when no advanced filters are applied
+    }
     
     const timeoutId = setTimeout(() => {
-      fetchProblems(1, appliedFilters)
+      executeEnhancedSearch(1)
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, appliedFilters, fetchProblems])
+  }, [searchTerm, difficultyFilters, statusFilters, tagFilters, executeEnhancedSearch])
 
   // Helper functions for filter display
   const getSelectedCompanyName = () => {
@@ -350,7 +447,7 @@ export default function CodeTopPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">CodeTop</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">OLIVER</h1>
           <span className="text-2xl">🔥</span>
         </div>
         <div className="flex items-center gap-4">
@@ -479,6 +576,7 @@ export default function CodeTopPage() {
               onClick={handleResetFilters}
               disabled={getFilterCount() === 0}
               className="px-3"
+              title="清除所有筛选条件"
             >
               <RotateCcw className="h-4 w-4" />
             </Button>
@@ -631,45 +729,99 @@ export default function CodeTopPage() {
             </PopoverContent>
           </Popover>
 
-          {/* Clear All Filters */}
+          {/* Clear All Advanced Filters */}
           {(difficultyFilters.length > 0 || statusFilters.length > 0 || tagFilters.length > 0) && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-muted-foreground h-9"
-              onClick={() => {
-                setDifficultyFilters([])
-                setStatusFilters([])
-                setTagFilters([])
-              }}
-            >
-              <X className="w-4 h-4 mr-1" />
-              清除筛选
-            </Button>
+            <>
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="bg-blue-600 hover:bg-blue-700 text-white h-9"
+                onClick={handleApplyAdvancedFilters}
+              >
+                应用筛选
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-muted-foreground h-9"
+                onClick={handleClearAdvancedFilters}
+              >
+                <X className="w-4 h-4 mr-1" />
+                清除筛选
+              </Button>
+            </>
           )}
         </div>
 
         {/* Active Filters Display */}
-        {(getFilterCount() > 0 || difficultyFilters.length > 0 || statusFilters.length > 0 || tagFilters.length > 0) && (
+        {(Object.keys(appliedFilters).length > 0 || difficultyFilters.length > 0 || statusFilters.length > 0 || tagFilters.length > 0) && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">已选择：</span>
-            {/* Company/Department/Position filters */}
-            {selectedCompany && (
+            <span className="text-sm text-muted-foreground">已应用：</span>
+            {/* Applied Company/Department/Position filters */}
+            {appliedFilters.companyId && (
               <Badge variant="outline" className="gap-1">
-                {getSelectedCompanyName()}
-                <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedCompany(null)} />
+                {companies.find(c => c.id === appliedFilters.companyId)?.displayName || 
+                 companies.find(c => c.id === appliedFilters.companyId)?.name}
+                <X className="w-3 h-3 cursor-pointer" onClick={async () => {
+                  setAppliedFilters(prev => {
+                    const newFilters = { ...prev }
+                    delete newFilters.companyId
+                    return newFilters
+                  })
+                  // Also clear the selected company
+                  setSelectedCompany(null)
+                  setSelectedDepartment(null)
+                  setSelectedPosition(null)
+                  setDepartments([])
+                  setPositions([])
+                  setDepartmentEnabled(false)
+                  setPositionEnabled(false)
+                  // Fetch with updated filters
+                  const newFilters = { ...appliedFilters }
+                  delete newFilters.companyId
+                  await fetchProblems(1, newFilters)
+                }} />
               </Badge>
             )}
-            {selectedDepartment && (
+            {appliedFilters.departmentId && (
               <Badge variant="outline" className="gap-1">
-                {getSelectedDepartmentName()}
-                <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedDepartment(null)} />
+                {departments.find(d => d.id === appliedFilters.departmentId)?.displayName || 
+                 departments.find(d => d.id === appliedFilters.departmentId)?.name}
+                <X className="w-3 h-3 cursor-pointer" onClick={async () => {
+                  setAppliedFilters(prev => {
+                    const newFilters = { ...prev }
+                    delete newFilters.departmentId
+                    return newFilters
+                  })
+                  // Also clear the selected department
+                  setSelectedDepartment(null)
+                  setSelectedPosition(null)
+                  setPositions([])
+                  setPositionEnabled(false)
+                  // Fetch with updated filters
+                  const newFilters = { ...appliedFilters }
+                  delete newFilters.departmentId
+                  await fetchProblems(1, newFilters)
+                }} />
               </Badge>
             )}
-            {selectedPosition && (
+            {appliedFilters.positionId && (
               <Badge variant="outline" className="gap-1">
-                {getSelectedPositionName()}
-                <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedPosition(null)} />
+                {positions.find(p => p.id === appliedFilters.positionId)?.displayName || 
+                 positions.find(p => p.id === appliedFilters.positionId)?.name}
+                <X className="w-3 h-3 cursor-pointer" onClick={async () => {
+                  setAppliedFilters(prev => {
+                    const newFilters = { ...prev }
+                    delete newFilters.positionId
+                    return newFilters
+                  })
+                  // Also clear the selected position
+                  setSelectedPosition(null)
+                  // Fetch with updated filters
+                  const newFilters = { ...appliedFilters }
+                  delete newFilters.positionId
+                  await fetchProblems(1, newFilters)
+                }} />
               </Badge>
             )}
             {/* Difficulty filters */}
@@ -891,7 +1043,7 @@ export default function CodeTopPage() {
           problemTitle={selectedProblem.title}
           onStatusUpdate={() => {
             // Refresh the current page data after status update
-            fetchProblems(pagination.current, appliedFilters, searchTerm)
+            fetchProblems(pagination.current, appliedFilters)
           }}
         />
       )}

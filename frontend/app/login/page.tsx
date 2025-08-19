@@ -3,8 +3,8 @@ import LoginForm from "@/components/auth/login-form"
 import ProtectedRoute from "@/components/auth/protected-route"
 
 export const metadata = {
-  title: "登录 - CodeTop",
-  description: "登录您的 CodeTop 账户",
+  title: "登录 - OLIVER",
+  description: "登录您的 OLIVER 账户"
 }
 
 export default function LoginPage() {

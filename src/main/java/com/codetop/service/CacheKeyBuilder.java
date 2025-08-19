@@ -65,6 +65,24 @@ public class CacheKeyBuilder {
         return buildKey("problem", "stats", "global");
     }
     
+    public static String problemAdvancedSearch(Object request, Integer page, Integer size) {
+        StringJoiner params = new StringJoiner(DELIMITER);
+        params.add("advanced");
+        params.add("page" + PARAM_DELIMITER + page);
+        params.add("size" + PARAM_DELIMITER + size);
+        params.add("request" + PARAM_DELIMITER + request.hashCode());
+        return buildKey("problem", "search", params.toString());
+    }
+    
+    public static String problemEnhancedSearch(Object request, Integer page, Integer size) {
+        StringJoiner params = new StringJoiner(DELIMITER);
+        params.add("enhanced");
+        params.add("page" + PARAM_DELIMITER + page);
+        params.add("size" + PARAM_DELIMITER + size);
+        params.add("request" + PARAM_DELIMITER + request.hashCode());
+        return buildKey("problem", "search", params.toString());
+    }
+    
     public static String tagStatistics() {
         return buildKey("tag", "stats", "global");
     }
@@ -125,6 +143,35 @@ public class CacheKeyBuilder {
         return buildKey("codetop", "filter", params.toString());
     }
     
+    public static String codetopGlobalProblems(Integer page, Integer size, String sortBy, String sortOrder) {
+        StringJoiner params = new StringJoiner(DELIMITER);
+        params.add("page" + PARAM_DELIMITER + page);
+        params.add("size" + PARAM_DELIMITER + size);
+        if (sortBy != null && !sortBy.trim().isEmpty()) {
+            params.add("sort" + PARAM_DELIMITER + sortBy);
+        }
+        if (sortOrder != null && !sortOrder.trim().isEmpty()) {
+            params.add("order" + PARAM_DELIMITER + sortOrder);
+        }
+        
+        return buildKey("codetop", "global", params.toString());
+    }
+    
+    public static String codetopGlobalProblemsWithUserStatus(Long userId, Integer page, Integer size, String sortBy, String sortOrder) {
+        StringJoiner params = new StringJoiner(DELIMITER);
+        params.add("userId" + PARAM_DELIMITER + userId);
+        params.add("page" + PARAM_DELIMITER + page);
+        params.add("size" + PARAM_DELIMITER + size);
+        if (sortBy != null && !sortBy.trim().isEmpty()) {
+            params.add("sort" + PARAM_DELIMITER + sortBy);
+        }
+        if (sortOrder != null && !sortOrder.trim().isEmpty()) {
+            params.add("order" + PARAM_DELIMITER + sortOrder);
+        }
+        
+        return buildKey("codetop", "globaluser", params.toString());
+    }
+    
     // Cache invalidation patterns
     public static String problemDomain() {
         return NAMESPACE + DELIMITER + "problem" + DELIMITER + "*";
@@ -140,6 +187,10 @@ public class CacheKeyBuilder {
     
     public static String codetopFilterDomain() {
         return NAMESPACE + DELIMITER + "codetop" + DELIMITER + "*";
+    }
+    
+    public static String codetopUserStatusDomain(Long userId) {
+        return NAMESPACE + DELIMITER + "codetop" + DELIMITER + "globaluser" + DELIMITER + "userId" + PARAM_DELIMITER + userId + "*";
     }
     
     // Utility methods

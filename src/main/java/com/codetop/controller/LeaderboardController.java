@@ -14,9 +14,13 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.List;
+import java.util.stream.Collectors;
 import com.codetop.dto.LeaderboardEntryDTO;
 import com.codetop.dto.AccuracyLeaderboardEntryDTO;
 import com.codetop.dto.StreakLeaderboardEntryDTO;
+import com.codetop.dto.LeaderboardEntryVO;
+import com.codetop.dto.AccuracyLeaderboardEntryVO;
+import com.codetop.dto.StreakLeaderboardEntryVO;
 
 /**
  * Leaderboard controller for user rankings and achievements.
@@ -44,14 +48,17 @@ public class LeaderboardController {
      */
     @GetMapping
     @Operation(summary = "Get global leaderboard", description = "Get top users by total review count with badge system")
-    public ResponseEntity<List<LeaderboardEntryDTO>> getGlobalLeaderboard(
+    public ResponseEntity<List<LeaderboardEntryVO>> getGlobalLeaderboard(
             @Parameter(description = "Maximum number of entries to return (1-100)")
             @RequestParam(defaultValue = "50") 
             @Min(1) @Max(100) int limit) {
         
         log.info("Fetching global leaderboard with limit: {}", limit);
         List<LeaderboardEntryDTO> leaderboard = leaderboardService.getGlobalLeaderboard(limit);
-        return ResponseEntity.ok(leaderboard);
+        List<LeaderboardEntryVO> response = leaderboard.stream()
+                .map(this::convertLeaderboardEntryToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -59,14 +66,17 @@ public class LeaderboardController {
      */
     @GetMapping("/weekly")
     @Operation(summary = "Get weekly leaderboard", description = "Get top users by review count this week")
-    public ResponseEntity<List<LeaderboardEntryDTO>> getWeeklyLeaderboard(
+    public ResponseEntity<List<LeaderboardEntryVO>> getWeeklyLeaderboard(
             @Parameter(description = "Maximum number of entries to return (1-100)")
             @RequestParam(defaultValue = "50") 
             @Min(1) @Max(100) int limit) {
         
         log.info("Fetching weekly leaderboard with limit: {}", limit);
         List<LeaderboardEntryDTO> leaderboard = leaderboardService.getWeeklyLeaderboard(limit);
-        return ResponseEntity.ok(leaderboard);
+        List<LeaderboardEntryVO> response = leaderboard.stream()
+                .map(this::convertLeaderboardEntryToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -74,14 +84,17 @@ public class LeaderboardController {
      */
     @GetMapping("/monthly")
     @Operation(summary = "Get monthly leaderboard", description = "Get top users by review count this month")
-    public ResponseEntity<List<LeaderboardEntryDTO>> getMonthlyLeaderboard(
+    public ResponseEntity<List<LeaderboardEntryVO>> getMonthlyLeaderboard(
             @Parameter(description = "Maximum number of entries to return (1-100)")
             @RequestParam(defaultValue = "50") 
             @Min(1) @Max(100) int limit) {
         
         log.info("Fetching monthly leaderboard with limit: {}", limit);
         List<LeaderboardEntryDTO> leaderboard = leaderboardService.getMonthlyLeaderboard(limit);
-        return ResponseEntity.ok(leaderboard);
+        List<LeaderboardEntryVO> response = leaderboard.stream()
+                .map(this::convertLeaderboardEntryToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -89,7 +102,7 @@ public class LeaderboardController {
      */
     @GetMapping("/accuracy")
     @Operation(summary = "Get accuracy leaderboard", description = "Get top users by accuracy rate (minimum 10 reviews)")
-    public ResponseEntity<List<AccuracyLeaderboardEntryDTO>> getAccuracyLeaderboard(
+    public ResponseEntity<List<AccuracyLeaderboardEntryVO>> getAccuracyLeaderboard(
             @Parameter(description = "Maximum number of entries to return (1-100)")
             @RequestParam(defaultValue = "50") 
             @Min(1) @Max(100) int limit,
@@ -99,7 +112,10 @@ public class LeaderboardController {
         
         log.info("Fetching accuracy leaderboard with limit: {} and days: {}", limit, days);
         List<AccuracyLeaderboardEntryDTO> leaderboard = leaderboardService.getAccuracyLeaderboard(limit, days);
-        return ResponseEntity.ok(leaderboard);
+        List<AccuracyLeaderboardEntryVO> response = leaderboard.stream()
+                .map(this::convertAccuracyLeaderboardEntryToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -107,14 +123,17 @@ public class LeaderboardController {
      */
     @GetMapping("/streak")
     @Operation(summary = "Get streak leaderboard", description = "Get top users by current learning streak")
-    public ResponseEntity<List<StreakLeaderboardEntryDTO>> getStreakLeaderboard(
+    public ResponseEntity<List<StreakLeaderboardEntryVO>> getStreakLeaderboard(
             @Parameter(description = "Maximum number of entries to return (1-100)")
             @RequestParam(defaultValue = "50") 
             @Min(1) @Max(100) int limit) {
         
         log.info("Fetching streak leaderboard with limit: {}", limit);
         List<StreakLeaderboardEntryDTO> leaderboard = leaderboardService.getStreakLeaderboard(limit);
-        return ResponseEntity.ok(leaderboard);
+        List<StreakLeaderboardEntryVO> response = leaderboard.stream()
+                .map(this::convertStreakLeaderboardEntryToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -141,6 +160,57 @@ public class LeaderboardController {
         log.info("Fetching leaderboard statistics summary");
         LeaderboardService.TopPerformersSummary summary = leaderboardService.getTopPerformersSummary();
         return ResponseEntity.ok(summary);
+    }
+
+    // Converter methods
+    
+    /**
+     * Convert LeaderboardEntryDTO to VO.
+     */
+    private LeaderboardEntryVO convertLeaderboardEntryToVO(LeaderboardEntryDTO dto) {
+        return LeaderboardEntryVO.builder()
+                .rank(dto.getRank())
+                .userId(dto.getUserId())
+                .username(dto.getUsername())
+                .avatarUrl(dto.getAvatarUrl())
+                .totalReviews(dto.getTotalReviews())
+                .correctReviews(dto.getCorrectReviews())
+                .accuracy(dto.getAccuracy())
+                .streak(dto.getStreak())
+                .badge(dto.getBadge())
+                .build();
+    }
+    
+    /**
+     * Convert AccuracyLeaderboardEntryDTO to VO.
+     */
+    private AccuracyLeaderboardEntryVO convertAccuracyLeaderboardEntryToVO(AccuracyLeaderboardEntryDTO dto) {
+        return AccuracyLeaderboardEntryVO.builder()
+                .rank(dto.getRank())
+                .userId(dto.getUserId())
+                .username(dto.getUsername())
+                .avatarUrl(dto.getAvatarUrl())
+                .totalReviews(dto.getTotalReviews())
+                .correctReviews(dto.getCorrectReviews())
+                .accuracy(dto.getAccuracy())
+                .badge(dto.getBadge())
+                .build();
+    }
+    
+    /**
+     * Convert StreakLeaderboardEntryDTO to VO.
+     */
+    private StreakLeaderboardEntryVO convertStreakLeaderboardEntryToVO(StreakLeaderboardEntryDTO dto) {
+        return StreakLeaderboardEntryVO.builder()
+                .rank(dto.getRank())
+                .userId(dto.getUserId())
+                .username(dto.getUsername())
+                .avatarUrl(dto.getAvatarUrl())
+                .currentStreak(dto.getCurrentStreak())
+                .longestStreak(dto.getLongestStreak())
+                .totalActiveDays(dto.getTotalActiveDays())
+                .badge(dto.getBadge())
+                .build();
     }
 
     // DTOs

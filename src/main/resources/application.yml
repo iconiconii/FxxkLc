@@ -168,25 +168,30 @@ app:
 
 # FSRS Configuration
 fsrs:
-  # Default FSRS Parameters (17 parameters)
+  # Default FSRS Parameters (17 parameters) - Optimized for algorithm problems
   default-parameters:
-    - 0.4     # w[0] - initial difficulty for Again rating
-    - 0.6     # w[1] - initial difficulty for Hard rating  
-    - 2.4     # w[2] - initial difficulty for Good rating
-    - 5.8     # w[3] - initial difficulty for Easy rating
-    - 4.93    # w[4] - difficulty decay
-    - 0.94    # w[5] - difficulty multiplier for Again
-    - 0.86    # w[6] - difficulty multiplier for Hard
-    - 0.01    # w[7] - difficulty multiplier for Good
-    - 1.49    # w[8] - difficulty multiplier for Easy
-    - 0.14    # w[9] - initial stability for Again rating
-    - 0.94    # w[10] - initial stability for Hard rating
-    - 2.18    # w[11] - initial stability for Good rating
-    - 0.05    # w[12] - stability multiplier for Again
-    - 0.34    # w[13] - stability multiplier for Hard
-    - 1.26    # w[14] - stability multiplier for Good
-    - 0.29    # w[15] - stability multiplier for Easy
-    - 2.61    # w[16] - retrievability threshold
+    # Initial Stability Parameters (w[0-3])
+    - 0.4072  # w[0] - initial stability for Again rating
+    - 1.1829  # w[1] - initial stability for Hard rating (reduced for shorter intervals)
+    - 3.1262  # w[2] - initial stability for Good rating
+    - 15.4722 # w[3] - initial stability for Easy rating
+    
+    # Difficulty Parameters (w[4-8])
+    - 5.0746  # w[4] - initial difficulty calculation
+    - -1.2025 # w[5] - difficulty change for Again
+    - -1.5374 # w[6] - difficulty change for Hard  
+    - 0.0465  # w[7] - difficulty change for Good
+    - 1.6477  # w[8] - difficulty change for Easy
+    
+    # Stability Growth Parameters (w[9-16])
+    - -0.5890 # w[9] - stability factor after Again
+    - 1.0994  # w[10] - stability factor after Hard
+    - -2.0567 # w[11] - stability factor after Good
+    - -0.2192 # w[12] - additional stability factor
+    - 0.8577  # w[13] - retrievability impact on stability
+    - 0.0884  # w[14] - time factor in stability calculation
+    - 2.0777  # w[15] - lapse impact factor
+    - 0.8236  # w[16] - interval bonus factor
   
   # Algorithm Settings
   target-retention: 0.9  # 90% retention rate

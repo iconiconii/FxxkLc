@@ -8,11 +8,13 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Problem ranking DTO with frequency and relevance information.
  * 
  * Used for CodeTop-style problem lists with comprehensive ranking data.
+ * Includes user-specific status information when user is authenticated.
  * 
  * @author CodeTop Team
  */
@@ -27,6 +29,15 @@ public class ProblemRankingDTO {
     private String difficulty;
     private String problemUrl;
     private String leetcodeId;
+    
+    // User-specific status (populated when user is authenticated)
+    private Integer mastery;                    // User's mastery level (0-3 stars)
+    private String status;                      // User's completion status: "not_done", "done", "reviewed"
+    private String notes;                       // User's notes for this problem
+    private LocalDateTime lastAttemptDate;      // Last time user attempted this problem
+    private LocalDateTime lastConsideredDate;  // Next review date for FSRS
+    private Integer attemptCount;               // Number of times user attempted this problem
+    private Double accuracy;                    // User's accuracy rate for this problem
 
     // Frequency statistics
     private BigDecimal frequencyScore;
@@ -75,6 +86,13 @@ public class ProblemRankingDTO {
             @JsonProperty("difficulty") String difficulty,
             @JsonProperty("problemUrl") String problemUrl,
             @JsonProperty("leetcodeId") String leetcodeId,
+            @JsonProperty("mastery") Integer mastery,
+            @JsonProperty("status") String status,
+            @JsonProperty("notes") String notes,
+            @JsonProperty("lastAttemptDate") LocalDateTime lastAttemptDate,
+            @JsonProperty("lastConsideredDate") LocalDateTime lastConsideredDate,
+            @JsonProperty("attemptCount") Integer attemptCount,
+            @JsonProperty("accuracy") Double accuracy,
             @JsonProperty("frequencyScore") BigDecimal frequencyScore,
             @JsonProperty("interviewCount") Integer interviewCount,
             @JsonProperty("frequencyRank") Integer frequencyRank,
@@ -106,6 +124,13 @@ public class ProblemRankingDTO {
         this.difficulty = difficulty;
         this.problemUrl = problemUrl;
         this.leetcodeId = leetcodeId;
+        this.mastery = mastery;
+        this.status = status;
+        this.notes = notes;
+        this.lastAttemptDate = lastAttemptDate;
+        this.lastConsideredDate = lastConsideredDate;
+        this.attemptCount = attemptCount;
+        this.accuracy = accuracy;
         this.frequencyScore = frequencyScore;
         this.interviewCount = interviewCount;
         this.frequencyRank = frequencyRank;

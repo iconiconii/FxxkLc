@@ -52,8 +52,8 @@ export type {
 } from './leaderboard-api'
 export type {
   ProblemRankingDTO,
-  CodeTopFilterRequest,
-  CodeTopFilterResponse,
+  OliverFilterRequest,
+  OliverFilterResponse,
   FilterOptions,
   CompanyProblemBreakdownDTO,
   CategoryUsageStatsDTO

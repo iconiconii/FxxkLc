@@ -18,19 +18,19 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         <Link href="/" className="flex items-center gap-3">
           <Image
             src="https://kokonutui.com/logo.svg"
-            alt="CodeTop"
+            alt="OLIVER"
             width={32}
             height={32}
             className="flex-shrink-0 hidden dark:block"
           />
           <Image
             src="https://kokonutui.com/logo-black.svg"
-            alt="CodeTop"
+            alt="OLIVER"
             width={32}
             height={32}
             className="flex-shrink-0 block dark:hidden"
           />
-          <span className="text-xl font-bold text-gray-900 dark:text-white">CodeTop</span>
+          <span className="text-xl font-bold text-gray-900 dark:text-white">OLIVER</span>
           <span className="text-xl">🔥</span>
         </Link>
         <ThemeToggle />
@@ -41,14 +41,14 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
           <div className="flex justify-center items-center gap-3 mb-4">
             <Image
               src="https://kokonutui.com/logo.svg"
-              alt="CodeTop"
+              alt="OLIVER"
               width={48}
               height={48}
               className="hidden dark:block"
             />
             <Image
               src="https://kokonutui.com/logo-black.svg"
-              alt="CodeTop"
+              alt="OLIVER"
               width={48}
               height={48}
               className="block dark:hidden"
@@ -63,7 +63,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
       {/* Footer */}
       <div className="mt-8 text-center">
-        <p className="text-sm text-gray-500 dark:text-gray-400">© 2025 CodeTop. 专注于算法面试题目练习</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">© 2025 OLIVER. 专注于算法面试题目练习</p>
       </div>
     </div>
   )

@@ -47,8 +47,10 @@ public class FSRSCard extends BaseEntity {
     private Long problemId;
 
     @JsonIgnore
+    @TableField(exist = false)
     private User user;
 
+    @TableField(exist = false)
     private Problem problem;
 
     @Builder.Default

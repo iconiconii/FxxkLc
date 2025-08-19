@@ -118,7 +118,7 @@ export default function RegisterForm() {
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">创建账户</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">加入 CodeTop，开始您的算法学习之旅</p>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">加入 OLIVER，开始您的算法学习之旅</p>
       </div>
 
       {/* Social Login Buttons */}

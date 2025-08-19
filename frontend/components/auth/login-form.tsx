@@ -55,7 +55,7 @@ export default function LoginForm() {
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">欢迎回来</h2>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">登录您的 CodeTop 账户</p>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">登录您的 OLIVER 账户</p>
       </div>
 
       {/* Social Login Buttons */}

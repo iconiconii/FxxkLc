@@ -7,6 +7,9 @@ import com.codetop.dto.UserProblemStatusLegacyDTO;
 import com.codetop.dto.ProblemMasteryDTO;
 import com.codetop.dto.UpdateProblemStatusRequest;
 import com.codetop.dto.ProblemStatisticsDTO;
+import com.codetop.dto.UserProblemStatusVO;
+import com.codetop.dto.ProblemStatisticsVO;
+import com.codetop.dto.ProblemMasteryVO;
 import com.codetop.entity.Problem;
 import com.codetop.enums.Difficulty;
 import com.codetop.mapper.ProblemMapper;
@@ -22,6 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Problem controller for managing algorithm problems.
@@ -81,10 +85,10 @@ public class ProblemController {
     }
 
     /**
-     * Advanced search with filters.
+     * Advanced search with filters including status and tags.
      */
     @PostMapping("/search/advanced")
-    @Operation(summary = "Advanced search", description = "Advanced problem search with multiple filters")
+    @Operation(summary = "Advanced search", description = "Advanced problem search with multiple filters including difficulty, status, and tags")
     public ResponseEntity<Page<Problem>> advancedSearch(
             @RequestBody AdvancedSearchRequest request,
             @RequestParam(defaultValue = "1") int page,
@@ -97,8 +101,41 @@ public class ProblemController {
         serviceRequest.setDifficulty(request.getDifficulty());
         serviceRequest.setTag(request.getTag());
         serviceRequest.setIsPremium(request.getIsPremium());
+        serviceRequest.setDifficulties(request.getDifficulties());
+        serviceRequest.setTags(request.getTags());
+        serviceRequest.setStatuses(request.getStatuses());
+        serviceRequest.setUserId(request.getUserId());
         
         Page<Problem> result = problemService.advancedSearch(serviceRequest, pageRequest);
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * Enhanced search with comprehensive filters for CodeTop page.
+     */
+    @GetMapping("/search/enhanced")
+    @Operation(summary = "Enhanced search", description = "Enhanced search with difficulty, status, tags filters and search functionality")
+    public ResponseEntity<Page<Problem>> enhancedSearch(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) List<String> difficulties,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(required = false) List<String> tags,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "title,asc") String sort) {
+        
+        Page<Problem> pageRequest = new Page<>(page, Math.min(size, 100));
+        
+        ProblemService.EnhancedSearchRequest request = new ProblemService.EnhancedSearchRequest();
+        request.setSearch(search);
+        request.setDifficulties(difficulties);
+        request.setStatuses(statuses);
+        request.setTags(tags);
+        request.setUserId(userId);
+        request.setSort(sort);
+        
+        Page<Problem> result = problemService.enhancedSearch(request, pageRequest);
         return ResponseEntity.ok(result);
     }
 
@@ -192,9 +229,10 @@ public class ProblemController {
      */
     @GetMapping("/statistics")
     @Operation(summary = "Get problem statistics", description = "Get overall problem statistics")
-    public ResponseEntity<ProblemStatisticsDTO> getStatistics() {
+    public ResponseEntity<ProblemStatisticsVO> getStatistics() {
         ProblemStatisticsDTO result = problemService.getStatistics();
-        return ResponseEntity.ok(result);
+        ProblemStatisticsVO response = convertStatisticsToVO(result);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -213,11 +251,14 @@ public class ProblemController {
     @GetMapping("/user-progress")
     @Operation(summary = "Get user problem progress", description = "Get user's completion status for problems")
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<List<UserProblemStatusDTO>> getUserProblemProgress(
+    public ResponseEntity<List<UserProblemStatusVO>> getUserProblemProgress(
             @CurrentUserId Long userId) {
         
         List<UserProblemStatusDTO> progress = problemService.getUserProblemProgress(userId);
-        return ResponseEntity.ok(progress);
+        List<UserProblemStatusVO> response = progress.stream()
+                .map(this::convertUserStatusToVO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -256,12 +297,62 @@ public class ProblemController {
     @GetMapping("/{problemId}/mastery")
     @Operation(summary = "Get problem mastery", description = "Get user's mastery level for a specific problem")
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<ProblemMasteryDTO> getProblemMastery(
+    public ResponseEntity<ProblemMasteryVO> getProblemMastery(
             @PathVariable Long problemId,
             @CurrentUserId Long userId) {
         
         ProblemMasteryDTO mastery = problemService.getProblemMastery(userId, problemId);
-        return ResponseEntity.ok(mastery);
+        ProblemMasteryVO response = convertMasteryToVO(mastery);
+        return ResponseEntity.ok(response);
+    }
+
+    // Converter methods
+    
+    /**
+     * Convert UserProblemStatusDTO to VO.
+     */
+    private UserProblemStatusVO convertUserStatusToVO(UserProblemStatusDTO dto) {
+        return UserProblemStatusVO.builder()
+                .problemId(dto.getProblemId())
+                .title(dto.getTitle())
+                .difficulty(dto.getDifficulty())
+                .status(dto.getStatus())
+                .mastery(dto.getMastery())
+                .lastAttemptDate(dto.getLastAttemptDate())
+                .lastConsideredDate(dto.getLastConsideredDate())
+                .attemptCount(dto.getAttemptCount())
+                .accuracy(dto.getAccuracy())
+                .notes(dto.getNotes())
+                .build();
+    }
+    
+    /**
+     * Convert ProblemStatisticsDTO to VO.
+     */
+    private ProblemStatisticsVO convertStatisticsToVO(ProblemStatisticsDTO dto) {
+        return ProblemStatisticsVO.builder()
+                .totalProblems(dto.getTotalProblems())
+                .easyCount(dto.getEasyCount())
+                .mediumCount(dto.getMediumCount())
+                .hardCount(dto.getHardCount())
+                .premiumCount(dto.getPremiumCount())
+                .build();
+    }
+    
+    /**
+     * Convert ProblemMasteryDTO to VO.
+     */
+    private ProblemMasteryVO convertMasteryToVO(ProblemMasteryDTO dto) {
+        return ProblemMasteryVO.builder()
+                .problemId(dto.getProblemId())
+                .masteryLevel(dto.getMasteryLevel())
+                .attemptCount(dto.getAttemptCount())
+                .accuracy(dto.getAccuracy())
+                .lastAttemptDate(dto.getLastAttemptDate())
+                .nextReviewDate(dto.getNextReviewDate())
+                .difficulty(dto.getDifficulty())
+                .notes(dto.getNotes())
+                .build();
     }
 
     // DTOs
@@ -272,6 +363,12 @@ public class ProblemController {
         private Difficulty difficulty;
         private String tag;
         private Boolean isPremium;
+        
+        // Enhanced fields for comprehensive filtering
+        private List<String> difficulties;
+        private List<String> statuses;
+        private List<String> tags;
+        private Long userId;
     }
 
     @lombok.Data

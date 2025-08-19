@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logout Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        #token-display {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>Frontend Logout Test</h1>
+    
+    <div id="step1" class="step">
+        <h3>Step 1: Login</h3>
+        <p>Use testuser123 / password123 or register a new user</p>
+        <button class="primary" onclick="login()">Login</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div id="step2" class="step" style="display: none;">
+        <h3>Step 2: Check Stored Tokens</h3>
+        <div id="token-display"></div>
+        <button class="secondary" onclick="checkTokens()">Refresh Tokens</button>
+    </div>
+    
+    <div id="step3" class="step" style="display: none;">
+        <h3>Step 3: Test API Access</h3>
+        <button class="primary" onclick="testApiAccess()">Test API Access</button>
+        <div id="api-result"></div>
+    </div>
+    
+    <div id="step4" class="step" style="display: none;">
+        <h3>Step 4: Logout</h3>
+        <button class="primary" onclick="logout()">Logout</button>
+        <div id="logout-result"></div>
+    </div>
+    
+    <div id="step5" class="step" style="display: none;">
+        <h3>Step 5: Verify Logout</h3>
+        <button class="primary" onclick="verifyLogout()">Verify Token Cleared</button>
+        <button class="secondary" onclick="testApiAfterLogout()">Test API After Logout</button>
+        <div id="verify-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api/v1';
+        
+        async function login() {
+            try {
+                // Try to login with existing user
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        identifier: 'testuser123',
+                        password: 'password123'
+                    }),
+                });
+                
+                const result = document.getElementById('login-result');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('userInfo', JSON.stringify(data.user));
+                    
+                    result.innerHTML = '<div class="success">✅ Login successful!</div>';
+                    result.innerHTML += `<div>User: ${data.user.username}</div>`;
+                    
+                    // Show next steps
+                    document.getElementById('step2').style.display = 'block';
+                    checkTokens();
+                } else {
+                    const error = await response.json();
+                    result.innerHTML = `<div class="error">❌ Login failed: ${error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('login-result').innerHTML = 
+                    `<div class="error">❌ Network error: ${error.message}</div>`;
+            }
+        }
+        
+        function checkTokens() {
+            const tokenDisplay = document.getElementById('token-display');
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            const userInfo = localStorage.getItem('userInfo');
+            
+            tokenDisplay.innerHTML = `
+                <strong>Access Token:</strong> ${accessToken ? accessToken.substring(0, 50) + '...' : 'None'}<br>
+                <strong>Refresh Token:</strong> ${refreshToken ? refreshToken.substring(0, 50) + '...' : 'None'}<br>
+                <strong>User Info:</strong> ${userInfo || 'None'}
+            `;
+            
+            document.getElementById('step3').style.display = 'block';
+        }
+        
+        async function testApiAccess() {
+            try {
+                const accessToken = localStorage.getItem('accessToken');
+                const response = await fetch(`${API_BASE}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                });
+                
+                const result = document.getElementById('api-result');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.innerHTML = '<div class="success">✅ API access successful!</div>';
+                    result.innerHTML += `<div>User: ${data.username}</div>`;
+                    
+                    document.getElementById('step4').style.display = 'block';
+                } else {
+                    const error = await response.json();
+                    result.innerHTML = `<div class="error">❌ API access failed: ${error.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = 
+                    `<div class="error">❌ Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function logout() {
+            try {
+                const accessToken = localStorage.getItem('accessToken');
+                const response = await fetch(`${API_BASE}/auth/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                });
+                
+                const result = document.getElementById('logout-result');
+                
+                // Clear tokens from localStorage
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('userInfo');
+                
+                if (response.ok) {
+                    result.innerHTML = '<div class="success">✅ Logout successful!</div>';
+                } else {
+                    result.innerHTML = '<div class="success">✅ Logout completed (tokens cleared)!</div>';
+                }
+                
+                document.getElementById('step5').style.display = 'block';
+            } catch (error) {
+                // Even if network fails, clear tokens
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('userInfo');
+                
+                document.getElementById('logout-result').innerHTML = 
+                    '<div class="success">✅ Logout completed (tokens cleared)!</div>';
+                document.getElementById('step5').style.display = 'block';
+            }
+        }
+        
+        function verifyLogout() {
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            const userInfo = localStorage.getItem('userInfo');
+            
+            const result = document.getElementById('verify-result');
+            
+            if (!accessToken && !refreshToken && !userInfo) {
+                result.innerHTML = '<div class="success">✅ All tokens cleared from localStorage!</div>';
+            } else {
+                result.innerHTML = '<div class="error">❌ Some tokens still remain:</div>';
+                result.innerHTML += `<div>Access Token: ${accessToken ? 'Present' : 'Cleared'}</div>`;
+                result.innerHTML += `<div>Refresh Token: ${refreshToken ? 'Present' : 'Cleared'}</div>`;
+                result.innerHTML += `<div>User Info: ${userInfo ? 'Present' : 'Cleared'}</div>`;
+            }
+        }
+        
+        async function testApiAfterLogout() {
+            try {
+                // Try to access API without tokens
+                const response = await fetch(`${API_BASE}/auth/me`);
+                
+                const result = document.getElementById('verify-result');
+                
+                if (response.status === 401) {
+                    result.innerHTML = '<div class="success">✅ API correctly returns 401 after logout!</div>';
+                } else {
+                    const data = await response.text();
+                    result.innerHTML = `<div class="error">❌ Unexpected response: ${response.status} - ${data}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('verify-result').innerHTML = 
+                    `<div class="error">❌ Network error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 /**
- * API client for CodeTop FSRS Backend
+ * API client for OLIVER FSRS Backend
  * Base URL and request configuration
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
 
 interface ApiResponse<T = any> {
   data?: T

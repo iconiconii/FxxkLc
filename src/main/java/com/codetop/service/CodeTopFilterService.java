@@ -44,6 +44,7 @@ public class CodeTopFilterService {
     private final CompanyMapper companyMapper;
     private final DepartmentMapper departmentMapper;
     private final PositionMapper positionMapper;
+    private final FSRSCardMapper fsrsCardMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     /**
@@ -248,6 +249,159 @@ public class CodeTopFilterService {
                 return null;
             }
         }).filter(Objects::nonNull).collect(Collectors.toList());
+    }
+    
+    /**
+     * Convert ProblemFrequencyStats to ProblemRankingDTO with integrated user status.
+     * This version includes user-specific progress data from FSRS cards.
+     */
+    private List<ProblemRankingDTO> convertToProblemRankingDTOsWithUserStatus(
+            List<ProblemFrequencyStats> stats, Map<Long, FSRSCard> userCardsMap) {
+        return stats.stream().map(stat -> {
+            try {
+                // Get problem details
+                Problem problem = problemMapper.selectById(stat.getProblemId());
+                if (problem == null) {
+                    log.warn("Problem not found for ID: {}", stat.getProblemId());
+                    return null;
+                }
+                
+                // Get user's FSRS card for this problem
+                FSRSCard userCard = userCardsMap.get(stat.getProblemId());
+                
+                // Extract user status from FSRS card
+                Integer mastery = 0;
+                String status = "not_done";
+                String notes = "";
+                java.time.LocalDateTime lastAttemptDate = null;
+                java.time.LocalDateTime lastConsideredDate = null;
+                Integer attemptCount = 0;
+                Double accuracy = 0.0;
+                
+                if (userCard != null) {
+                    // Determine status based on FSRS card state
+                    status = determineStatusFromFSRSCard(userCard);
+                    
+                    // Calculate mastery level based on FSRS stability and difficulty
+                    mastery = calculateMasteryFromFSRS(userCard);
+                    
+                    // Extract other user-specific data
+                    notes = ""; // FSRSCard doesn't have notes field
+                    lastAttemptDate = userCard.getLastReview();
+                    lastConsideredDate = userCard.getNextReview();
+                    attemptCount = userCard.getReviewCount() != null ? userCard.getReviewCount() : 0;
+                    accuracy = calculateAccuracyFromFSRS(userCard);
+                }
+                
+                // Calculate additional scores (same as before)
+                double recencyScore = calculateRecencyScore(stat.getLastAskedDate());
+                boolean isHotProblem = stat.getTotalFrequencyScore() != null && 
+                                     stat.getTotalFrequencyScore().compareTo(BigDecimal.valueOf(60)) >= 0;
+                boolean isTrending = "INCREASING".equals(String.valueOf(stat.getFrequencyTrend()));
+                boolean isTopPercentile = stat.getPercentile() != null && 
+                                        stat.getPercentile().compareTo(BigDecimal.valueOf(90)) >= 0;
+                
+                return ProblemRankingDTO.builder()
+                    // Basic problem info
+                    .problemId(problem.getId())
+                    .title(problem.getTitle())
+                    .difficulty(problem.getDifficulty().name())
+                    .problemUrl(problem.getProblemUrl())
+                    .leetcodeId(problem.getLeetcodeId())
+                    
+                    // User-specific status
+                    .mastery(mastery)
+                    .status(status)
+                    .notes(notes)
+                    .lastAttemptDate(lastAttemptDate)
+                    .lastConsideredDate(lastConsideredDate)
+                    .attemptCount(attemptCount)
+                    .accuracy(accuracy)
+                    
+                    // Frequency statistics
+                    .frequencyScore(stat.getTotalFrequencyScore())
+                    .interviewCount(stat.getInterviewCount())
+                    .frequencyRank(stat.getFrequencyRank())
+                    .percentile(stat.getPercentile())
+                    .lastAskedDate(stat.getLastAskedDate())
+                    .trend(String.valueOf(stat.getFrequencyTrend()))
+                    .recencyScore(recencyScore)
+                    .isHotProblem(isHotProblem)
+                    .isTrending(isTrending)
+                    .isTopPercentile(isTopPercentile)
+                    
+                    // Additional metadata
+                    .statsScope(String.valueOf(stat.getStatsScope()))
+                    .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
+                    .isPremium(problem.getIsPremium())
+                    .tags(problem.getTags())
+                    .build();
+                    
+            } catch (Exception e) {
+                log.error("Error converting stat to DTO with user status for problem ID: {}", stat.getProblemId(), e);
+                return null;
+            }
+        }).filter(Objects::nonNull).collect(Collectors.toList());
+    }
+    
+    /**
+     * Determine user status from FSRS card state.
+     */
+    private String determineStatusFromFSRSCard(FSRSCard card) {
+        if (card == null) {
+            return "not_done";
+        }
+        
+        switch (card.getState()) {
+            case NEW:
+                return "not_done";
+            case LEARNING:
+            case REVIEW:
+                return "done";
+            case RELEARNING:
+                return "reviewed";
+            default:
+                return "not_done";
+        }
+    }
+    
+    /**
+     * Calculate mastery level from FSRS card data.
+     */
+    private Integer calculateMasteryFromFSRS(FSRSCard card) {
+        if (card == null || card.getStability() == null) {
+            return 0;
+        }
+        
+        // Convert FSRS stability to mastery stars (0-3)
+        double stability = card.getStability().doubleValue();
+        if (stability >= 30) {
+            return 3; // 3 stars for high stability (>30 days)
+        } else if (stability >= 10) {
+            return 2; // 2 stars for medium stability (10-30 days)
+        } else if (stability >= 1) {
+            return 1; // 1 star for low stability (1-10 days)
+        } else {
+            return 0; // 0 stars for very low stability (<1 day)
+        }
+    }
+    
+    /**
+     * Calculate accuracy from FSRS card data.
+     */
+    private Double calculateAccuracyFromFSRS(FSRSCard card) {
+        if (card == null || card.getStability() == null || card.getDifficulty() == null) {
+            return 0.0;
+        }
+        
+        // Simple accuracy calculation based on stability and difficulty
+        // Higher stability and lower difficulty indicate better mastery
+        double stability = card.getStability().doubleValue();
+        double difficulty = card.getDifficulty().doubleValue();
+        
+        // Normalize to 0-100 scale
+        double accuracy = Math.max(0, Math.min(100, (stability * 10) - (difficulty * 20)));
+        return accuracy;
     }
     
     /**
@@ -608,8 +762,8 @@ public class CodeTopFilterService {
     public CodeTopFilterResponse getGlobalProblems(Integer page, Integer size, String sortBy, String sortOrder) {
         log.info("Getting global problems: page={}, size={}, sortBy={}, sortOrder={}", page, size, sortBy, sortOrder);
         
-        // Generate cache key
-        String cacheKey = "codetop-global-problems::global:page_" + page + ":size_" + size + ":sort_" + sortBy + "_" + sortOrder;
+        // Generate cache key using CacheKeyBuilder
+        String cacheKey = CacheKeyBuilder.codetopGlobalProblems(page, size, sortBy, sortOrder);
         
         // Try to get from cache first
         try {
@@ -697,6 +851,119 @@ public class CodeTopFilterService {
     }
 
     /**
+     * Get global problems with integrated user status.
+     * This method combines problem rankings with user-specific progress data.
+     */
+    public CodeTopFilterResponse getGlobalProblemsWithUserStatus(Long userId, Integer page, Integer size, String sortBy, String sortOrder) {
+        log.info("Getting global problems with user status: userId={}, page={}, size={}, sortBy={}, sortOrder={}", 
+                 userId, page, size, sortBy, sortOrder);
+        
+        // Generate cache key using CacheKeyBuilder that includes user ID
+        String cacheKey = CacheKeyBuilder.codetopGlobalProblemsWithUserStatus(userId, page, size, sortBy, sortOrder);
+        
+        // Try to get from cache first
+        try {
+            Object cachedResult = redisTemplate.opsForValue().get(cacheKey);
+            if (cachedResult instanceof CodeTopFilterResponse) {
+                log.info("Cache HIT for global problems with user status: {}", cacheKey);
+                return (CodeTopFilterResponse) cachedResult;
+            }
+            log.info("Cache MISS for global problems with user status: {}", cacheKey);
+        } catch (Exception e) {
+            log.warn("Error reading from cache: {}", e.getMessage());
+        }
+        
+        try {
+            // Get base global problems data
+            Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
+            
+            // Build query for GLOBAL scope only
+            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("stats_scope", "GLOBAL");
+            
+            // Sorting
+            boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
+            switch (sortBy) {
+                case "frequency_score":
+                    if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
+                    else queryWrapper.orderByAsc("total_frequency_score");
+                    break;
+                case "interview_count":
+                    if (isDesc) queryWrapper.orderByDesc("interview_count");
+                    else queryWrapper.orderByAsc("interview_count");
+                    break;
+                case "last_asked_date":
+                    if (isDesc) queryWrapper.orderByDesc("last_asked_date");
+                    else queryWrapper.orderByAsc("last_asked_date");
+                    break;
+                default:
+                    queryWrapper.orderByDesc("total_frequency_score");
+            }
+            
+            // Secondary sort by frequency rank
+            queryWrapper.orderByAsc("frequency_rank");
+            
+            Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
+            
+            // Get all problem IDs from the current page
+            List<Long> problemIds = globalStats.getRecords().stream()
+                    .map(ProblemFrequencyStats::getProblemId)
+                    .collect(Collectors.toList());
+            
+            // Get user's FSRS cards for these problems in one query
+            Map<Long, FSRSCard> userCardsMap = Collections.emptyMap();
+            if (!problemIds.isEmpty()) {
+                QueryWrapper<FSRSCard> cardQuery = new QueryWrapper<>();
+                cardQuery.eq("user_id", userId)
+                        .in("problem_id", problemIds);
+                List<FSRSCard> userCards = fsrsCardMapper.selectList(cardQuery);
+                userCardsMap = userCards.stream()
+                        .collect(Collectors.toMap(FSRSCard::getProblemId, card -> card));
+            }
+            
+            // Convert to ProblemRankingDTO list with user status integrated
+            List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOsWithUserStatus(
+                    globalStats.getRecords(), userCardsMap);
+            
+            // Build summary statistics
+            CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
+            
+            CodeTopFilterResponse response = CodeTopFilterResponse.builder()
+                .problems(problemRankings)
+                .totalElements(globalStats.getTotal())
+                .currentPage((long) page)
+                .pageSize((long) size)
+                .totalPages(globalStats.getPages())
+                .summary(summary)
+                .build();
+            
+            log.info("Global problems with user status query completed: found {} problems for user {}", 
+                     problemRankings.size(), userId);
+            
+            // Store in cache with shorter TTL (15 minutes for user-specific data)
+            try {
+                redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(15));
+                log.info("Cached global problems with user status result: {}", cacheKey);
+            } catch (Exception e) {
+                log.warn("Error storing to cache: {}", e.getMessage());
+            }
+            
+            return response;
+            
+        } catch (Exception e) {
+            log.error("Error getting global problems with user status: {}", e.getMessage(), e);
+            // Return empty response on error
+            return CodeTopFilterResponse.builder()
+                .problems(Collections.emptyList())
+                .totalElements(0L)
+                .currentPage((long) page)
+                .pageSize((long) size)
+                .totalPages(0L)
+                .build();
+        }
+    }
+
+    /**
      * Get category usage statistics.
      */
     public List<CategoryUsageStatsDTO> getCategoryUsageStatistics() {
@@ -759,5 +1026,28 @@ public class CodeTopFilterService {
             this.trends = Arrays.asList("INCREASING", "STABLE", "DECREASING", "NEW");
         }
 
+    }
+    
+    /**
+     * Clear user-specific problem status cache after status updates.
+     * This ensures the unified API returns the latest user progress data.
+     */
+    public void clearUserStatusCache(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        
+        try {
+            // Clear all cached entries for this user's problem status using CacheKeyBuilder pattern
+            String pattern = CacheKeyBuilder.codetopUserStatusDomain(userId);
+            Set<String> keys = redisTemplate.keys(pattern);
+            
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.info("Cleared {} user status cache entries for user {}", keys.size(), userId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to clear user status cache for user {}: {}", userId, e.getMessage(), e);
+        }
     }
 }

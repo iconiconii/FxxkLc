@@ -5,6 +5,8 @@ import com.codetop.enums.ReviewType;
 import com.codetop.mapper.FSRSCardMapper;
 import com.codetop.security.UserPrincipal;
 import com.codetop.service.FSRSService;
+import com.codetop.dto.FSRSReviewQueueVO;
+import com.codetop.dto.FSRSReviewResultVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,13 +42,14 @@ public class ReviewController {
      */
     @GetMapping("/queue")
     @Operation(summary = "Get review queue", description = "Get personalized review queue using FSRS algorithm")
-    public ResponseEntity<com.codetop.dto.FSRSReviewQueueDTO> getReviewQueue(
+    public ResponseEntity<FSRSReviewQueueVO> getReviewQueue(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam(defaultValue = "20") int limit) {
         
         com.codetop.dto.FSRSReviewQueueDTO queue = fsrsService.generateReviewQueue(
                 userPrincipal.getId(), Math.min(limit, 50));
-        return ResponseEntity.ok(queue);
+        FSRSReviewQueueVO response = convertReviewQueueToVO(queue);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -54,7 +57,7 @@ public class ReviewController {
      */
     @PostMapping("/submit")
     @Operation(summary = "Submit review", description = "Submit review result and update FSRS scheduling")
-    public ResponseEntity<com.codetop.dto.FSRSReviewResultDTO> submitReview(
+    public ResponseEntity<FSRSReviewResultVO> submitReview(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @Valid @RequestBody SubmitReviewRequest request) {
         
@@ -66,7 +69,8 @@ public class ReviewController {
                 request.getRating(),
                 reviewType);
         
-        return ResponseEntity.ok(result);
+        FSRSReviewResultVO response = convertReviewResultToVO(result);
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -165,6 +169,34 @@ public class ReviewController {
                 .build();
         
         return ResponseEntity.ok(result);
+    }
+
+    // Converter methods
+    
+    /**
+     * Convert FSRSReviewQueueDTO to VO.
+     */
+    private FSRSReviewQueueVO convertReviewQueueToVO(com.codetop.dto.FSRSReviewQueueDTO dto) {
+        return FSRSReviewQueueVO.builder()
+                .cards(dto.getCards())
+                .totalCount(dto.getTotalCount())
+                .stats(dto.getStats())
+                .generatedAt(dto.getGeneratedAt())
+                .build();
+    }
+    
+    /**
+     * Convert FSRSReviewResultDTO to VO.
+     */
+    private FSRSReviewResultVO convertReviewResultToVO(com.codetop.dto.FSRSReviewResultDTO dto) {
+        return FSRSReviewResultVO.builder()
+                .card(dto.getCard())
+                .nextReviewTime(dto.getNextReviewTime())
+                .intervalDays(dto.getIntervalDays())
+                .newState(dto.getNewState())
+                .difficulty(dto.getDifficulty())
+                .stability(dto.getStability())
+                .build();
     }
 
     // DTOs

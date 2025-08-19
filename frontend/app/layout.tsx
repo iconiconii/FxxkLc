@@ -6,8 +6,8 @@ import { AuthProvider } from "@/lib/auth-context"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "CodeTop FSRS - 智能算法学习平台",
-  description: "基于 FSRS 算法的智能化算法题学习和复习系统",
+  title: "OLIVER FSRS - 智能算法学习平台",
+  description: "基于 FSRS 算法的智能化算法题学习和复习系统"
 }
 
 export default function RootLayout({

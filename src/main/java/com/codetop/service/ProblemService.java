@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.codetop.dto.*;
 import com.codetop.entity.Problem;
 import com.codetop.enums.Difficulty;
+import com.codetop.event.Events;
 import com.codetop.mapper.ProblemMapper;
+import com.codetop.mapper.FSRSCardMapper;
 import com.codetop.entity.FSRSCard;
 import com.codetop.enums.ReviewType;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Problem service for managing algorithm problems.
@@ -42,6 +45,7 @@ import java.util.Optional;
 public class ProblemService {
     
     private final ProblemMapper problemMapper;
+    private final FSRSCardMapper fsrsCardMapper;
     private final FSRSService fsrsService;
     private final CacheInvalidationManager cacheInvalidationManager;
     private final ApplicationEventPublisher eventPublisher;
@@ -141,14 +145,80 @@ public class ProblemService {
     /**
      * Advanced search with multiple filters.
      */
+    @Cacheable(value = "codetop-problem-advanced", key = "T(com.codetop.service.CacheKeyBuilder).problemAdvancedSearch(#request, #page.current, #page.size)")
     public Page<Problem> advancedSearch(AdvancedSearchRequest request, Page<Problem> page) {
-        return problemMapper.advancedSearch(
-            page,
-            request.getKeyword(),
-            request.getDifficulty() != null ? request.getDifficulty().name() : null,
-            request.getTag(),
-            request.getIsPremium()
-        );
+        TraceContext.setOperation("PROBLEM_ADVANCED_SEARCH");
+        
+        long startTime = System.currentTimeMillis();
+        log.debug("Advanced search: keyword='{}', difficulty={}, tag='{}', difficulties={}, statuses={}, tags={}, userId={}", 
+                request.getKeyword(), request.getDifficulty(), request.getTag(), 
+                request.getDifficulties(), request.getStatuses(), request.getTags(), request.getUserId());
+        
+        try {
+            Page<Problem> result = problemMapper.advancedSearch(
+                page,
+                request.getKeyword(),
+                request.getDifficulty() != null ? request.getDifficulty().name() : null,
+                request.getTag(),
+                request.getIsPremium()
+            );
+            
+            // Apply additional filters if needed
+            if (request.getDifficulties() != null || request.getStatuses() != null || 
+                request.getTags() != null || request.getUserId() != null) {
+                result = enhancedFilterResults(result, request);
+            }
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Advanced search completed: totalResults={}, actualResults={}, duration={}ms", 
+                    result.getTotal(), result.getRecords().size(), duration);
+            
+            return result;
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed advanced search: duration={}ms, error={}", duration, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Enhanced search with comprehensive filters for CodeTop page.
+     */
+    @Cacheable(value = "codetop-problem-enhanced", key = "T(com.codetop.service.CacheKeyBuilder).problemEnhancedSearch(#request, #page.current, #page.size)")
+    public Page<Problem> enhancedSearch(EnhancedSearchRequest request, Page<Problem> page) {
+        TraceContext.setOperation("PROBLEM_ENHANCED_SEARCH");
+        
+        long startTime = System.currentTimeMillis();
+        log.debug("Enhanced search: search='{}', difficulties={}, statuses={}, tags={}, userId={}, sort='{}'", 
+                request.getSearch(), request.getDifficulties(), request.getStatuses(), 
+                request.getTags(), request.getUserId(), request.getSort());
+        
+        try {
+            Page<Problem> result;
+            
+            // Start with basic search if search term is provided
+            if (request.getSearch() != null && !request.getSearch().trim().isEmpty()) {
+                result = problemMapper.searchProblems(page, request.getSearch().trim());
+            } else {
+                result = problemMapper.selectPage(page, null);
+            }
+            
+            // Apply advanced filters
+            result = applyEnhancedFilters(result, request, page);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Enhanced search completed: search='{}', totalResults={}, actualResults={}, duration={}ms", 
+                    request.getSearch(), result.getTotal(), result.getRecords().size(), duration);
+            
+            return result;
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed enhanced search: search='{}', duration={}ms, error={}", 
+                    request.getSearch(), duration, e.getMessage(), e);
+            throw e;
+        }
     }
 
     /**
@@ -316,12 +386,162 @@ public class ProblemService {
         private Long premiumCount;
     }
 
+    // Enhanced search DTOs and helper methods
+    
+    /**
+     * Enhanced search request with comprehensive filtering options.
+     */
+    @lombok.Data
+    public static class EnhancedSearchRequest {
+        private String search;
+        private List<String> difficulties;
+        private List<String> statuses;
+        private List<String> tags;
+        private Long userId;
+        private String sort;
+    }
+    
+    /**
+     * Apply enhanced filters to problem results.
+     */
+    private Page<Problem> applyEnhancedFilters(Page<Problem> result, EnhancedSearchRequest request, Page<Problem> page) {
+        List<Problem> filteredProblems = result.getRecords().stream()
+                .filter(problem -> matchesDifficultyFilter(problem, request.getDifficulties()))
+                .filter(problem -> matchesTagFilter(problem, request.getTags()))
+                .filter(problem -> matchesStatusFilter(problem, request.getStatuses(), request.getUserId()))
+                .collect(Collectors.toList());
+        
+        // Create new page with filtered results
+        Page<Problem> filteredPage = new Page<>(page.getCurrent(), page.getSize());
+        filteredPage.setRecords(filteredProblems);
+        filteredPage.setTotal(filteredProblems.size());
+        filteredPage.setPages((long) Math.ceil((double) filteredProblems.size() / page.getSize()));
+        
+        return filteredPage;
+    }
+    
+    /**
+     * Apply enhanced filters to advanced search results.
+     */
+    private Page<Problem> enhancedFilterResults(Page<Problem> result, AdvancedSearchRequest request) {
+        List<Problem> filteredProblems = result.getRecords().stream()
+                .filter(problem -> matchesDifficultyFilter(problem, request.getDifficulties()))
+                .filter(problem -> matchesTagFilter(problem, request.getTags()))
+                .filter(problem -> matchesStatusFilter(problem, request.getStatuses(), request.getUserId()))
+                .collect(Collectors.toList());
+        
+        // Update result with filtered problems
+        result.setRecords(filteredProblems);
+        result.setTotal(filteredProblems.size());
+        result.setPages((long) Math.ceil((double) filteredProblems.size() / result.getSize()));
+        
+        return result;
+    }
+    
+    /**
+     * Check if problem matches difficulty filter.
+     */
+    private boolean matchesDifficultyFilter(Problem problem, List<String> difficulties) {
+        if (difficulties == null || difficulties.isEmpty()) {
+            return true;
+        }
+        
+        String problemDifficulty = problem.getDifficulty().name().toLowerCase();
+        return difficulties.stream()
+                .map(String::toLowerCase)
+                .anyMatch(difficulty -> difficulty.equals(problemDifficulty));
+    }
+    
+    /**
+     * Check if problem matches tag filter.
+     */
+    private boolean matchesTagFilter(Problem problem, List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return true;
+        }
+        
+        String problemTags = problem.getTags();
+        if (problemTags == null || problemTags.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Parse tags from JSON or comma-separated string
+        List<String> problemTagList = parseTagsFromProblem(problemTags);
+        
+        return tags.stream()
+                .anyMatch(tag -> problemTagList.stream()
+                        .anyMatch(problemTag -> problemTag.contains(tag) || tag.contains(problemTag)));
+    }
+    
+    /**
+     * Check if problem matches status filter for a specific user.
+     */
+    private boolean matchesStatusFilter(Problem problem, List<String> statuses, Long userId) {
+        if (statuses == null || statuses.isEmpty()) {
+            return true;
+        }
+        
+        if (userId == null) {
+            // For anonymous users, only show "not_done" status
+            return statuses.contains("not_done");
+        }
+        
+        try {
+            // Get user's status for this problem from FSRS
+            FSRSCard card = fsrsService.getOrCreateCard(userId, problem.getId());
+            String problemStatus = determineStatusFromCard(card);
+            
+            return statuses.contains(problemStatus);
+            
+        } catch (Exception e) {
+            log.debug("Failed to get status for user {} problem {}: {}", userId, problem.getId(), e.getMessage());
+            // Fallback to "not_done" if unable to determine status
+            return statuses.contains("not_done");
+        }
+    }
+    
+    /**
+     * Parse tags from problem tags field (JSON or comma-separated).
+     */
+    private List<String> parseTagsFromProblem(String tagsField) {
+        if (tagsField == null || tagsField.trim().isEmpty()) {
+            return List.of();
+        }
+        
+        try {
+            // Try parsing as JSON array first
+            if (tagsField.trim().startsWith("[")) {
+                return List.of(tagsField.replaceAll("[\\[\\]\"]", "").split(","))
+                        .stream()
+                        .map(String::trim)
+                        .filter(tag -> !tag.isEmpty())
+                        .collect(Collectors.toList());
+            } else {
+                // Fall back to comma-separated parsing
+                return List.of(tagsField.split(","))
+                        .stream()
+                        .map(String::trim)
+                        .filter(tag -> !tag.isEmpty())
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.debug("Failed to parse tags from '{}': {}", tagsField, e.getMessage());
+            return List.of();
+        }
+    }
+
     @lombok.Data
     public static class AdvancedSearchRequest {
         private String keyword;
         private Difficulty difficulty;
         private String tag;
         private Boolean isPremium;
+        
+        // Enhanced fields for comprehensive filtering
+        private List<String> difficulties;
+        private List<String> statuses;
+        private List<String> tags;
+        private Long userId;
     }
 
     @lombok.Data
@@ -406,23 +626,53 @@ public class ProblemService {
      */
     @Cacheable(value = "codetop-user-progress", key = "T(com.codetop.service.CacheKeyBuilder).userProblemProgress(#userId)")
     public List<UserProblemStatusDTO> getUserProblemProgress(Long userId) {
-        // This is a simplified implementation - would typically query user's FSRS cards and review logs
-        List<Problem> problems = problemMapper.selectList(null);
+        // Get all problems (limit to first 10 for now)
+        List<Problem> problems = problemMapper.selectList(null).stream()
+                .limit(10) // Limit for demo purposes
+                .collect(Collectors.toList());
+        
+        // Get user's FSRS cards for these problems
+        Map<Long, FSRSCard> userCards = fsrsCardMapper.findByUserId(userId).stream()
+                .collect(Collectors.toMap(FSRSCard::getProblemId, Function.identity()));
         
         return problems.stream()
-                .limit(10) // Limit for demo purposes
-                .map(problem -> UserProblemStatusDTO.builder()
-                        .problemId(problem.getId())
-                        .title(problem.getTitle())
-                        .difficulty(problem.getDifficulty())
-                        .status("not_done")
-                        .mastery(0)
-                        .lastAttemptDate(null)
-                        .lastConsideredDate(null)
-                        .attemptCount(0)
-                        .accuracy(0.0)
-                        .notes("")
-                        .build())
+                .map(problem -> {
+                    FSRSCard card = userCards.get(problem.getId());
+                    
+                    if (card == null) {
+                        // User hasn't started this problem yet
+                        return UserProblemStatusDTO.builder()
+                                .problemId(problem.getId())
+                                .title(problem.getTitle())
+                                .difficulty(problem.getDifficulty())
+                                .status("not_done")
+                                .mastery(0)
+                                .lastAttemptDate(null)
+                                .lastConsideredDate(null)
+                                .attemptCount(0)
+                                .accuracy(0.0)
+                                .notes("")
+                                .build();
+                    } else {
+                        // User has a card for this problem - calculate status based on FSRS data
+                        String status = determineStatusFromFSRSCard(card);
+                        Integer mastery = calculateMasteryFromFSRSCard(card);
+                        Double accuracy = calculateAccuracyFromFSRS(card);
+                        
+                        return UserProblemStatusDTO.builder()
+                                .problemId(problem.getId())
+                                .title(problem.getTitle())
+                                .difficulty(problem.getDifficulty())
+                                .status(status)
+                                .mastery(mastery)
+                                .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
+                                .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
+                                .attemptCount(card.getReviewCount())
+                                .accuracy(accuracy)
+                                .notes("")
+                                .build();
+                    }
+                })
                 .collect(Collectors.toList());
     }
 
@@ -430,6 +680,7 @@ public class ProblemService {
      * Update problem status for user.
      */
     @Transactional
+    @CacheEvict(value = "codetop-user-progress", key = "T(com.codetop.service.CacheKeyBuilder).userProblemProgress(#userId)")
     public UserProblemStatusLegacyDTO updateProblemStatus(
             Long userId, Long problemId, UpdateProblemStatusRequest request) {
         
@@ -456,7 +707,7 @@ public class ProblemService {
             log.info("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
                     problemId, request.getStatus(), userId, fsrsRating, reviewResult.getNextReviewTime());
             
-            return UserProblemStatusLegacyDTO.builder()
+            UserProblemStatusLegacyDTO result = UserProblemStatusLegacyDTO.builder()
                     .problemId(problemId)
                     .title(problem.getTitle())
                     .difficulty(problem.getDifficulty())
@@ -469,12 +720,18 @@ public class ProblemService {
                     .accuracy(accuracy)
                     .notes(request.getNotes())
                     .build();
+            
+            // Publish event to clear user status cache
+            eventPublisher.publishEvent(new Events.UserEvent(
+                    Events.UserEvent.UserEventType.PROGRESS_UPDATED, userId, null));
+            
+            return result;
                     
         } catch (Exception e) {
             log.error("Failed to update FSRS status for user {} problem {}: {}", userId, problemId, e.getMessage());
             
             // Fallback to basic status update without FSRS integration
-            return UserProblemStatusLegacyDTO.builder()
+            UserProblemStatusLegacyDTO result = UserProblemStatusLegacyDTO.builder()
                     .problemId(problemId)
                     .title(problem.getTitle())
                     .difficulty(problem.getDifficulty())
@@ -486,6 +743,12 @@ public class ProblemService {
                     .accuracy(0.0)
                     .notes(request.getNotes())
                     .build();
+            
+            // Publish event to clear user status cache even for fallback case
+            eventPublisher.publishEvent(new Events.UserEvent(
+                    Events.UserEvent.UserEventType.PROGRESS_UPDATED, userId, null));
+            
+            return result;
         }
     }
 
@@ -906,6 +1169,56 @@ public class ProblemService {
             int review = reviewCards != null ? reviewCards : 0;
             int relearning = relearningCards != null ? relearningCards : 0;
             return learning + review + relearning;
+        }
+    }
+    
+    // Helper methods for getUserProblemProgress
+    
+    /**
+     * Determine user status from FSRS card state.
+     */
+    private String determineStatusFromFSRSCard(FSRSCard card) {
+        if (card.getReviewCount() == 0) {
+            return "not_done";
+        }
+        
+        // If user has done reviews, consider it "done"
+        // This is a simplified mapping - you might want more sophisticated logic
+        switch (card.getState()) {
+            case NEW:
+                return "not_done";
+            case LEARNING:
+            case REVIEW:
+            case RELEARNING:
+                return "done";
+            default:
+                return "not_done";
+        }
+    }
+    
+    /**
+     * Calculate mastery level from FSRS card metrics.
+     */
+    private Integer calculateMasteryFromFSRSCard(FSRSCard card) {
+        if (card.getReviewCount() == 0) {
+            return 0;
+        }
+        
+        // Calculate mastery based on stability and review count
+        // Higher stability and more reviews = higher mastery
+        double stability = card.getStability() != null ? card.getStability().doubleValue() : 0.0;
+        int reviewCount = card.getReviewCount();
+        int lapses = card.getLapses();
+        
+        // Simple mastery calculation (0-3 scale)
+        if (stability > 30 && reviewCount >= 5 && lapses <= 1) {
+            return 3; // Expert
+        } else if (stability > 10 && reviewCount >= 3 && lapses <= 2) {
+            return 2; // Good
+        } else if (stability > 2 && reviewCount >= 1) {
+            return 1; // Basic
+        } else {
+            return 0; // Learning
         }
     }
 }

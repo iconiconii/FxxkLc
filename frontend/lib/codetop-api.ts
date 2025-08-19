@@ -1,5 +1,5 @@
 /**
- * CodeTop filtering API client functions
+ * OLIVER filtering API client functions
  */
 
 import { apiRequest } from './api'
@@ -10,6 +10,15 @@ export interface ProblemRankingDTO {
   difficulty: string
   problemUrl: string
   leetcodeId: string
+  
+  // User-specific status (populated when user is authenticated)
+  mastery?: number                    // User's mastery level (0-3 stars)
+  status?: string                     // User's completion status: "not_done", "done", "reviewed"
+  notes?: string                      // User's notes for this problem
+  lastAttemptDate?: string           // Last time user attempted this problem
+  lastConsideredDate?: string        // Next review date for FSRS
+  attemptCount?: number              // Number of times user attempted this problem
+  accuracy?: number                  // User's accuracy rate for this problem
   
   // Frequency statistics
   frequencyScore: number
@@ -52,7 +61,7 @@ export interface ProblemRankingDTO {
   tags: string
 }
 
-export interface CodeTopFilterRequest {
+export interface OliverFilterRequest {
   companyId?: number
   departmentId?: number
   positionId?: number
@@ -72,7 +81,7 @@ export interface CodeTopFilterRequest {
   size?: number
 }
 
-export interface CodeTopFilterResponse {
+export interface OliverFilterResponse {
   problems: ProblemRankingDTO[]
   totalElements: number
   totalPages: number
@@ -130,10 +139,10 @@ export interface CategoryUsageStatsDTO {
 
 export const codeTopApi = {
   /**
-   * Get filtered problems with CodeTop-style ranking
+   * Get filtered problems with OLIVER-style ranking
    */
-  async getFilteredProblems(request: CodeTopFilterRequest): Promise<CodeTopFilterResponse> {
-    return await apiRequest<CodeTopFilterResponse>('/codetop/filter', {
+  async getFilteredProblems(request: OliverFilterRequest): Promise<OliverFilterResponse> {
+    return await apiRequest<OliverFilterResponse>('/codetop/filter', {
       method: 'POST',
       body: JSON.stringify(request),
     })
@@ -254,7 +263,7 @@ export const codeTopApi = {
     size: number = 20,
     sortBy: string = 'frequency_score',
     sortOrder: string = 'desc'
-  ): Promise<CodeTopFilterResponse> {
+  ): Promise<OliverFilterResponse> {
     const params = new URLSearchParams({
       page: page.toString(),
       size: size.toString(),
@@ -262,7 +271,26 @@ export const codeTopApi = {
       sortOrder,
     })
 
-    return await apiRequest<CodeTopFilterResponse>(`/codetop/problems/global?${params}`)
+    return await apiRequest<OliverFilterResponse>(`/codetop/problems/global?${params}`)
+  },
+
+  /**
+   * Get global problems with integrated user status (for authenticated users)
+   */
+  async getGlobalProblemsWithUserStatus(
+    page: number = 1,
+    size: number = 20,
+    sortBy: string = 'frequency_score',
+    sortOrder: string = 'desc'
+  ): Promise<OliverFilterResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sortBy,
+      sortOrder,
+    })
+
+    return await apiRequest<OliverFilterResponse>(`/codetop/problems/global/with-user-status?${params}`)
   },
 
   /**
@@ -288,7 +316,7 @@ export const codeTopApi = {
   },
 
   /**
-   * Health check for CodeTop filtering system
+   * Health check for OLIVER filtering system
    */
   async healthCheck(): Promise<string> {
     return await apiRequest<string>('/codetop/health')

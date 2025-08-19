@@ -63,19 +63,19 @@ export default function Sidebar() {
             <div className="flex items-center gap-3">
               <Image
                 src="https://kokonutui.com/logo.svg"
-                alt="CodeTop"
+                alt="OLIVER"
                 width={32}
                 height={32}
                 className="flex-shrink-0 hidden dark:block"
               />
               <Image
                 src="https://kokonutui.com/logo-black.svg"
-                alt="CodeTop"
+                alt="OLIVER"
                 width={32}
                 height={32}
                 className="flex-shrink-0 block dark:hidden"
               />
-              <span className="text-lg font-semibold hover:cursor-pointer text-gray-900 dark:text-white">CodeTop</span>
+              <span className="text-lg font-semibold hover:cursor-pointer text-gray-900 dark:text-white">OLIVER</span>
             </div>
           </Link>
 

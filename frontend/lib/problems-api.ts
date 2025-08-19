@@ -55,6 +55,21 @@ export interface AdvancedSearchRequest {
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD'
   tag?: string
   isPremium?: boolean
+  
+  // Enhanced fields for comprehensive filtering
+  difficulties?: string[]
+  statuses?: string[]
+  tags?: string[]
+  userId?: number
+}
+
+export interface EnhancedSearchRequest {
+  search?: string
+  difficulties?: string[]
+  statuses?: string[]
+  tags?: string[]
+  userId?: number
+  sort?: string
 }
 
 export const problemsApi = {
@@ -83,6 +98,44 @@ export const problemsApi = {
     }
 
     return await apiRequest<PaginatedResponse<Problem>>(`/problems/search?${params}`)
+  },
+
+  /**
+   * Enhanced search with comprehensive filters
+   */
+  async enhancedSearch(
+    request: EnhancedSearchRequest,
+    page: number = 1,
+    size: number = 20
+  ): Promise<PaginatedResponse<Problem>> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+    })
+
+    // Add search parameter
+    if (request.search) {
+      params.append('search', request.search)
+    }
+
+    // Add array parameters
+    if (request.difficulties) {
+      request.difficulties.forEach(diff => params.append('difficulties', diff))
+    }
+    if (request.statuses) {
+      request.statuses.forEach(status => params.append('statuses', status))
+    }
+    if (request.tags) {
+      request.tags.forEach(tag => params.append('tags', tag))
+    }
+    if (request.userId) {
+      params.append('userId', request.userId.toString())
+    }
+    if (request.sort) {
+      params.append('sort', request.sort)
+    }
+
+    return await apiRequest<PaginatedResponse<Problem>>(`/problems/search/enhanced?${params}`)
   },
 
   /**
@@ -195,7 +248,7 @@ export const problemsApi = {
   },
 
   /**
-   * Get trending problems (Note: Use codeTopApi.getTrendingProblems() for CodeTop-style trending)
+   * Get trending problems (Note: Use codeTopApi.getTrendingProblems() for OLIVER-style trending)
    */
   async getTrendingProblems(
     days: number = 7,
