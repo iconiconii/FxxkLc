@@ -2,19 +2,23 @@ package com.codetop.event;
 
 import com.codetop.event.Events.*;
 import com.codetop.service.CacheInvalidationManager;
+import com.codetop.service.CacheInvalidationStrategy;
+import com.codetop.service.CodeTopFilterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Event-driven cache invalidation system
+ * Synchronous event-driven cache invalidation system with Cache-First Strategy
  * 
- * Listens to domain events and automatically invalidates related caches
- * to maintain data consistency across the application.
+ * Strategy Change:
+ * - Removed @Async to ensure synchronous cache invalidation
+ * - Cache invalidation now happens BEFORE database updates
+ * - Uses BEFORE_COMMIT phase for immediate consistency
+ * - Ensures database is always the source of truth
  * 
  * @author CodeTop Team
  */
@@ -24,97 +28,135 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class CacheInvalidationEventListener {
     
     private final CacheInvalidationManager cacheInvalidationManager;
+    private final CacheInvalidationStrategy cacheInvalidationStrategy;
+    private final CodeTopFilterService codeTopFilterService;
     
     /**
-     * Handle problem-related events
+     * Handle problem-related events - Synchronous execution with cache-first strategy
+     * Cache invalidation happens BEFORE database commit to ensure consistency
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Async
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleProblemEvent(ProblemEvent event) {
-        log.info("Handling problem event: type={}, problemId={}", event.getType(), event.getProblemId());
+        log.info("Synchronously handling problem event: type={}, problemId={}", event.getType(), event.getProblemId());
         
-        switch (event.getType()) {
-            case CREATED:
-            case UPDATED:
-            case DELETED:
-                cacheInvalidationManager.invalidateProblemCaches();
-                break;
-            case STATUS_CHANGED:
-                // More targeted invalidation for status changes
-                cacheInvalidationManager.invalidateCodetopFilterCaches();
-                break;
+        try {
+            switch (event.getType()) {
+                case CREATED:
+                case UPDATED:
+                case DELETED:
+                    // Use synchronous cache invalidation strategy
+                    cacheInvalidationStrategy.invalidateProblemCachesSync();
+                    log.info("Problem caches invalidated synchronously for event: {}", event.getType());
+                    break;
+                case STATUS_CHANGED:
+                    // More targeted invalidation for status changes
+                    cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
+                    log.info("CodeTop filter caches invalidated synchronously for status change");
+                    break;
+            }
+        } catch (Exception e) {
+            log.error("Failed to handle problem event synchronously: type={}, problemId={}", 
+                     event.getType(), event.getProblemId(), e);
+            // Don't re-throw to avoid breaking the main transaction
         }
     }
     
     /**
-     * Handle user-related events
+     * Handle user-related events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Async
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleUserEvent(UserEvent event) {
-        log.info("Handling user event: type={}, userId={}", event.getType(), event.getUserId());
+        log.info("Synchronously handling user event: type={}, userId={}", event.getType(), event.getUserId());
         
-        switch (event.getType()) {
-            case PROFILE_UPDATED:
-                cacheInvalidationManager.invalidateUserCaches(event.getUserId());
-                break;
-            case PROGRESS_UPDATED:
-                // Clear user progress and mastery caches
-                cacheInvalidationManager.invalidateUserCaches(event.getUserId());
-                break;
-            case PARAMETERS_OPTIMIZED:
-                // Clear FSRS-related caches for the user
-                cacheInvalidationManager.invalidateFSRSCaches(event.getUserId());
-                break;
+        try {
+            switch (event.getType()) {
+                case PROFILE_UPDATED:
+                    cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
+                    log.info("User caches invalidated synchronously for profile update: userId={}", event.getUserId());
+                    break;
+                case PROGRESS_UPDATED:
+                    // Clear user progress and mastery caches
+                    cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
+                    // Also clear unified API cache for this user
+                    codeTopFilterService.clearUserStatusCache(event.getUserId());
+                    log.info("User progress caches invalidated synchronously: userId={}", event.getUserId());
+                    break;
+                case PARAMETERS_OPTIMIZED:
+                    // Clear FSRS-related caches for the user
+                    cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
+                    log.info("FSRS caches invalidated synchronously for parameter optimization: userId={}", event.getUserId());
+                    break;
+            }
+        } catch (Exception e) {
+            log.error("Failed to handle user event synchronously: type={}, userId={}", 
+                     event.getType(), event.getUserId(), e);
+            // Don't re-throw to avoid breaking the main transaction
         }
     }
     
     /**
-     * Handle FSRS review events
+     * Handle FSRS review events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Async
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleReviewEvent(ReviewEvent event) {
-        log.info("Handling review event: type={}, userId={}, problemId={}", 
+        log.info("Synchronously handling review event: type={}, userId={}, problemId={}", 
                 event.getType(), event.getUserId(), event.getProblemId());
         
-        switch (event.getType()) {
-            case REVIEW_COMPLETED:
-                // Clear user-specific FSRS caches
-                cacheInvalidationManager.invalidateFSRSCaches(event.getUserId());
-                
-                // Update user mastery cache for this specific problem
-                cacheInvalidationManager.evictCacheEntry("codetop-user-mastery", 
-                    String.format("codetop:user:mastery:userId_%d:problemId_%d", 
-                        event.getUserId(), event.getProblemId()));
-                break;
-            case BULK_REVIEWS:
-                // For bulk operations, clear broader caches
-                cacheInvalidationManager.invalidateUserCaches(event.getUserId());
-                break;
+        try {
+            switch (event.getType()) {
+                case REVIEW_COMPLETED:
+                    // Clear user-specific FSRS caches
+                    cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
+                    
+                    // Update user mastery cache for this specific problem
+                    cacheInvalidationStrategy.evictCacheEntrySync("codetop-user-mastery", 
+                        String.format("codetop:user:mastery:userId_%d:problemId_%d", 
+                            event.getUserId(), event.getProblemId()));
+                    
+                    log.info("Review completion caches invalidated synchronously: userId={}, problemId={}", 
+                             event.getUserId(), event.getProblemId());
+                    break;
+                case BULK_REVIEWS:
+                    // For bulk operations, clear broader caches
+                    cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
+                    log.info("Bulk review caches invalidated synchronously: userId={}", event.getUserId());
+                    break;
+            }
+        } catch (Exception e) {
+            log.error("Failed to handle review event synchronously: type={}, userId={}, problemId={}", 
+                     event.getType(), event.getUserId(), event.getProblemId(), e);
+            // Don't re-throw to avoid breaking the main transaction
         }
     }
     
     /**
-     * Handle company/organization events
+     * Handle company/organization events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Async
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleCompanyEvent(CompanyEvent event) {
-        log.info("Handling company event: type={}, companyId={}", event.getType(), event.getCompanyId());
+        log.info("Synchronously handling company event: type={}, companyId={}", event.getType(), event.getCompanyId());
         
-        switch (event.getType()) {
-            case COMPANY_UPDATED:
-            case DEPARTMENT_UPDATED:
-            case POSITION_UPDATED:
-                // Company hierarchy changes affect CodeTop filter results
-                cacheInvalidationManager.invalidateCompanyCaches();
-                break;
-            case FREQUENCY_UPDATED:
-                // Frequency updates affect rankings and statistics
-                cacheInvalidationManager.invalidateCodetopFilterCaches();
-                cacheInvalidationManager.invalidateProblemCaches(); // Statistics may change
-                break;
+        try {
+            switch (event.getType()) {
+                case COMPANY_UPDATED:
+                case DEPARTMENT_UPDATED:
+                case POSITION_UPDATED:
+                    // Company hierarchy changes affect CodeTop filter results
+                    cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
+                    cacheInvalidationStrategy.invalidateProblemCachesSync();
+                    log.info("Company hierarchy caches invalidated synchronously: companyId={}", event.getCompanyId());
+                    break;
+                case FREQUENCY_UPDATED:
+                    // Frequency updates affect rankings and statistics
+                    cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
+                    cacheInvalidationStrategy.invalidateProblemCachesSync(); // Statistics may change
+                    log.info("Frequency update caches invalidated synchronously: companyId={}", event.getCompanyId());
+                    break;
+            }
+        } catch (Exception e) {
+            log.error("Failed to handle company event synchronously: type={}, companyId={}", 
+                     event.getType(), event.getCompanyId(), e);
+            // Don't re-throw to avoid breaking the main transaction
         }
     }
     
@@ -144,14 +186,19 @@ public class CacheInvalidationEventListener {
     }
     
     /**
-     * Handle scheduled cache warm-up events
+     * Handle scheduled cache warm-up events - Synchronous execution for immediate completion
      */
     @EventListener
-    @Async
     public void handleCacheWarmupEvent(CacheWarmupEvent event) {
-        log.info("Handling cache warm-up event: priority={}", event.getPriority());
+        log.info("Synchronously handling cache warm-up event: priority={}", event.getPriority());
         
-        // Warm up critical caches based on priority
-        cacheInvalidationManager.warmUpCriticalCaches();
+        try {
+            // Warm up critical caches based on priority
+            cacheInvalidationManager.warmUpCriticalCaches();
+            log.info("Cache warm-up completed synchronously");
+        } catch (Exception e) {
+            log.error("Failed to handle cache warm-up event synchronously", e);
+            // Don't re-throw to avoid breaking event processing
+        }
     }
 }

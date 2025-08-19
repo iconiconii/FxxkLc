@@ -73,46 +73,7 @@ public class UniversalJsonRedisSerializer implements RedisSerializer<Object> {
             log.debug("Deserializing JSON (length: {}): {}", json.length(), 
                      json.length() > 200 ? json.substring(0, 200) + "..." : json);
             
-            Object result;
-            
-            // Handle JSON arrays with type information specially
-            if (json.trim().startsWith("[") && json.contains("@class")) {
-                // For arrays containing objects with @class, we need to use a different approach
-                // Create a temporary ObjectMapper without default typing for the array structure
-                ObjectMapper arrayMapper = new ObjectMapper();
-                arrayMapper.registerModule(new JavaTimeModule());
-                arrayMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-                arrayMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-                arrayMapper.configure(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE, false);
-                arrayMapper.configure(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES, false);
-                
-                // Parse each object in the array individually using the main mapper
-                com.fasterxml.jackson.databind.JsonNode arrayNode = arrayMapper.readTree(json);
-                if (arrayNode.isArray()) {
-                    java.util.List<Object> resultList = new java.util.ArrayList<>();
-                    for (com.fasterxml.jackson.databind.JsonNode elementNode : arrayNode) {
-                        if (elementNode.has("@class")) {
-                            // Use the main mapper to deserialize objects with @class information
-                            Object element = objectMapper.readValue(elementNode.toString(), Object.class);
-                            resultList.add(element);
-                        } else {
-                            // Use the array mapper for objects without @class
-                            Object element = arrayMapper.readValue(elementNode.toString(), Object.class);
-                            resultList.add(element);
-                        }
-                    }
-                    result = resultList;
-                } else {
-                    // Fallback to regular deserialization
-                    result = objectMapper.readValue(json, Object.class);
-                }
-            } else {
-                // Regular deserialization for non-array or arrays without @class
-                result = objectMapper.readValue(json, Object.class);
-            }
-            
-            // Clean @class information from the result before returning
-            result = cleanClassInformation(result);
+            Object result = objectMapper.readValue(json, Object.class);
             
             log.debug("Successfully deserialized object: {} (JSON length: {})", 
                      result.getClass().getSimpleName(), json.length());
@@ -125,30 +86,4 @@ public class UniversalJsonRedisSerializer implements RedisSerializer<Object> {
         }
     }
     
-    /**
-     * Clean @class information from deserialized objects to prevent exposure to frontend.
-     * This method recursively removes class type information while preserving the actual data.
-     */
-    private Object cleanClassInformation(Object obj) {
-        if (obj == null) {
-            return null;
-        }
-        
-        try {
-            // Create a clean ObjectMapper without type information
-            ObjectMapper cleanMapper = new ObjectMapper();
-            cleanMapper.registerModule(new JavaTimeModule());
-            cleanMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            cleanMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            
-            // Serialize and deserialize to remove class information
-            String cleanJson = cleanMapper.writeValueAsString(obj);
-            return cleanMapper.readValue(cleanJson, Object.class);
-            
-        } catch (Exception e) {
-            log.warn("Failed to clean class information from object: {}, returning original", 
-                    obj.getClass().getSimpleName(), e);
-            return obj;
-        }
-    }
 }
