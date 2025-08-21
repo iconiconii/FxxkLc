@@ -123,6 +123,33 @@ public class CacheKeyBuilder {
         return buildKey("fsrs", "metrics", "days" + PARAM_DELIMITER + days);
     }
     
+    // Leaderboard domain keys
+    public static String leaderboardGlobal(Integer limit) {
+        return buildKey("leaderboard", "global", "limit" + PARAM_DELIMITER + limit);
+    }
+    
+    public static String leaderboardWeekly(Integer limit) {
+        return buildKey("leaderboard", "weekly", "limit" + PARAM_DELIMITER + limit);
+    }
+    
+    public static String leaderboardMonthly(Integer limit) {
+        return buildKey("leaderboard", "monthly", "limit" + PARAM_DELIMITER + limit);
+    }
+    
+    public static String leaderboardAccuracy(Integer limit, Integer days) {
+        return buildKey("leaderboard", "accuracy", 
+                "limit" + PARAM_DELIMITER + limit,
+                "days" + PARAM_DELIMITER + days);
+    }
+    
+    public static String leaderboardStreak(Integer limit) {
+        return buildKey("leaderboard", "streak", "limit" + PARAM_DELIMITER + limit);
+    }
+    
+    public static String userRank(Long userId) {
+        return buildKey("user", "rank", "userId" + PARAM_DELIMITER + userId);
+    }
+    
     // CodeTop Filter domain keys
     public static String codetopFilter(Long companyId, Long departmentId, Long positionId, 
                                      String keyword, Integer page, Integer size, String sortBy) {
@@ -182,7 +209,8 @@ public class CacheKeyBuilder {
     }
     
     public static String fsrsDomain(Long userId) {
-        return NAMESPACE + DELIMITER + "fsrs" + DELIMITER + "*" + userId + "*";
+        // Pattern to match Spring Cache keys format: cache-name::actual-key
+        return "*fsrs*" + userId + "*";
     }
     
     public static String codetopFilterDomain() {
@@ -191,6 +219,10 @@ public class CacheKeyBuilder {
     
     public static String codetopUserStatusDomain(Long userId) {
         return NAMESPACE + DELIMITER + "codetop" + DELIMITER + "globaluser" + DELIMITER + "userId" + PARAM_DELIMITER + userId + "*";
+    }
+    
+    public static String leaderboardDomain() {
+        return NAMESPACE + DELIMITER + "leaderboard" + DELIMITER + "*";
     }
     
     // Utility methods

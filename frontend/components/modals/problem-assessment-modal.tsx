@@ -11,7 +11,7 @@ interface ProblemAssessmentModalProps {
   onClose: () => void
   problemId: number
   problemTitle: string
-  onStatusUpdate?: () => void
+  onStatusUpdate?: (problemId: number, newStatus: string, newMastery: number) => void
 }
 
 export default function ProblemAssessmentModal({
@@ -54,7 +54,7 @@ export default function ProblemAssessmentModal({
       const masteryLevel = getDifficultyToMasteryLevel(difficulty)
       
       // Update problem status to done
-      await userApi.updateProblemStatus(problemId, {
+      const result = await userApi.updateProblemStatus(problemId, {
         status: 'done',
         mastery: masteryLevel,
         notes: `难度评估: ${getDifficultyLabel(difficulty)}`
@@ -67,8 +67,8 @@ export default function ProblemAssessmentModal({
         masteryLevel
       })
 
-      // Notify parent component to refresh data
-      onStatusUpdate?.()
+      // Notify parent component to update local state with actual result
+      onStatusUpdate?.(problemId, result.status, result.mastery)
       
       // Close the modal
       onClose()

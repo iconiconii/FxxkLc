@@ -18,7 +18,7 @@ import { useAuth } from "@/lib/auth-context"
 interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
   difficulty: "easy" | "medium" | "hard"
   mastery: number
-  status: "not_done" | "done" | "reviewed"
+  status: "not_done" | "done" | "reviewed" | "attempted"
 }
 
 const difficultyColors = {
@@ -432,14 +432,41 @@ export default function OliverPage() {
   const totalCount = filteredProblems.length
 
   const handleNotDoneClick = (problem: DisplayProblem) => {
-    // 现在只有已登录用户能看到操作按钮，所以直接打开模态框
-    setSelectedProblem(problem)
-    setModalOpen(true)
+    // 只允许"未做"状态的题目点击
+    if (problem.status === "not_done") {
+      setSelectedProblem(problem)
+      setModalOpen(true)
+    }
+  }
+
+  // 本地更新题目状态，避免重新请求API
+  const updateLocalProblemStatus = (problemId: number, newStatus: string, newMastery: number) => {
+    setProblems(prevProblems => 
+      prevProblems.map(problem => 
+        problem.problemId === problemId 
+          ? { ...problem, status: newStatus as "not_done" | "done" | "reviewed" | "attempted", mastery: newMastery }
+          : problem
+      )
+    )
   }
 
   const handleModalClose = () => {
     setModalOpen(false)
     setSelectedProblem(null)
+  }
+
+  const handlePageChange = (page: number) => {
+    // 根据当前状态选择合适的数据获取方法
+    const hasAdvancedFilters = difficultyFilters.length > 0 || 
+                               statusFilters.length > 0 || 
+                               tagFilters.length > 0 || 
+                               (searchTerm && searchTerm.trim())
+    
+    if (hasAdvancedFilters) {
+      executeEnhancedSearch(page)
+    } else {
+      fetchProblems(page, appliedFilters)
+    }
   }
 
   return (
@@ -650,7 +677,7 @@ export default function OliverPage() {
               <div className="space-y-3">
                 <div className="text-xs font-medium text-muted-foreground">选择状态</div>
                 <div className="space-y-2">
-                  {[{key: 'not_done', label: '未做', color: 'text-gray-600'}, {key: 'done', label: '已完成', color: 'text-green-600'}, {key: 'reviewed', label: '已复习', color: 'text-blue-600'}].map((status) => (
+                  {[{key: 'not_done', label: '未做', color: 'text-gray-600'}, {key: 'done', label: '已完成', color: 'text-green-600'}, {key: 'reviewed', label: '已复习', color: 'text-blue-600'}, {key: 'attempted', label: '尝试过', color: 'text-orange-600'}].map((status) => (
                     <div key={status.key} className="flex items-center gap-2">
                       <Checkbox 
                         id={`${id}-status-${status.key}`}
@@ -834,7 +861,7 @@ export default function OliverPage() {
             {/* Status filters */}
             {statusFilters.map(status => (
               <Badge key={status} variant="outline" className="gap-1">
-                {status === 'not_done' ? '未做' : status === 'done' ? '已完成' : '已复习'}
+                {status === 'not_done' ? '未做' : status === 'done' ? '已完成' : status === 'reviewed' ? '已复习' : '尝试过'}
                 <X className="w-3 h-3 cursor-pointer" onClick={() => setStatusFilters(statusFilters.filter(f => f !== status))} />
               </Badge>
             ))}
@@ -932,6 +959,9 @@ export default function OliverPage() {
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-200">
                       操作
+                      <div className="text-xs font-normal text-gray-500 dark:text-gray-400 mt-1">
+                        复习请到复习页面
+                      </div>
                     </th>
                   </>
                 )}
@@ -991,29 +1021,39 @@ export default function OliverPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 h-8"
+                              className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:border-blue-400 h-8"
                               onClick={() => handleNotDoneClick(problem)}
                               title="点击记录做题状态"
                             >
-                              未做
+                              练习
                             </Button>
                           ) : problem.status === "done" ? (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/20 h-8"
-                              onClick={() => handleNotDoneClick(problem)}
-                              title="点击更新做题状态"
+                              disabled
+                              className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 h-8 opacity-75 cursor-not-allowed"
+                              title="已完成 - 复习请到复习页面"
                             >
                               已完成
+                            </Button>
+                          ) : problem.status === "attempted" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 h-8 opacity-75 cursor-not-allowed"
+                              title="尝试过 - 复习请到复习页面"
+                            >
+                              尝试过
                             </Button>
                           ) : (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8"
-                              onClick={() => handleNotDoneClick(problem)}
-                              title="点击更新做题状态"
+                              disabled
+                              className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 h-8 opacity-75 cursor-not-allowed"
+                              title="已复习 - 复习请到复习页面"
                             >
                               已复习
                             </Button>
@@ -1034,6 +1074,88 @@ export default function OliverPage() {
         )}
       </div>
 
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              第 {pagination.current} 页，共 {pagination.pages} 页（总计 {pagination.total} 道题目）
+            </div>
+            <div className="flex gap-2 items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current <= 1}
+                onClick={() => handlePageChange(1)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                首页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current <= 1}
+                onClick={() => handlePageChange(pagination.current - 1)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                上一页
+              </Button>
+              
+              {/* 页码显示 */}
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                  let pageNum: number;
+                  if (pagination.pages <= 5) {
+                    pageNum = i + 1;
+                  } else if (pagination.current <= 3) {
+                    pageNum = i + 1;
+                  } else if (pagination.current >= pagination.pages - 2) {
+                    pageNum = pagination.pages - 4 + i;
+                  } else {
+                    pageNum = pagination.current - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === pagination.current ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`w-8 h-8 p-0 text-xs ${
+                        pageNum === pagination.current 
+                          ? "bg-blue-500 text-white hover:bg-blue-600" 
+                          : "border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                      } transition-colors`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current >= pagination.pages}
+                onClick={() => handlePageChange(pagination.current + 1)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                下一页
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current >= pagination.pages}
+                onClick={() => handlePageChange(pagination.pages)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                末页
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assessment Modal */}
       {selectedProblem && (
         <ProblemAssessmentModal
@@ -1041,9 +1163,8 @@ export default function OliverPage() {
           onClose={handleModalClose}
           problemId={selectedProblem.problemId}
           problemTitle={selectedProblem.title}
-          onStatusUpdate={() => {
-            // Refresh the current page data after status update
-            fetchProblems(pagination.current, appliedFilters)
+          onStatusUpdate={(problemId, newStatus, newMastery) => {
+            updateLocalProblemStatus(problemId, newStatus, newMastery)
           }}
         />
       )}

@@ -1,6 +1,7 @@
 package com.codetop.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.annotation.CurrentUserId;
 import com.codetop.dto.UserProblemStatusDTO;
 import com.codetop.dto.UserProblemStatusLegacyDTO;

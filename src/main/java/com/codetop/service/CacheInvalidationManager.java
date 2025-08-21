@@ -145,7 +145,9 @@ public class CacheInvalidationManager {
             Set<String> keys = redisTemplate.keys(pattern);
             if (keys != null && !keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.debug("Deleted {} cache keys matching pattern: {}", keys.size(), pattern);
+                log.info("Deleted {} cache keys matching pattern: {}", keys.size(), pattern);
+            } else {
+                log.info("No cache keys found matching pattern: {}", pattern);
             }
         } catch (Exception e) {
             log.error("Error clearing cache with pattern: {}", pattern, e);

@@ -20,5 +20,4 @@ public class StreakLeaderboardEntryDTO {
     private Integer currentStreak;
     private Integer longestStreak;
     private Long totalActiveDays;
-    private String badge;
 }

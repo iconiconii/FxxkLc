@@ -1,5 +1,6 @@
 package com.codetop.controller;
 
+import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.entity.User;
 import com.codetop.mapper.UserMapper;
 import com.codetop.security.UserPrincipal;
@@ -198,6 +199,11 @@ public class UserController {
         private String lastName;
         private String timezone;
         private String avatarUrl;
+        
+        /**
+         * 幂等性请求ID，用于防止重复更新资料
+         */
+        private String requestId;
     }
 
     @lombok.Data
@@ -231,6 +237,11 @@ public class UserController {
         private Boolean pushNotifications;
         private Integer dailyGoal;
         private String difficultyPreference;
+        
+        /**
+         * 幂等性请求ID，用于防止重复更新偏好
+         */
+        private String requestId;
     }
 
     @lombok.Data

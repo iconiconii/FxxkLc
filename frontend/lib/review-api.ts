@@ -3,6 +3,7 @@
  */
 
 import { apiRequest } from './api'
+import { withIdempotency } from './idempotency-utils'
 
 export interface FSRSCard {
   id: number
@@ -22,16 +23,47 @@ export interface FSRSCard {
 }
 
 export interface ReviewQueueCard {
+  id: number
+  userId: number
   problemId: number
-  title: string
-  difficulty: string
-  due: string
-  state: string
-  intervalDays: number
+  state: 'NEW' | 'LEARNING' | 'REVIEW' | 'RELEARNING'
+  difficulty: number
   stability: number
-  cardDifficulty: number
-  reps: number
+  reviewCount: number
   lapses: number
+  dueDate: string
+  intervalDays: number
+  problemTitle: string
+  problemDifficulty: 'EASY' | 'MEDIUM' | 'HARD'
+  priority: number
+  new: boolean
+  learning: boolean
+  review: boolean
+  relearning: boolean
+  due: boolean
+  overdue: boolean
+}
+
+export interface ReviewQueueResponse {
+  cards: ReviewQueueCard[]
+  totalCount: number
+  stats: {
+    totalCards: number
+    newCards: number
+    learningCards: number
+    reviewCards: number
+    relearningCards: number
+    dueCards: number
+    avgReviews: number
+    avgDifficulty: number
+    avgStability: number
+    totalLapses: number
+  }
+  generatedAt: string
+  // Pagination fields
+  currentPage?: number
+  pageSize?: number
+  totalPages?: number
 }
 
 export interface ReviewQueue {
@@ -40,6 +72,10 @@ export interface ReviewQueue {
   reviewCards: ReviewQueueCard[]
   relearningCards: ReviewQueueCard[]
   totalCount: number
+  // Pagination fields
+  currentPage?: number
+  pageSize?: number
+  totalPages?: number
 }
 
 export interface ReviewResult {
@@ -66,7 +102,8 @@ export interface UserLearningStats {
 export interface SubmitReviewRequest {
   problemId: number
   rating: 1 | 2 | 3 | 4 // 1=Again, 2=Hard, 3=Good, 4=Easy
-  reviewType: 'LEARNING' | 'REVIEW' | 'CRAM'
+  reviewType: 'SCHEDULED' | 'EXTRA' | 'CRAM' | 'MANUAL' | 'BULK'
+  requestId?: string // 幂等性请求ID
 }
 
 export interface OptimizationResult {
@@ -77,23 +114,65 @@ export interface OptimizationResult {
 
 export const reviewApi = {
   /**
-   * Get review queue for user
+   * Get review queue for user with pagination support
    */
-  async getReviewQueue(limit: number = 20): Promise<ReviewQueue> {
+  async getReviewQueue(
+    limit: number = 20, 
+    page: number = 1, 
+    pageSize: number = 10,
+    showAll: boolean = false
+  ): Promise<ReviewQueue> {
     const params = new URLSearchParams({
       limit: limit.toString(),
+      page: page.toString(),
+      pageSize: pageSize.toString(),
+      showAll: showAll.toString(),
     })
 
-    return await apiRequest<ReviewQueue>(`/review/queue?${params}`)
+    const response = await apiRequest<ReviewQueueResponse>(`/review/queue?${params}`)
+    
+    // Transform the flat cards array into categorized arrays
+    const newCards = response.cards.filter(card => card.state === 'NEW')
+    const learningCards = response.cards.filter(card => card.state === 'LEARNING')
+    const reviewCards = response.cards.filter(card => card.state === 'REVIEW')
+    const relearningCards = response.cards.filter(card => card.state === 'RELEARNING')
+
+    return {
+      newCards,
+      learningCards,
+      reviewCards,
+      relearningCards,
+      totalCount: response.totalCount,
+      currentPage: response.currentPage,
+      pageSize: response.pageSize,
+      totalPages: response.totalPages,
+    }
+  },
+
+  /**
+   * Get all problems that need review (due today or overdue, not reviewed today)
+   * Ordered by next review time ascending
+   */
+  async getAllDueProblems(limit: number = 50): Promise<ReviewQueueCard[]> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      showAll: 'true',
+    })
+
+    const response = await apiRequest<ReviewQueueResponse>(`/review/queue?${params}`)
+    return response.cards
   },
 
   /**
    * Submit review for a problem
    */
   async submitReview(request: SubmitReviewRequest): Promise<ReviewResult> {
+    // 为复习提交添加幂等性requestId
+    const requestWithId = withIdempotency(request)
+    
     return await apiRequest<ReviewResult>('/review/submit', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(requestWithId),
     })
   },
 
@@ -155,8 +234,12 @@ export const reviewApi = {
    * Optimize FSRS parameters for user
    */
   async optimizeParameters(): Promise<OptimizationResult> {
+    // 为参数优化添加幂等性requestId
+    const requestWithId = withIdempotency({})
+    
     return await apiRequest<OptimizationResult>('/review/optimize-parameters', {
       method: 'POST',
+      body: JSON.stringify(requestWithId),
     })
   },
 }

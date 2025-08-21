@@ -27,4 +27,9 @@ public class RegisterRequestDTO {
     private String firstName;
     private String lastName;
     private String timezone;
+    
+    /**
+     * 幂等性请求ID，用于防止重复注册
+     */
+    private String requestId;
 }

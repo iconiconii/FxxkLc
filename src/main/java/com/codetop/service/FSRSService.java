@@ -56,6 +56,7 @@ public class FSRSService {
 
     /**
      * Get or create FSRS card for user-problem combination.
+     * 依靠数据库唯一约束防止竞态条件
      */
     @Transactional
     public FSRSCard getOrCreateCard(Long userId, Long problemId) {
@@ -66,34 +67,52 @@ public class FSRSService {
         log.debug("Getting or creating FSRS card: userId={}, problemId={}", userId, problemId);
         
         try {
+            // 先检查是否已存在
             Optional<FSRSCard> existingCard = fsrsCardMapper.findByUserIdAndProblemId(userId, problemId);
-            
             if (existingCard.isPresent()) {
                 long duration = System.currentTimeMillis() - startTime;
                 log.debug("Found existing FSRS card: cardId={}, duration={}ms", existingCard.get().getId(), duration);
                 return existingCard.get();
             }
 
-            // Create new card
-            FSRSCard card = FSRSCard.builder()
-                    .userId(userId)
-                    .problemId(problemId)
-                    .state(FSRSState.NEW)
-                    .difficulty(BigDecimal.ZERO)
-                    .stability(BigDecimal.ZERO)
-                    .reviewCount(0)
-                    .lapses(0)
-                    .intervalDays(0)
-                    .easeFactor(new BigDecimal("2.5000"))
-                    .reps(0)
-                    .build();
+            // 创建新卡片 - 依靠数据库唯一约束防止重复
+            try {
+                FSRSCard card = FSRSCard.builder()
+                        .userId(userId)
+                        .problemId(problemId)
+                        .state(FSRSState.NEW)
+                        .difficulty(BigDecimal.ZERO)
+                        .stability(BigDecimal.ZERO)
+                        .reviewCount(0)
+                        .lapses(0)
+                        .intervalDays(0)
+                        .easeFactor(new BigDecimal("2.5000"))
+                        .reps(0)
+                        .build();
 
-            fsrsCardMapper.insert(card);
-            long duration = System.currentTimeMillis() - startTime;
-            
-            log.info("FSRS card created successfully: userId={}, problemId={}, cardId={}, duration={}ms", 
-                    userId, problemId, card.getId(), duration);
-            return card;
+                fsrsCardMapper.insert(card);
+                long duration = System.currentTimeMillis() - startTime;
+                
+                log.info("FSRS card created successfully: userId={}, problemId={}, cardId={}, duration={}ms", 
+                        userId, problemId, card.getId(), duration);
+                return card;
+                
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                // 数据库唯一约束冲突，重新查询已存在的记录
+                log.info("Database constraint violation, querying existing card: userId={}, problemId={}", 
+                        userId, problemId);
+                existingCard = fsrsCardMapper.findByUserIdAndProblemId(userId, problemId);
+                if (existingCard.isPresent()) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.debug("Retrieved existing card after constraint violation: cardId={}, duration={}ms", 
+                            existingCard.get().getId(), duration);
+                    return existingCard.get();
+                } else {
+                    log.error("Card should exist after constraint violation but not found: userId={}, problemId={}", 
+                            userId, problemId);
+                    throw e;
+                }
+            }
             
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
@@ -333,6 +352,38 @@ public class FSRSService {
      */
     public List<FSRSCardMapper.ReviewQueueCard> getOverdueCards(Long userId, int limit) {
         return fsrsCardMapper.findOverdueCards(userId, LocalDateTime.now(), limit);
+    }
+
+    /**
+     * Get all problems that need review, excluding those reviewed today.
+     * This includes new cards, learning/relearning cards, and due review cards.
+     * Ordered by next review time ascending to prioritize urgent reviews.
+     */
+    public List<FSRSCardMapper.ReviewQueueCard> getAllDueProblems(Long userId, int limit) {
+        TraceContext.setOperation("FSRS_GET_ALL_DUE_PROBLEMS");
+        TraceContext.setUserId(userId);
+        
+        long startTime = System.currentTimeMillis();
+        log.info("Getting all due problems: userId={}, limit={}", userId, limit);
+        
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            List<FSRSCardMapper.ReviewQueueCard> cards = fsrsCardMapper.getAllDueProblems(userId, now, limit);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            int actualCount = cards != null ? cards.size() : 0;
+            
+            log.info("Retrieved all due problems: userId={}, requestedLimit={}, actualCount={}, duration={}ms", 
+                    userId, limit, actualCount, duration);
+            
+            return cards != null ? cards : List.of();
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to get all due problems: userId={}, limit={}, duration={}ms, error={}", 
+                    userId, limit, duration, e.getMessage(), e);
+            return List.of();
+        }
     }
 
     /**

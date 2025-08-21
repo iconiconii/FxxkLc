@@ -1,6 +1,5 @@
 package com.codetop.dto;
 
-import com.codetop.mapper.FSRSCardMapper;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,10 +9,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * FSRS review queue VO for API responses.
+ * Optimized FSRS review queue VO for API responses with pagination support.
  * 
- * This VO is specifically designed for API responses to avoid
- * exposing internal type information from cached DTOs.
+ * This VO is specifically designed for frontend consumption,
+ * containing only essential fields to reduce payload size.
  * 
  * @author CodeTop Team
  */
@@ -22,8 +21,13 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class FSRSReviewQueueVO {
-    private List<FSRSCardMapper.ReviewQueueCard> cards;
+    private List<ReviewQueueCardVO> cards;
     private Integer totalCount;
-    private FSRSCardMapper.UserLearningStats stats;
+    private LearningStatsVO stats;
     private LocalDateTime generatedAt;
+    
+    // Pagination fields
+    private Integer currentPage;
+    private Integer pageSize;
+    private Integer totalPages;
 }

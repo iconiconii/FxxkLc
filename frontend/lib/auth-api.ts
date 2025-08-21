@@ -3,6 +3,7 @@
  */
 
 import { apiRequest, setAuthToken, clearAuthToken } from './api'
+import { withIdempotency } from './idempotency-utils'
 
 export interface UserInfo {
   id: number
@@ -36,6 +37,7 @@ export interface RegisterRequest {
   firstName?: string
   lastName?: string
   timezone?: string
+  requestId?: string // 幂等性请求ID
 }
 
 export interface RefreshTokenRequest {
@@ -72,9 +74,12 @@ export const authApi = {
    * User registration
    */
   async register(request: RegisterRequest): Promise<AuthResponse> {
+    // 为注册请求添加幂等性requestId
+    const requestWithId = withIdempotency(request)
+    
     const response = await apiRequest<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(requestWithId),
     })
     
     // Store tokens and user info after successful registration

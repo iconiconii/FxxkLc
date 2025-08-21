@@ -1,6 +1,7 @@
 package com.codetop.controller;
 
 import com.codetop.annotation.CurrentUserId;
+import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.dto.SubmissionResponse;
 import com.codetop.dto.SubmitReportRequest;
 import com.codetop.entity.InterviewReport;
@@ -37,6 +38,10 @@ public class InterviewReportController {
     @PostMapping
     @Operation(summary = "Submit interview report", description = "Submit a new interview report from community")
     @SecurityRequirement(name = "Bearer Authentication")
+    @SimpleIdempotent(
+        operation = "SUBMIT_INTERVIEW_REPORT",
+        returnCachedResult = false
+    )
     public ResponseEntity<SubmissionResponse> submitReport(
             @CurrentUserId Long userId,
             @Valid @RequestBody SubmitReportRequest request) {

@@ -5,14 +5,12 @@ import { ExternalLink, Star } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { codeTopApi, type ProblemRankingDTO, type OliverFilterResponse } from "@/lib/codetop-api"
-import { userApi, type UserProblemStatus } from "@/lib/user-api"
 import { useAuth } from "@/lib/auth-context"
-import ProblemAssessmentModal from "@/components/modals/problem-assessment-modal"
 
 interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
   difficulty: "easy" | "medium" | "hard"
   mastery: number
-  status: "not_done" | "done" | "reviewed"
+  status: "not_done" | "done" | "reviewed" | "attempted"
 }
 
 const difficultyColors = {
@@ -32,8 +30,6 @@ export default function ProblemList() {
   const [problems, setProblems] = useState<DisplayProblem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedProblem, setSelectedProblem] = useState<DisplayProblem | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
   
   const [pagination, setPagination] = useState({
     current: 1,
@@ -52,26 +48,6 @@ export default function ProblemList() {
     }
   }, [])
 
-  // Merge user status with problems
-  const mergeUserStatusWithProblems = useCallback((
-    problems: ProblemRankingDTO[], 
-    userStatuses: UserProblemStatus[]
-  ): DisplayProblem[] => {
-    const statusMap = new Map(
-      userStatuses.map(status => [status.problemId, status])
-    )
-    
-    return problems.map(problem => {
-      const userStatus = statusMap.get(problem.problemId)
-      return {
-        ...problem,
-        difficulty: problem.difficulty.toLowerCase() as "easy" | "medium" | "hard",
-        mastery: userStatus?.mastery || 0,
-        status: userStatus?.status || "not_done",
-      }
-    })
-  }, [])
-
   // Fetch problems data
   const fetchProblems = useCallback(async (page: number = 1) => {
     try {
@@ -86,21 +62,8 @@ export default function ProblemList() {
         'desc'
       )
       
-      let displayProblems: DisplayProblem[]
-      
-      if (isAuthenticated) {
-        // 已登录用户，合并个人状态
-        try {
-          const userStatuses = await userApi.getUserProblemProgress()
-          displayProblems = mergeUserStatusWithProblems(response.problems, userStatuses)
-        } catch (userErr) {
-          console.warn('Failed to load user status:', userErr)
-          displayProblems = response.problems.map(transformProblem)
-        }
-      } else {
-        // 未登录用户，使用默认值
-        displayProblems = response.problems.map(transformProblem)
-      }
+      // 首页不需要用户状态，直接使用默认状态
+      const displayProblems: DisplayProblem[] = response.problems.map(transformProblem)
       
       setProblems(displayProblems)
       setPagination({
@@ -115,7 +78,7 @@ export default function ProblemList() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.size, transformProblem, mergeUserStatusWithProblems, isAuthenticated])
+  }, [pagination.size, transformProblem])
 
   // 初始加载
   useEffect(() => {
@@ -123,18 +86,6 @@ export default function ProblemList() {
       fetchProblems(1)
     }
   }, [fetchProblems, authLoading])
-
-  const handleProblemClick = (problem: DisplayProblem) => {
-    if (isAuthenticated) {
-      setSelectedProblem(problem)
-      setModalOpen(true)
-    }
-  }
-
-  const handleModalClose = () => {
-    setModalOpen(false)
-    setSelectedProblem(null)
-  }
 
   const handlePageChange = (page: number) => {
     fetchProblems(page)
@@ -248,26 +199,6 @@ export default function ProblemList() {
                     </div>
                   </div>
 
-                  {/* 状态按钮 */}
-                  {isAuthenticated && (
-                    <div className="flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`text-xs px-3 py-1 rounded border transition-colors ${
-                          problem.status === "done" 
-                            ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-700 dark:bg-green-900/20 dark:text-green-400" 
-                            : problem.status === "reviewed"
-                            ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
-                            : "border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                        }`}
-                        onClick={() => handleProblemClick(problem)}
-                      >
-                        {problem.status === "not_done" ? "练习" : 
-                         problem.status === "done" ? "已完成" : "已复习"}
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -280,9 +211,18 @@ export default function ProblemList() {
         <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl p-4 border border-gray-200/30 dark:border-gray-700/30 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              第 {pagination.current} 页，共 {pagination.pages} 页
+              第 {pagination.current} 页，共 {pagination.pages} 页（总计 {pagination.total} 道题目）
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current <= 1}
+                onClick={() => handlePageChange(1)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                首页
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -292,6 +232,39 @@ export default function ProblemList() {
               >
                 上一页
               </Button>
+              
+              {/* 页码显示 */}
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                  let pageNum: number;
+                  if (pagination.pages <= 5) {
+                    pageNum = i + 1;
+                  } else if (pagination.current <= 3) {
+                    pageNum = i + 1;
+                  } else if (pagination.current >= pagination.pages - 2) {
+                    pageNum = pagination.pages - 4 + i;
+                  } else {
+                    pageNum = pagination.current - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === pagination.current ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`w-8 h-8 p-0 text-xs ${
+                        pageNum === pagination.current 
+                          ? "bg-blue-500 text-white hover:bg-blue-600" 
+                          : "border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                      } transition-colors`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
               <Button
                 variant="outline"
                 size="sm"
@@ -301,22 +274,18 @@ export default function ProblemList() {
               >
                 下一页
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.current >= pagination.pages}
+                onClick={() => handlePageChange(pagination.pages)}
+                className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
+              >
+                末页
+              </Button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Assessment Modal */}
-      {selectedProblem && (
-        <ProblemAssessmentModal
-          isOpen={modalOpen}
-          onClose={handleModalClose}
-          problemId={selectedProblem.problemId}
-          problemTitle={selectedProblem.title}
-          onStatusUpdate={() => {
-            fetchProblems(pagination.current)
-          }}
-        />
       )}
     </div>
   )

@@ -345,22 +345,41 @@ public class CodeTopFilterService {
     }
     
     /**
-     * Determine user status from FSRS card state.
+     * Determine user status from FSRS card state with enhanced logic for attempted status.
      */
     private String determineStatusFromFSRSCard(FSRSCard card) {
         if (card == null) {
+            log.debug("FSRS card is null, returning not_done");
             return "not_done";
         }
         
+        log.debug("Determining status for card: problemId={}, state={}, reviewCount={}", 
+                card.getProblemId(), card.getState(), card.getReviewCount());
+        
         switch (card.getState()) {
             case NEW:
+                // If the card has been reviewed (review count > 0) but still in NEW state,
+                // it means the user attempted but struggled (got Hard ratings)
+                if (card.getReviewCount() != null && card.getReviewCount() > 0) {
+                    log.debug("Card problemId={} has NEW state with reviewCount={}, returning attempted", 
+                            card.getProblemId(), card.getReviewCount());
+                    return "attempted";
+                }
+                log.debug("Card problemId={} has NEW state with reviewCount={}, returning not_done", 
+                        card.getProblemId(), card.getReviewCount());
                 return "not_done";
             case LEARNING:
             case REVIEW:
+                log.debug("Card problemId={} has state={}, returning done", 
+                        card.getProblemId(), card.getState());
                 return "done";
             case RELEARNING:
+                log.debug("Card problemId={} has RELEARNING state, returning reviewed", 
+                        card.getProblemId());
                 return "reviewed";
             default:
+                log.debug("Card problemId={} has unknown state={}, returning not_done", 
+                        card.getProblemId(), card.getState());
                 return "not_done";
         }
     }

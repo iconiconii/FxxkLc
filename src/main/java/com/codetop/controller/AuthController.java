@@ -1,6 +1,7 @@
 package com.codetop.controller;
 
 import com.codetop.annotation.CurrentUserId;
+import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -81,6 +82,10 @@ public class AuthController {
      */
     @PostMapping("/register")
     @Operation(summary = "User registration", description = "Register new user account")
+    @SimpleIdempotent(
+        operation = "USER_REGISTER",
+        returnCachedResult = false
+    )
     public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
         AuthService.RegisterRequest serviceRequest = new AuthService.RegisterRequest();
         serviceRequest.setUsername(request.getUsername());
@@ -123,7 +128,8 @@ public class AuthController {
      */
     @PostMapping("/logout")
     @Operation(summary = "User logout", description = "Logout user and invalidate token")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authorization) {
+    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authorization,
+                                      @Valid @RequestBody LogoutRequest request) {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             String token = authorization.substring(7);
             authService.logout(token);
@@ -190,6 +196,14 @@ public class AuthController {
     public static class RefreshTokenRequestDTO {
         @NotBlank(message = "Refresh token is required")
         private String refreshToken;
+    }
+
+    @lombok.Data
+    public static class LogoutRequest {
+        /**
+         * 幂等性请求ID，用于防止重复登出
+         */
+        private String requestId;
     }
 
     @lombok.Data

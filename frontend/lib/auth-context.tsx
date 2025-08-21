@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { authApi, type UserInfo } from './auth-api'
 
 interface AuthContextType {
@@ -33,6 +34,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const router = useRouter()
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
@@ -148,6 +150,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await authApi.logout()
     setUser(null)
     setIsAuthenticated(false)
+    // Redirect to home page after logout
+    router.push('/')
   }
 
   const value: AuthContextType = {

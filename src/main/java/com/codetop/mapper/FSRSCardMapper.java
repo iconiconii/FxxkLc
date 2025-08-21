@@ -124,35 +124,56 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
                                           @Param("limit") int limit);
 
     /**
-     * Generate optimal review queue with mixed card types.
+     * Generate optimal review queue with mixed card types, excluding cards reviewed today.
      */
     @Select("""
             (SELECT fc.*, p.title as problem_title, p.difficulty as problem_difficulty, 1 as priority
              FROM fsrs_cards fc
              INNER JOIN problems p ON fc.problem_id = p.id
+             LEFT JOIN (
+                SELECT DISTINCT card_id 
+                FROM review_logs 
+                WHERE user_id = #{userId} 
+                AND DATE(reviewed_at) = CURDATE()
+             ) today_reviews ON fc.id = today_reviews.card_id
              WHERE fc.user_id = #{userId}
              AND fc.state = 'NEW'
              AND p.deleted = 0
+             AND today_reviews.card_id IS NULL
              ORDER BY fc.created_at ASC
              LIMIT #{newLimit})
             UNION ALL
             (SELECT fc.*, p.title as problem_title, p.difficulty as problem_difficulty, 2 as priority
              FROM fsrs_cards fc
              INNER JOIN problems p ON fc.problem_id = p.id
+             LEFT JOIN (
+                SELECT DISTINCT card_id 
+                FROM review_logs 
+                WHERE user_id = #{userId} 
+                AND DATE(reviewed_at) = CURDATE()
+             ) today_reviews ON fc.id = today_reviews.card_id
              WHERE fc.user_id = #{userId}
              AND fc.state IN ('LEARNING', 'RELEARNING')
              AND (fc.next_review_at IS NULL OR fc.next_review_at <= #{now})
              AND p.deleted = 0
+             AND today_reviews.card_id IS NULL
              ORDER BY fc.next_review_at ASC
              LIMIT #{learningLimit})
             UNION ALL
             (SELECT fc.*, p.title as problem_title, p.difficulty as problem_difficulty, 3 as priority
              FROM fsrs_cards fc
              INNER JOIN problems p ON fc.problem_id = p.id
+             LEFT JOIN (
+                SELECT DISTINCT card_id 
+                FROM review_logs 
+                WHERE user_id = #{userId} 
+                AND DATE(reviewed_at) = CURDATE()
+             ) today_reviews ON fc.id = today_reviews.card_id
              WHERE fc.user_id = #{userId}
              AND fc.state = 'REVIEW'
              AND fc.next_review_at <= #{now}
              AND p.deleted = 0
+             AND today_reviews.card_id IS NULL
              ORDER BY fc.next_review_at ASC
              LIMIT #{reviewLimit})
             ORDER BY priority, next_review_at ASC
@@ -162,6 +183,43 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
                                                     @Param("newLimit") int newLimit,
                                                     @Param("learningLimit") int learningLimit,
                                                     @Param("reviewLimit") int reviewLimit);
+
+    /**
+     * Get all problems that need review today or are overdue, excluding those reviewed today.
+     * Ordered by next review time ascending to prioritize urgent reviews.
+     */
+    @Select("""
+            SELECT fc.*, p.title as problem_title, p.difficulty as problem_difficulty, 
+                   CASE 
+                       WHEN fc.state = 'NEW' THEN 1
+                       WHEN fc.state IN ('LEARNING', 'RELEARNING') THEN 2
+                       WHEN fc.state = 'REVIEW' AND fc.next_review_at <= #{now} THEN 3
+                       ELSE 4
+                   END as priority
+            FROM fsrs_cards fc
+            INNER JOIN problems p ON fc.problem_id = p.id
+            LEFT JOIN (
+                SELECT DISTINCT card_id 
+                FROM review_logs 
+                WHERE user_id = #{userId} 
+                AND DATE(reviewed_at) = CURDATE()
+            ) today_reviews ON fc.id = today_reviews.card_id
+            WHERE fc.user_id = #{userId}
+            AND p.deleted = 0
+            AND today_reviews.card_id IS NULL
+            AND (
+                fc.state = 'NEW' OR 
+                fc.state IN ('LEARNING', 'RELEARNING') OR
+                (fc.state = 'REVIEW' AND fc.next_review_at <= #{now})
+            )
+            ORDER BY 
+                COALESCE(fc.next_review_at, #{now}) ASC,
+                priority ASC
+            LIMIT #{limit}
+            """)
+    List<ReviewQueueCard> getAllDueProblems(@Param("userId") Long userId,
+                                           @Param("now") LocalDateTime now,
+                                           @Param("limit") int limit);
     
     // Statistics and analytics queries
     

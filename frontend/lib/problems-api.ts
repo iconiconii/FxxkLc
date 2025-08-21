@@ -50,6 +50,19 @@ export interface TagUsage {
   count: number
 }
 
+export interface UserProblemStatus {
+  problemId: number
+  title: string
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD'
+  status: 'not_done' | 'done' | 'reviewed'
+  mastery: number
+  lastAttemptDate?: string
+  lastConsideredDate?: string
+  attemptCount: number
+  accuracy?: number
+  notes?: string
+}
+
 export interface AdvancedSearchRequest {
   keyword?: string
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD'
@@ -278,6 +291,13 @@ export const problemsApi = {
    */
   async getTagStatistics(): Promise<TagUsage[]> {
     return await apiRequest<TagUsage[]>('/problems/tags/statistics')
+  },
+
+  /**
+   * Get user's problem progress
+   */
+  async getUserProgress(): Promise<UserProblemStatus[]> {
+    return await apiRequest<UserProblemStatus[]>('/problems/user-progress')
   },
 
   /**

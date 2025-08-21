@@ -977,8 +977,21 @@ public class ProblemService {
         
         // Consider status for rating adjustment
         boolean isSolved = "SOLVED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status);
+        boolean isDone = "done".equalsIgnoreCase(status);
         boolean isAttempted = "ATTEMPTED".equalsIgnoreCase(status) || "IN_PROGRESS".equalsIgnoreCase(status);
         
+        // For "done" status, we need to be more careful about rating assignment
+        if (isDone) {
+            return switch (mastery) {
+                case 0 -> 2;  // No mastery but done = Hard (attempted but struggled)
+                case 1 -> 2;  // Low mastery + done = Hard (attempted but struggled) 
+                case 2 -> 3;  // Medium mastery + done = Good
+                case 3 -> 4;  // High mastery + done = Easy
+                default -> 2; // Default to Hard for done status
+            };
+        }
+        
+        // Original logic for other statuses
         return switch (mastery) {
             case 0 -> isSolved ? 2 : 1;  // No mastery but solved = Hard, otherwise Again
             case 1 -> isSolved ? 3 : 2;  // Low mastery + solved = Good, otherwise Hard  
@@ -993,7 +1006,7 @@ public class ProblemService {
      */
     private ReviewType determineReviewType(String status) {
         return switch (status != null ? status.toUpperCase() : "") {
-            case "SOLVED", "COMPLETED" -> ReviewType.SCHEDULED;  // Regular review
+            case "SOLVED", "COMPLETED", "DONE" -> ReviewType.SCHEDULED;  // Regular review
             case "IN_PROGRESS", "ATTEMPTED" -> ReviewType.MANUAL;  // User-initiated
             case "REVIEWING", "PRACTICING" -> ReviewType.EXTRA;   // Extra practice
             default -> ReviewType.MANUAL;  // Default to manual review
@@ -1175,22 +1188,23 @@ public class ProblemService {
     // Helper methods for getUserProblemProgress
     
     /**
-     * Determine user status from FSRS card state.
+     * Determine user status from FSRS card state with enhanced logic for attempted status.
      */
     private String determineStatusFromFSRSCard(FSRSCard card) {
-        if (card.getReviewCount() == 0) {
+        if (card == null || card.getReviewCount() == null || card.getReviewCount() == 0) {
             return "not_done";
         }
         
-        // If user has done reviews, consider it "done"
-        // This is a simplified mapping - you might want more sophisticated logic
         switch (card.getState()) {
             case NEW:
-                return "not_done";
+                // If the card has been reviewed (review count > 0) but still in NEW state,
+                // it means the user attempted but struggled (got Hard ratings)
+                return "attempted";
             case LEARNING:
             case REVIEW:
-            case RELEARNING:
                 return "done";
+            case RELEARNING:
+                return "reviewed";
             default:
                 return "not_done";
         }

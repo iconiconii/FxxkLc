@@ -1,5 +1,6 @@
 package com.codetop.controller;
 
+import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.entity.FSRSCard;
 import com.codetop.enums.ReviewType;
 import com.codetop.mapper.FSRSCardMapper;
@@ -7,6 +8,8 @@ import com.codetop.security.UserPrincipal;
 import com.codetop.service.FSRSService;
 import com.codetop.dto.FSRSReviewQueueVO;
 import com.codetop.dto.FSRSReviewResultVO;
+import com.codetop.dto.ReviewQueueCardVO;
+import com.codetop.dto.LearningStatsVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,7 +23,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Review controller for FSRS spaced repetition system.
@@ -38,18 +43,63 @@ public class ReviewController {
     private final FSRSService fsrsService;
 
     /**
-     * Get review queue for user.
+     * Get review queue for user with pagination support.
      */
     @GetMapping("/queue")
-    @Operation(summary = "Get review queue", description = "Get personalized review queue using FSRS algorithm")
+    @Operation(summary = "Get review queue", description = "Get personalized review queue using FSRS algorithm with pagination")
     public ResponseEntity<FSRSReviewQueueVO> getReviewQueue(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @RequestParam(defaultValue = "20") int limit) {
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "false") boolean showAll) {
         
-        com.codetop.dto.FSRSReviewQueueDTO queue = fsrsService.generateReviewQueue(
-                userPrincipal.getId(), Math.min(limit, 50));
-        FSRSReviewQueueVO response = convertReviewQueueToVO(queue);
-        return ResponseEntity.ok(response);
+        if (showAll) {
+            // Show all due problems without mixed card type optimization
+            List<FSRSCardMapper.ReviewQueueCard> cards = fsrsService.getAllDueProblems(
+                    userPrincipal.getId(), Math.min(limit, 200));
+            
+            // Convert to VO format
+            List<ReviewQueueCardVO> cardVOs = cards.stream()
+                    .map(this::convertToCardVO)
+                    .collect(Collectors.toList());
+            
+            // Get user learning statistics
+            FSRSCardMapper.UserLearningStats stats = fsrsService.getUserLearningStats(userPrincipal.getId());
+            LearningStatsVO statsVO = convertToStatsVO(stats);
+            
+            FSRSReviewQueueVO response = FSRSReviewQueueVO.builder()
+                    .cards(cardVOs)
+                    .totalCount(cardVOs.size())
+                    .stats(statsVO)
+                    .generatedAt(LocalDateTime.now())
+                    .currentPage(null)
+                    .pageSize(null)
+                    .totalPages(null)
+                    .build();
+            
+            // Apply pagination if needed
+            if (page > 1 || pageSize < cardVOs.size()) {
+                response = applyClientSidePagination(response, page, pageSize);
+            }
+            
+            return ResponseEntity.ok(response);
+        } else {
+            // Use existing optimized mixed card type logic
+            // 对于分页请求，使用更高的limit确保有足够数据
+            int actualLimit = page == 1 ? Math.min(limit, 100) : Math.min(limit, 200);
+            
+            com.codetop.dto.FSRSReviewQueueDTO queue = fsrsService.generateReviewQueue(
+                    userPrincipal.getId(), actualLimit);
+            FSRSReviewQueueVO response = convertReviewQueueToVO(queue);
+            
+            // 如果请求指定了分页参数且不是第一页或者pageSize不等于limit，则进行客户端分页处理
+            if (page > 1 || pageSize < actualLimit) {
+                response = applyClientSidePagination(response, page, pageSize);
+            }
+            
+            return ResponseEntity.ok(response);
+        }
     }
 
     /**
@@ -57,6 +107,10 @@ public class ReviewController {
      */
     @PostMapping("/submit")
     @Operation(summary = "Submit review", description = "Submit review result and update FSRS scheduling")
+    @SimpleIdempotent(
+        operation = "SUBMIT_REVIEW",
+        returnCachedResult = false
+    )
     public ResponseEntity<FSRSReviewResultVO> submitReview(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @Valid @RequestBody SubmitReviewRequest request) {
@@ -157,8 +211,13 @@ public class ReviewController {
      */
     @PostMapping("/optimize-parameters")
     @Operation(summary = "Optimize FSRS parameters", description = "Optimize FSRS parameters based on review history")
+    @SimpleIdempotent(
+        operation = "OPTIMIZE_FSRS_PARAMETERS",
+        returnCachedResult = false
+    )
     public ResponseEntity<OptimizationResult> optimizeParameters(
-            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @Valid @RequestBody OptimizationRequest request) {
         
         var optimizedParameters = fsrsService.optimizeUserParameters(userPrincipal.getId());
         
@@ -174,14 +233,96 @@ public class ReviewController {
     // Converter methods
     
     /**
+     * Apply client-side pagination to review queue response.
+     */
+    private FSRSReviewQueueVO applyClientSidePagination(FSRSReviewQueueVO response, int page, int pageSize) {
+        List<ReviewQueueCardVO> allCards = response.getCards();
+        int totalCards = allCards.size();
+        int startIndex = (page - 1) * pageSize;
+        int endIndex = Math.min(startIndex + pageSize, totalCards);
+        
+        if (startIndex >= totalCards) {
+            // 请求页超出范围，返回空结果
+            return FSRSReviewQueueVO.builder()
+                    .cards(List.of())
+                    .totalCount(totalCards)
+                    .stats(response.getStats())
+                    .generatedAt(response.getGeneratedAt())
+                    .currentPage(page)
+                    .pageSize(pageSize)
+                    .totalPages((int) Math.ceil((double) totalCards / pageSize))
+                    .build();
+        }
+        
+        List<ReviewQueueCardVO> pageCards = allCards.subList(startIndex, endIndex);
+        
+        return FSRSReviewQueueVO.builder()
+                .cards(pageCards)
+                .totalCount(totalCards)
+                .stats(response.getStats())
+                .generatedAt(response.getGeneratedAt())
+                .currentPage(page)
+                .pageSize(pageSize)
+                .totalPages((int) Math.ceil((double) totalCards / pageSize))
+                .build();
+    }
+    
+    /**
      * Convert FSRSReviewQueueDTO to VO.
      */
     private FSRSReviewQueueVO convertReviewQueueToVO(com.codetop.dto.FSRSReviewQueueDTO dto) {
+        // Convert cards to simplified VO
+        List<ReviewQueueCardVO> cardVOs = dto.getCards().stream()
+                .map(this::convertToCardVO)
+                .collect(Collectors.toList());
+        
+        // Convert stats to simplified VO
+        LearningStatsVO statsVO = convertToStatsVO(dto.getStats());
+        
         return FSRSReviewQueueVO.builder()
-                .cards(dto.getCards())
+                .cards(cardVOs)
                 .totalCount(dto.getTotalCount())
-                .stats(dto.getStats())
+                .stats(statsVO)
                 .generatedAt(dto.getGeneratedAt())
+                .currentPage(null) // Will be set later if pagination is applied
+                .pageSize(null)
+                .totalPages(null)
+                .build();
+    }
+    
+    /**
+     * Convert ReviewQueueCard to simplified VO.
+     */
+    private ReviewQueueCardVO convertToCardVO(FSRSCardMapper.ReviewQueueCard card) {
+        return ReviewQueueCardVO.builder()
+                .id(card.getId())
+                .problemId(card.getProblemId())
+                .problemTitle(card.getProblemTitle())
+                .problemDifficulty(card.getProblemDifficulty())
+                .state(card.getState().name())
+                .dueDate(card.getDueDate())
+                .intervalDays(card.getIntervalDays())
+                .priority(card.getPriority())
+                .difficulty(card.getDifficulty() != null ? card.getDifficulty().doubleValue() : 0.0)
+                .stability(card.getStability() != null ? card.getStability().doubleValue() : 0.0)
+                .reviewCount(card.getReviewCount())
+                .lapses(card.getLapses())
+                .build();
+    }
+    
+    /**
+     * Convert UserLearningStats to simplified VO.
+     */
+    private LearningStatsVO convertToStatsVO(FSRSCardMapper.UserLearningStats stats) {
+        return LearningStatsVO.builder()
+                .totalCards(stats.getTotalCards())
+                .newCards(stats.getNewCards())
+                .learningCards(stats.getLearningCards())
+                .reviewCards(stats.getReviewCards())
+                .relearningCards(stats.getRelearningCards())
+                .dueCards(stats.getDueCards())
+                .avgDifficulty(stats.getAvgDifficulty())
+                .avgStability(stats.getAvgStability())
                 .build();
     }
     
@@ -213,6 +354,19 @@ public class ReviewController {
 
         @NotNull(message = "Review type is required")
         private String reviewType; // LEARNING, REVIEW, CRAM
+        
+        /**
+         * 幂等性请求ID，用于防止重复提交
+         */
+        private String requestId;
+    }
+
+    @lombok.Data
+    public static class OptimizationRequest {
+        /**
+         * 幂等性请求ID，用于防止重复优化
+         */
+        private String requestId;
     }
 
     @lombok.Data

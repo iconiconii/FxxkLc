@@ -73,9 +73,12 @@ public class LeaderboardController {
         
         log.info("Fetching weekly leaderboard with limit: {}", limit);
         List<LeaderboardEntryDTO> leaderboard = leaderboardService.getWeeklyLeaderboard(limit);
+        // 转换为V0,根据vo的rank设置badge
         List<LeaderboardEntryVO> response = leaderboard.stream()
                 .map(this::convertLeaderboardEntryToVO)
                 .collect(Collectors.toList());
+        // 根据rank设置badge
+        response.forEach(LeaderboardEntryVO::assignBadge);
         return ResponseEntity.ok(response);
     }
 
@@ -94,6 +97,7 @@ public class LeaderboardController {
         List<LeaderboardEntryVO> response = leaderboard.stream()
                 .map(this::convertLeaderboardEntryToVO)
                 .collect(Collectors.toList());
+        response.forEach(LeaderboardEntryVO::assignBadge);
         return ResponseEntity.ok(response);
     }
 
@@ -115,6 +119,7 @@ public class LeaderboardController {
         List<AccuracyLeaderboardEntryVO> response = leaderboard.stream()
                 .map(this::convertAccuracyLeaderboardEntryToVO)
                 .collect(Collectors.toList());
+        response.forEach(AccuracyLeaderboardEntryVO::assignAccuracyBadge);
         return ResponseEntity.ok(response);
     }
 
@@ -177,10 +182,9 @@ public class LeaderboardController {
                 .correctReviews(dto.getCorrectReviews())
                 .accuracy(dto.getAccuracy())
                 .streak(dto.getStreak())
-                .badge(dto.getBadge())
                 .build();
     }
-    
+
     /**
      * Convert AccuracyLeaderboardEntryDTO to VO.
      */
@@ -193,7 +197,6 @@ public class LeaderboardController {
                 .totalReviews(dto.getTotalReviews())
                 .correctReviews(dto.getCorrectReviews())
                 .accuracy(dto.getAccuracy())
-                .badge(dto.getBadge())
                 .build();
     }
     
@@ -209,7 +212,6 @@ public class LeaderboardController {
                 .currentStreak(dto.getCurrentStreak())
                 .longestStreak(dto.getLongestStreak())
                 .totalActiveDays(dto.getTotalActiveDays())
-                .badge(dto.getBadge())
                 .build();
     }
 

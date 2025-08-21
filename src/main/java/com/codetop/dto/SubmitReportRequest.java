@@ -22,4 +22,9 @@ public class SubmitReportRequest {
     private String additionalNotes;
     private Integer difficultyRating;
     private InterviewReport.InterviewRound interviewRound;
+    
+    /**
+     * 幂等性请求ID，用于防止重复提交面试报告
+     */
+    private String requestId;
 }

@@ -21,5 +21,4 @@ public class LeaderboardEntryDTO {
     private Long correctReviews;
     private Double accuracy;
     private Integer streak;
-    private String badge;
 }

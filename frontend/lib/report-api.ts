@@ -3,6 +3,7 @@
  */
 
 import { apiRequest } from './api'
+import { withIdempotency } from './idempotency-utils'
 
 export interface SubmitReportRequest {
   company: string
@@ -13,6 +14,7 @@ export interface SubmitReportRequest {
   additionalNotes?: string
   difficultyRating?: number
   interviewRound?: 'PHONE' | 'TECHNICAL' | 'ONSITE' | 'FINAL' | 'OTHER'
+  requestId?: string // 幂等性请求ID
 }
 
 export interface SubmissionResponse {
@@ -43,9 +45,12 @@ export const reportApi = {
    * Submit a new interview report
    */
   async submitReport(request: SubmitReportRequest): Promise<SubmissionResponse> {
+    // 为面试报告添加幂等性requestId
+    const requestWithId = withIdempotency(request)
+    
     return await apiRequest<SubmissionResponse>('/reports', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(requestWithId),
     })
   },
 

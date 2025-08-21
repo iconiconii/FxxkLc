@@ -20,5 +20,4 @@ public class AccuracyLeaderboardEntryDTO {
     private Long totalReviews;
     private Long correctReviews;
     private Double accuracy;
-    private String badge;
 }

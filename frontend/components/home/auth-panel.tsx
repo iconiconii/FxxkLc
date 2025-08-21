@@ -3,8 +3,27 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, UserPlus, LogIn, Sparkles } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import UserPanel from "./user-panel"
 
 export default function AuthPanel() {
+  const { isAuthenticated, loading } = useAuth()
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-gray-500 dark:text-gray-400">加载中...</div>
+      </div>
+    )
+  }
+
+  // If user is authenticated, show UserPanel
+  if (isAuthenticated) {
+    return <UserPanel />
+  }
+
+  // If user is not authenticated, show auth options
   return (
     <div className="h-full space-y-6">
       {/* 欢迎卡片 */}

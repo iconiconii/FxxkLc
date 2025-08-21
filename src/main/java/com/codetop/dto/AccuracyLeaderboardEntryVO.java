@@ -26,4 +26,29 @@ public class AccuracyLeaderboardEntryVO {
     private Long correctReviews;
     private Double accuracy;
     private String badge;
+    
+    /**
+     * Assign badge based on accuracy performance.
+     */
+    public void assignAccuracyBadge() {
+        if (this.getRank() == null)
+            return;
+
+        long rank = this.getRank();
+        double accuracy = this.getAccuracy();
+
+        if (rank == 1) {
+            this.setBadge("🎯 精准王者");
+        } else if (rank <= 3) {
+            this.setBadge("🏹 神射手");
+        } else if (rank <= 10) {
+            this.setBadge("🎪 高手");
+        } else if (accuracy >= 95.0) {
+            this.setBadge("💎 完美主义");
+        } else if (accuracy >= 90.0) {
+            this.setBadge("⭐ 卓越");
+        } else if (accuracy >= 85.0) {
+            this.setBadge("✨ 优秀");
+        }
+    }
 }

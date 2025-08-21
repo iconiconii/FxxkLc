@@ -1,6 +1,5 @@
 package com.codetop.util;
 
-import com.codetop.config.UniversalJsonRedisSerializer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -14,8 +13,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Redis Cache Utility for testing serialization/deserialization and monitoring cache performance.
  * 
- * Updated to use UniversalJsonRedisSerializer for consistency with RedisConfig.
- * This ensures all Redis operations use the same serialization strategy.
+ * Simplified to work with standard Spring Redis serialization.
  * 
  * @author CodeTop Team
  */
@@ -26,13 +24,9 @@ public class RedisCacheUtil {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
-    
-    // Use the same serializer as RedisConfig for consistency
-    private final UniversalJsonRedisSerializer universalJsonSerializer = new UniversalJsonRedisSerializer();
 
     /**
-     * Test serialization and deserialization for any object
-     * Uses UniversalJsonRedisSerializer for consistency with RedisConfig
+     * Test serialization and deserialization for any object using RedisTemplate
      */
     public <T> SerializationTestResult testSerialization(String key, T object, Class<T> clazz) {
         SerializationTestResult result = new SerializationTestResult();
@@ -40,42 +34,27 @@ public class RedisCacheUtil {
         result.setObjectType(clazz.getSimpleName());
         
         try {
-            // Test direct serialization using UniversalJsonRedisSerializer
-            long serializeStart = System.nanoTime();
-            byte[] serializedData = universalJsonSerializer.serialize(object);
-            long serializeTime = System.nanoTime() - serializeStart;
-            result.setSerializationTimeMs(serializeTime / 1_000_000.0);
-            
-            // Test direct deserialization using UniversalJsonRedisSerializer
-            long deserializeStart = System.nanoTime();
-            Object retrieved = universalJsonSerializer.deserialize(serializedData);
-            long deserializeTime = System.nanoTime() - deserializeStart;
-            result.setDeserializationTimeMs(deserializeTime / 1_000_000.0);
-            
-            // Also test through RedisTemplate to ensure consistency
+            // Test Redis round-trip
+            long redisStart = System.nanoTime();
             redisTemplate.opsForValue().set(key, object, 60, TimeUnit.SECONDS);
-            Object redisRetrieved = redisTemplate.opsForValue().get(key);
+            Object retrieved = redisTemplate.opsForValue().get(key);
+            long redisTime = System.nanoTime() - redisStart;
+            result.setSerializationTimeMs(redisTime / 1_000_000.0);
             
-            // Verify correctness - both direct serialization and Redis should work
-            if (retrieved != null && redisRetrieved != null && clazz.isInstance(retrieved) && clazz.isInstance(redisRetrieved)) {
+            if (retrieved != null && clazz.isInstance(retrieved)) {
                 result.setSuccess(true);
-                result.setMessage("Serialization/deserialization successful with UniversalJsonRedisSerializer");
+                result.setMessage("Redis serialization/deserialization successful");
                 
-                // Compare original vs both retrieved objects using JSON for deep comparison
+                // Compare using JSON for deep comparison
                 try {
                     String originalJson = objectMapper.writeValueAsString(object);
-                    String directRetrievedJson = objectMapper.writeValueAsString(retrieved);
-                    String redisRetrievedJson = objectMapper.writeValueAsString(redisRetrieved);
+                    String retrievedJson = objectMapper.writeValueAsString(retrieved);
                     
-                    boolean directMatch = originalJson.equals(directRetrievedJson);
-                    boolean redisMatch = originalJson.equals(redisRetrievedJson);
-                    boolean bothMatch = directRetrievedJson.equals(redisRetrievedJson);
+                    boolean match = originalJson.equals(retrievedJson);
+                    result.setDataIntegrityOk(match);
                     
-                    result.setDataIntegrityOk(directMatch && redisMatch && bothMatch);
-                    
-                    if (!result.isDataIntegrityOk()) {
-                        result.setMessage(String.format("Data integrity check failed - directMatch=%s, redisMatch=%s, bothMatch=%s", 
-                                                       directMatch, redisMatch, bothMatch));
+                    if (!match) {
+                        result.setMessage("Data integrity check failed");
                     }
                 } catch (JsonProcessingException e) {
                     result.setDataIntegrityOk(false);
@@ -83,9 +62,7 @@ public class RedisCacheUtil {
                 }
             } else {
                 result.setSuccess(false);
-                result.setMessage(String.format("Deserialization failed - directOk=%s, redisOk=%s", 
-                                               retrieved != null && clazz.isInstance(retrieved),
-                                               redisRetrieved != null && clazz.isInstance(redisRetrieved)));
+                result.setMessage("Redis deserialization failed");
             }
             
             // Clean up test key
@@ -93,15 +70,15 @@ public class RedisCacheUtil {
             
         } catch (Exception e) {
             result.setSuccess(false);
-            result.setMessage("Serialization test failed: " + e.getMessage());
-            log.error("Serialization test failed for key: {} with object type: {}", key, clazz.getSimpleName(), e);
+            result.setMessage("Redis test failed: " + e.getMessage());
+            log.error("Redis test failed for key: {} with object type: {}", key, clazz.getSimpleName(), e);
         }
         
         return result;
     }
 
     /**
-     * Test bulk serialization performance using UniversalJsonRedisSerializer
+     * Test bulk serialization performance
      */
     public <T> BulkSerializationTestResult testBulkSerialization(String keyPrefix, List<T> objects, Class<T> clazz) {
         BulkSerializationTestResult result = new BulkSerializationTestResult();
@@ -109,39 +86,21 @@ public class RedisCacheUtil {
         result.setObjectType(clazz.getSimpleName());
         result.setObjectCount(objects.size());
         
-        long totalSerializeTime = 0;
-        long totalDeserializeTime = 0;
-        long totalRedisTime = 0;
+        long totalTime = 0;
         int successCount = 0;
-        int redisSuccessCount = 0;
         
         try {
             for (int i = 0; i < objects.size(); i++) {
                 String key = keyPrefix + ":" + i;
                 T object = objects.get(i);
                 
-                // Test direct serialization with UniversalJsonRedisSerializer
-                long serializeStart = System.nanoTime();
-                byte[] serialized = universalJsonSerializer.serialize(object);
-                totalSerializeTime += (System.nanoTime() - serializeStart);
-                
-                // Test direct deserialization
-                long deserializeStart = System.nanoTime();
-                Object directRetrieved = universalJsonSerializer.deserialize(serialized);
-                totalDeserializeTime += (System.nanoTime() - deserializeStart);
-                
-                if (directRetrieved != null && clazz.isInstance(directRetrieved)) {
-                    successCount++;
-                }
-                
-                // Also test Redis round-trip for verification
-                long redisStart = System.nanoTime();
+                long start = System.nanoTime();
                 redisTemplate.opsForValue().set(key, object, 60, TimeUnit.SECONDS);
-                Object redisRetrieved = redisTemplate.opsForValue().get(key);
-                totalRedisTime += (System.nanoTime() - redisStart);
+                Object retrieved = redisTemplate.opsForValue().get(key);
+                totalTime += (System.nanoTime() - start);
                 
-                if (redisRetrieved != null && clazz.isInstance(redisRetrieved)) {
-                    redisSuccessCount++;
+                if (retrieved != null && clazz.isInstance(retrieved)) {
+                    successCount++;
                 }
                 
                 // Clean up
@@ -149,20 +108,13 @@ public class RedisCacheUtil {
             }
             
             result.setSuccessCount(successCount);
-            result.setAvgSerializationTimeMs(totalSerializeTime / (objects.size() * 1_000_000.0));
-            result.setAvgDeserializationTimeMs(totalDeserializeTime / (objects.size() * 1_000_000.0));
+            result.setAvgSerializationTimeMs(totalTime / (objects.size() * 1_000_000.0));
             result.setSuccessRate((double) successCount / objects.size() * 100);
-            
-            // Add Redis consistency information
-            double redisSuccessRate = (double) redisSuccessCount / objects.size() * 100;
-            double avgRedisTimeMs = totalRedisTime / (objects.size() * 1_000_000.0);
-            
-            result.setMessage(String.format("Direct serialization success: %.1f%%, Redis success: %.1f%%, Redis avg time: %.2fms", 
-                                           result.getSuccessRate(), redisSuccessRate, avgRedisTimeMs));
+            result.setMessage(String.format("Bulk Redis test success rate: %.1f%%", result.getSuccessRate()));
             
         } catch (Exception e) {
-            result.setMessage("Bulk serialization test failed: " + e.getMessage());
-            log.error("Bulk serialization test failed for keyPrefix: {}", keyPrefix, e);
+            result.setMessage("Bulk Redis test failed: " + e.getMessage());
+            log.error("Bulk Redis test failed for keyPrefix: {}", keyPrefix, e);
         }
         
         return result;
@@ -233,8 +185,8 @@ public class RedisCacheUtil {
         
         @Override
         public String toString() {
-            return String.format("SerializationTest[key=%s, type=%s, success=%s, integrity=%s, serialize=%.2fms, deserialize=%.2fms, message=%s]",
-                    key, objectType, success, dataIntegrityOk, serializationTimeMs, deserializationTimeMs, message);
+            return String.format("SerializationTest[key=%s, type=%s, success=%s, integrity=%s, time=%.2fms, message=%s]",
+                    key, objectType, success, dataIntegrityOk, serializationTimeMs, message);
         }
     }
 
@@ -278,8 +230,8 @@ public class RedisCacheUtil {
         
         @Override
         public String toString() {
-            return String.format("BulkSerializationTest[prefix=%s, type=%s, count=%d, success=%d/%.1f%%, avgSerialize=%.2fms, avgDeserialize=%.2fms]",
-                    keyPrefix, objectType, objectCount, successCount, successRate, avgSerializationTimeMs, avgDeserializationTimeMs);
+            return String.format("BulkSerializationTest[prefix=%s, type=%s, count=%d, success=%d/%.1f%%, avgTime=%.2fms]",
+                    keyPrefix, objectType, objectCount, successCount, successRate, avgSerializationTimeMs);
         }
     }
 
