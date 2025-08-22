@@ -63,3 +63,37 @@ PROJECT_SUMMARY.md
 
 # Claude configuration (personal)
 .claude/
+
+# Test and debug files
+test-*.js
+debug-*.js
+verify-*.js
+check-*.js
+simple-test.js
+*-test.js
+*-debug.js
+
+# Temporary SQL files
+*.sql
+!src/main/resources/db/migration/*.sql
+!src/test/resources/*.sql
+
+# Documentation and reports (temporary)
+*-report.md
+*-summary.md
+*-fix-*.md
+API-Fix-Report.md
+api-test-report.md
+authentication-fix-summary.md
+sql-error-fix-summary.md
+PROJECT_SUMMARY.md
+README-TESTING.md
+改造总结报告.md
+
+# Test data and responses
+response.json
+api-test-results.json
+
+# Java test files (root level)
+Test*.java
+*Test*.java
