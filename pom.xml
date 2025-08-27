@@ -89,6 +89,11 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
         
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+        
         
         <!-- MyBatis-Plus (Spring Boot 3 Starter) -->
         <dependency>
@@ -287,7 +292,7 @@
                 <artifactId>flyway-maven-plugin</artifactId>
                 <version>9.16.0</version>
                 <configuration>
-                    <url>jdbc:mysql://localhost:3306/codetop_fsrs?useUnicode=true&amp;characterEncoding=UTF-8&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=Asia/Shanghai</url>
+                    <url>jdbc:mysql://localhost:3307/codetop_fsrs?useUnicode=true&amp;characterEncoding=UTF-8&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=Asia/Shanghai</url>
                     <user>root</user>
                     <password>root</password>
                     <locations>

@@ -1,20 +1,24 @@
 package com.codetop.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 /**
- * Problem Note entity for user-specific notes on problems.
+ * Problem Note entity for user-specific notes on problems (Metadata only).
+ * 
+ * This entity stores metadata and basic information about problem notes,
+ * while detailed content is stored in MongoDB via ProblemNoteDocument.
  * 
  * Features:
- * - Personal notes and insights on problems
- * - Solution approaches and tips
- * - Time complexity and space complexity notes
- * - Pitfalls and common mistakes
- * - Pattern recognition notes
+ * - Basic note metadata and visibility settings
+ * - Statistics and engagement metrics
+ * - Soft delete support
+ * - Association with User and Problem entities
  * 
  * @author CodeTop Team
  */
@@ -34,30 +38,17 @@ public class ProblemNote extends BaseEntity {
     @TableField("problem_id")
     private Long problemId;
 
-    @TableField("content")
-    private String content;
-
-    @TableField("solution_approach")
-    private String solutionApproach;
-
-    @TableField("time_complexity")
-    private String timeComplexity;
-
-    @TableField("space_complexity")
-    private String spaceComplexity;
-
-    @TableField("pitfalls")
-    private String pitfalls;
-
-    @TableField("tips")
-    private String tips;
+    @NotNull
+    @Size(min = 1, max = 200, message = "Title must be between 1 and 200 characters")
+    @TableField("title")
+    private String title;
 
     @Builder.Default
     @TableField("is_public")
     private Boolean isPublic = false;
 
-    @TableField("tags")
-    private String tags; // Comma-separated tags
+    @TableField("note_type")
+    private String noteType; // SOLUTION, EXPLANATION, TIPS, PATTERN, etc.
 
     @Builder.Default
     @TableField("helpful_votes")
@@ -66,6 +57,11 @@ public class ProblemNote extends BaseEntity {
     @Builder.Default
     @TableField("view_count")
     private Integer viewCount = 0;
+
+    @Builder.Default
+    @TableLogic
+    @TableField("deleted")
+    private Boolean deleted = false;
 
     // Associations (not mapped to database in MyBatis-Plus)
     @TableField(exist = false)
@@ -76,26 +72,17 @@ public class ProblemNote extends BaseEntity {
     @JsonIgnore
     private Problem problem;
 
-    // Derived methods
-    public boolean hasContent() {
-        return content != null && !content.trim().isEmpty();
-    }
-
-    public boolean hasSolutionApproach() {
-        return solutionApproach != null && !solutionApproach.trim().isEmpty();
-    }
-
-    public boolean hasComplexityAnalysis() {
-        return (timeComplexity != null && !timeComplexity.trim().isEmpty()) ||
-               (spaceComplexity != null && !spaceComplexity.trim().isEmpty());
-    }
-
+    // Derived methods for business logic
     public boolean isHelpful() {
-        return helpfulVotes > 0;
+        return helpfulVotes != null && helpfulVotes > 0;
     }
 
     public boolean isPopular() {
-        return viewCount > 100 || helpfulVotes > 10;
+        return (viewCount != null && viewCount > 100) || (helpfulVotes != null && helpfulVotes > 10);
+    }
+
+    public boolean hasTitle() {
+        return title != null && !title.trim().isEmpty();
     }
 
     /**
@@ -135,15 +122,32 @@ public class ProblemNote extends BaseEntity {
         this.isPublic = false;
     }
 
+    /**
+     * Mark as deleted (soft delete).
+     */
+    public void markDeleted() {
+        this.deleted = true;
+    }
+
+    /**
+     * Restore from deleted state.
+     */
+    public void restore() {
+        this.deleted = false;
+    }
+
     @Override
     public String toString() {
         return "ProblemNote{" +
                 "id=" + getId() +
                 ", userId=" + userId +
                 ", problemId=" + problemId +
+                ", title='" + title + '\'' +
                 ", isPublic=" + isPublic +
+                ", noteType='" + noteType + '\'' +
                 ", helpfulVotes=" + helpfulVotes +
                 ", viewCount=" + viewCount +
+                ", deleted=" + deleted +
                 '}';
     }
 }

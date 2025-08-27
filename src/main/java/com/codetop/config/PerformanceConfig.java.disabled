@@ -1,0 +1,254 @@
+package com.codetop.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.web.filter.CommonsRequestLoggingFilter;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.apache.tomcat.util.threads.VirtualThreadExecutor;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executor;
+
+/**
+ * Performance optimization configuration for the CodeTop FSRS system.
+ * 
+ * This configuration provides:
+ * - Async processing thread pools
+ * - Redis caching strategies
+ * - Connection pool optimizations
+ * - Response time monitoring
+ * - Tomcat server tuning
+ * 
+ * @author CodeTop Team
+ */
+@Configuration
+@EnableAsync
+@EnableCaching
+public class PerformanceConfig {
+    
+    /**
+     * Async task executor for non-blocking operations.
+     * Used for view count updates, event publishing, etc.
+     */
+    @Bean(name = "taskExecutor")
+    public Executor taskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        
+        // Core pool size - minimum threads to keep alive
+        executor.setCorePoolSize(8);
+        // Maximum pool size - maximum threads when load is high
+        executor.setMaxPoolSize(32);
+        // Queue capacity - tasks waiting for available threads
+        executor.setQueueCapacity(200);
+        // Thread name prefix for debugging
+        executor.setThreadNamePrefix("async-note-");
+        // Keep alive time for idle threads
+        executor.setKeepAliveSeconds(60);
+        // Reject policy when queue is full
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        // Allow core threads to timeout
+        executor.setAllowCoreThreadTimeOut(true);
+        // Wait for tasks to complete on shutdown
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        
+        executor.initialize();
+        return executor;
+    }
+    
+    /**
+     * Redis cache manager with optimized configurations for different data types.
+     * Different cache regions have different TTL and serialization strategies.
+     */
+    @Bean
+    public CacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
+        // Default cache configuration
+        RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
+            .entryTtl(Duration.ofMinutes(10))  // Default TTL: 10 minutes
+            .serializeKeysWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair
+                .fromSerializer(new org.springframework.data.redis.serializer.StringRedisSerializer()))
+            .serializeValuesWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair
+                .fromSerializer(new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer()))
+            .disableCachingNullValues();
+        
+        // Cache-specific configurations
+        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
+        
+        // User notes - cache for 5 minutes (frequently changing)
+        cacheConfigurations.put("userNotes", defaultConfig.entryTtl(Duration.ofMinutes(5)));
+        
+        // Public notes - cache for 15 minutes (less frequently changing)
+        cacheConfigurations.put("publicNotes", defaultConfig.entryTtl(Duration.ofMinutes(15)));
+        
+        // Popular notes - cache for 30 minutes (stable rankings)
+        cacheConfigurations.put("popularNotes", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        
+        // Note statistics - cache for 1 hour (aggregate data)
+        cacheConfigurations.put("noteStatistics", defaultConfig.entryTtl(Duration.ofHours(1)));
+        
+        // Search results - cache for 5 minutes (dynamic content)
+        cacheConfigurations.put("searchResults", defaultConfig.entryTtl(Duration.ofMinutes(5)));
+        
+        // User profiles - cache for 2 hours (rarely changing)
+        cacheConfigurations.put("userProfiles", defaultConfig.entryTtl(Duration.ofHours(2)));
+        
+        return RedisCacheManager.builder(redisConnectionFactory)
+            .cacheDefaults(defaultConfig)
+            .withInitialCacheConfigurations(cacheConfigurations)
+            .transactionAware()  // Support Spring transactions
+            .build();
+    }
+    
+    /**
+     * Request logging filter for performance monitoring.
+     * Logs request processing times for performance analysis.
+     */
+    @Bean
+    public CommonsRequestLoggingFilter requestLoggingFilter() {
+        CommonsRequestLoggingFilter filter = new CommonsRequestLoggingFilter();
+        
+        // Include query string in logs
+        filter.setIncludeQueryString(true);
+        // Include request payload (limited size)
+        filter.setIncludePayload(true);
+        filter.setMaxPayloadLength(1000);
+        // Include request headers for debugging
+        filter.setIncludeHeaders(false);  // Disabled for security
+        // Include client info
+        filter.setIncludeClientInfo(true);
+        
+        // Log format
+        filter.setBeforeMessagePrefix("REQUEST [");
+        filter.setBeforeMessageSuffix("] STARTED");
+        filter.setAfterMessagePrefix("REQUEST [");
+        filter.setAfterMessageSuffix("] COMPLETED");
+        
+        return filter;
+    }
+    
+    /**
+     * Tomcat server customization for performance optimization.
+     * Optimizes connection handling, thread pools, and resource limits.
+     */
+    @Bean
+    public WebServerFactoryCustomizer<TomcatServletWebServerFactory> servletContainerCustomizer() {
+        return factory -> {
+            // Connector optimizations
+            factory.addConnectorCustomizers(connector -> {
+                // Connection timeout settings
+                connector.setProperty("connectionTimeout", "30000");  // 30 seconds
+                connector.setProperty("keepAliveTimeout", "15000");   // 15 seconds
+                connector.setProperty("maxKeepAliveRequests", "100");
+                
+                // Thread pool settings
+                connector.setProperty("maxThreads", "200");           // Max concurrent requests
+                connector.setProperty("minSpareThreads", "25");       // Minimum idle threads
+                connector.setProperty("maxConnections", "8192");      // Max concurrent connections
+                
+                // Compression settings for better bandwidth utilization
+                connector.setProperty("compression", "on");
+                connector.setProperty("compressionMinSize", "2048");  // Compress files > 2KB
+                connector.setProperty("compressableMimeType", 
+                    "text/html,text/xml,text/plain,text/css,text/javascript," +
+                    "application/javascript,application/json,application/xml");
+                
+                // Buffer settings
+                connector.setProperty("socketBuffer", "65536");       // 64KB socket buffer
+                
+                // Security settings
+                connector.setProperty("server", "CodeTop-Server");    // Hide server info
+                connector.setProperty("maxHttpHeaderSize", "8192");   // 8KB max header size
+                connector.setProperty("maxPostSize", "10485760");     // 10MB max POST size
+            });
+            
+            // Additional server settings
+            factory.addContextCustomizers(context -> {
+                // Session timeout
+                context.setSessionTimeout(30);  // 30 minutes
+                
+                // Resource caching
+                context.addWelcomeFile("index.html");
+            });
+        };
+    }
+    
+    /**
+     * MongoDB connection optimization.
+     * Configures connection pooling for better performance.
+     */
+    @Bean
+    public org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer mongoClientCustomizer() {
+        return clientSettingsBuilder -> {
+            // Connection pool settings
+            clientSettingsBuilder.applyConnectionPoolSettings(poolSettings -> {
+                poolSettings.maxSize(50)                    // Max connections
+                           .minSize(5)                      // Min connections
+                           .maxWaitTime(5000, java.util.concurrent.TimeUnit.MILLISECONDS)  // Wait timeout
+                           .maxConnectionLifeTime(30, java.util.concurrent.TimeUnit.MINUTES)  // Connection lifetime
+                           .maxConnectionIdleTime(10, java.util.concurrent.TimeUnit.MINUTES); // Idle timeout
+            });
+            
+            // Socket settings
+            clientSettingsBuilder.applySocketSettings(socketSettings -> {
+                socketSettings.connectTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)   // Connect timeout
+                             .readTimeout(30000, java.util.concurrent.TimeUnit.MILLISECONDS);      // Read timeout
+            });
+            
+            // Server selection settings
+            clientSettingsBuilder.applyServerSettings(serverSettings -> {
+                serverSettings.heartbeatFrequency(10000, java.util.concurrent.TimeUnit.MILLISECONDS)  // Health check interval
+                             .minHeartbeatFrequency(1000, java.util.concurrent.TimeUnit.MILLISECONDS);  // Min health check
+            });
+        };
+    }
+    
+    /**
+     * HTTP client configuration for external API calls.
+     * Optimizes timeouts and connection pooling for external services.
+     */
+    @Bean
+    public org.springframework.boot.web.client.RestTemplateBuilder restTemplateBuilder() {
+        return new org.springframework.boot.web.client.RestTemplateBuilder()
+            .setConnectTimeout(Duration.ofSeconds(5))     // Connection timeout
+            .setReadTimeout(Duration.ofSeconds(30))       // Read timeout
+            .additionalInterceptors((request, body, execution) -> {
+                // Add request headers for better caching
+                request.getHeaders().add("Cache-Control", "max-age=300");
+                request.getHeaders().add("User-Agent", "CodeTop-API-Client/1.0");
+                return execution.execute(request, body);
+            });
+    }
+    
+    /**
+     * JVM optimization suggestions via system properties.
+     * These should be set as JVM arguments for production deployment.
+     */
+    @Bean
+    public String jvmOptimizationHints() {
+        String hints = """
+            Recommended JVM options for production:
+            -Xms2g -Xmx4g
+            -XX:+UseG1GC
+            -XX:MaxGCPauseMillis=200
+            -XX:+UseStringDeduplication
+            -XX:+OptimizeStringConcat
+            -Dspring.jmx.enabled=true
+            -Dmanagement.endpoint.metrics.enabled=true
+            """;
+        
+        System.out.println("=== JVM Optimization Hints ===");
+        System.out.println(hints);
+        
+        return hints;
+    }
+}

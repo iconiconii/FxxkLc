@@ -1,0 +1,271 @@
+# Production configuration for Notes functionality
+# This configuration optimizes the system for high-performance production deployment
+
+spring:
+  profiles:
+    active: prod
+  
+  # Database configurations optimized for production
+  datasource:
+    hikari:
+      # Connection pool settings for high concurrency
+      maximum-pool-size: 50                 # Increased for production load
+      minimum-idle: 15                      # Maintain minimum connections
+      connection-timeout: 20000             # 20 seconds connection timeout
+      idle-timeout: 300000                  # 5 minutes idle timeout
+      max-lifetime: 1200000                 # 20 minutes max connection lifetime
+      leak-detection-threshold: 60000       # 1 minute leak detection
+      
+      # Performance optimizations
+      auto-commit: false                    # Manual transaction control
+      read-only: false
+      isolation-level-name: TRANSACTION_READ_COMMITTED
+      
+      # Connection validation
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
+  
+  # MongoDB configuration for production
+  data:
+    mongodb:
+      # Connection string with production optimizations
+      uri: ${MONGODB_URI:mongodb://localhost:27017/codetop_notes}
+      
+      # Connection pool settings
+      database: codetop_notes
+      auto-index-creation: false            # Indexes managed manually in production
+      
+      # GridFS configuration for large documents
+      gridfs:
+        database: codetop_notes
+        bucket: note_files
+  
+  # Redis configuration for caching and sessions
+  data:
+    redis:
+      # Connection settings
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 2000ms
+      
+      # Connection pool settings
+      lettuce:
+        pool:
+          max-active: 100                   # Maximum connections
+          max-idle: 20                      # Maximum idle connections
+          min-idle: 5                       # Minimum idle connections
+          max-wait: 2000ms                  # Maximum wait time
+        
+        # Cluster settings (if using Redis cluster)
+        cluster:
+          refresh:
+            adaptive: true
+            period: 30s
+
+# Application-specific configurations
+notes:
+  # Content processing settings
+  max-content-size: 100000                 # 100KB max content size for production
+  compression-threshold: 5000              # Compress content larger than 5KB
+  chunk-size: 20000                        # 20KB chunks for very large content
+  
+  # Auto-save configuration
+  auto-save-interval: 60000                # Auto-save every minute
+  auto-save-enabled: true
+  
+  # Sync and retry configuration
+  sync-retry-attempts: 5                   # Increased retry attempts
+  sync-retry-delay: 2000                   # 2 second delay between retries
+  sync-timeout: 10000                      # 10 second sync timeout
+  
+  # Performance settings
+  batch-size: 100                          # Batch processing size
+  async-processing: true                   # Enable async processing
+  cache-preload: true                      # Preload frequently accessed data
+  
+  # Security settings
+  content-validation: true                 # Enable content validation
+  max-tags: 20                            # Maximum tags per note
+  max-images: 50                          # Maximum images per note
+  max-links: 100                          # Maximum links per note
+
+# Caching configuration
+spring:
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600s                   # Default 10 minutes TTL
+      cache-null-values: false             # Don't cache null values
+      use-key-prefix: true                 # Use key prefixes for organization
+
+# Logging configuration for production
+logging:
+  level:
+    com.codetop.service.ProblemNoteService: INFO
+    com.codetop.service.ProblemNoteServiceOptimized: INFO
+    com.codetop.service.LargeDocumentHandler: WARN
+    com.codetop.health.NotesHealthIndicator: INFO
+    org.springframework.data.mongodb: WARN
+    org.springframework.cache: WARN
+  
+  # Performance logging
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+  
+  # Log file configuration
+  file:
+    name: ./logs/codetop-notes-prod.log
+    max-size: 100MB
+    max-history: 30
+
+# Actuator configuration for monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus,custom-notes-health
+  
+  endpoint:
+    health:
+      show-details: when-authorized
+      status:
+        order: fatal,down,out-of-service,unknown,up
+      group:
+        notes:
+          include: notes,mongo,db
+          show-components: always
+    
+    metrics:
+      enabled: true
+    
+    prometheus:
+      enabled: true
+  
+  # Custom health indicators
+  health:
+    notes:
+      enabled: true
+    mongo:
+      enabled: true
+    diskspace:
+      enabled: true
+      threshold: 10GB
+    
+  # Metrics configuration
+  metrics:
+    tags:
+      application: codetop-notes
+      environment: production
+    
+    # Custom metrics
+    distribution:
+      percentiles:
+        notes.create.duration: 0.5,0.75,0.90,0.95,0.99
+        notes.retrieve.duration: 0.5,0.75,0.90,0.95,0.99
+        notes.search.duration: 0.5,0.75,0.90,0.95,0.99
+      
+      percentiles-histogram:
+        notes.content.size: true
+        notes.response.time: true
+
+# Server configuration optimizations
+server:
+  # Connection settings
+  port: 8080
+  
+  # Thread configuration
+  tomcat:
+    threads:
+      max: 400                             # Increased for production load
+      min-spare: 50                        # Minimum spare threads
+    
+    # Connection settings
+    max-connections: 10000                 # Maximum concurrent connections
+    accept-count: 200                      # Accept queue size
+    
+    # Keep-alive settings
+    keep-alive-timeout: 20s
+    max-keep-alive-requests: 200
+    
+    # Resource settings
+    max-http-form-post-size: 10MB
+    max-swallow-size: 10MB
+    
+    # Access log for production monitoring
+    accesslog:
+      enabled: true
+      pattern: "%h %l %u %t \"%r\" %s %b %D"
+      directory: ./logs
+      prefix: access_log
+      suffix: .log
+      rotate: true
+      max-days: 30
+
+# JPA/Hibernate optimizations for production
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none                       # No schema changes in production
+    
+    # Query optimization
+    properties:
+      hibernate:
+        # Connection and performance settings
+        connection.provider_disables_autocommit: true
+        cache.use_second_level_cache: true
+        cache.use_query_cache: true
+        cache.region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+        
+        # Batch processing
+        jdbc.batch_size: 25
+        jdbc.batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+        
+        # Statistics for monitoring
+        generate_statistics: true
+        
+        # SQL formatting (disable in production for performance)
+        format_sql: false
+        show_sql: false
+
+# AsyncConfig for production
+async:
+  # Thread pool configuration
+  core-pool-size: 16                       # Core threads based on CPU cores
+  max-pool-size: 64                        # Maximum threads for peak load
+  queue-capacity: 1000                     # Task queue size
+  thread-name-prefix: notes-async-
+  keep-alive-seconds: 120
+  allow-core-thread-timeout: true
+  
+  # Rejection policy
+  rejection-policy: CallerRunsPolicy       # Execute in caller thread if pool is full
+
+# Security configurations for production
+security:
+  # Rate limiting
+  rate-limit:
+    enabled: true
+    requests-per-minute: 200               # Per user rate limit
+    requests-per-ip: 2000                  # Per IP rate limit
+    burst-capacity: 50                     # Burst allowance
+  
+  # CORS settings
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+    allowed-methods: GET,POST,PUT,DELETE,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+
+# External service timeouts
+http:
+  client:
+    connection-timeout: 5s
+    read-timeout: 30s
+    write-timeout: 30s
+    max-idle-connections: 20
+    keep-alive-duration: 5m

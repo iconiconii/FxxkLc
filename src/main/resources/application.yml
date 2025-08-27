@@ -24,7 +24,7 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       # Database Connection
-      url: jdbc:mysql://localhost:3306/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+      url: jdbc:mysql://localhost:3307/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
       username: ${DB_USERNAME:root}
       password: ${DB_PASSWORD:root}
       driver-class-name: com.mysql.cj.jdbc.Driver
@@ -69,6 +69,11 @@ spring:
           max-wait: -1ms
           max-idle: 10
           min-idle: 5
+    
+    # MongoDB Configuration
+    mongodb:
+      uri: mongodb://localhost:27017/codetop_notes
+      auto-index-creation: true
   
   # Cache Configuration
   cache:
@@ -283,6 +288,12 @@ spring:
   config:
     activate:
       on-profile: dev
+  
+  # Development MongoDB Configuration
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/codetop_notes_dev
+      auto-index-creation: true
 
 # Development CORS settings
 app:
@@ -317,6 +328,10 @@ spring:
   data:
     redis:
       database: 1
+    # Test MongoDB Configuration
+    mongodb:
+      uri: mongodb://icon:xxhh..@localhost:27017/codetop_notes_test
+      auto-index-creation: true
 
 logging:
   level:
@@ -366,6 +381,11 @@ spring:
       jedis:
         pool:
           max-active: 200
+    
+    # Production MongoDB Configuration
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://user:password@localhost:27017/codetop_notes_prod}
+      auto-index-creation: false
 
 # Production security settings - MUST use environment variables
 app:

@@ -1,0 +1,71 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]:
+    - img [ref=e8] [cursor=pointer]
+  - alert [ref=e11]
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - link "OLIVER OLIVER 🔥" [ref=e14] [cursor=pointer]:
+        - /url: /
+        - img "OLIVER" [ref=e15] [cursor=pointer]
+        - generic [ref=e16] [cursor=pointer]: OLIVER
+        - generic [ref=e17] [cursor=pointer]: 🔥
+      - button "Toggle theme" [ref=e18]:
+        - img [ref=e19]
+        - generic [ref=e25]: Toggle theme
+    - generic [ref=e26]:
+      - img "OLIVER" [ref=e29]
+      - generic [ref=e31]:
+        - generic [ref=e32]:
+          - heading "创建账户" [level=2] [ref=e33]
+          - paragraph [ref=e34]: 加入 OLIVER，开始您的算法学习之旅
+        - generic [ref=e35]:
+          - button "使用 Google 注册" [active] [ref=e36]:
+            - img
+            - generic [ref=e37]: 使用 Google 注册
+          - button "使用 GitHub 注册" [ref=e38]:
+            - img
+            - generic [ref=e39]: 使用 GitHub 注册
+        - generic [ref=e43]: 或者使用邮箱注册
+        - generic [ref=e44]:
+          - generic [ref=e45]:
+            - generic [ref=e46]: 用户名
+            - generic [ref=e47]:
+              - textbox "用户名" [ref=e48]
+              - img [ref=e49]
+          - generic [ref=e52]:
+            - generic [ref=e53]: 邮箱地址
+            - generic [ref=e54]:
+              - textbox "邮箱地址" [ref=e55]: test_1756265252973@example.com
+              - img [ref=e56]
+          - generic [ref=e59]:
+            - generic [ref=e60]: 密码
+            - generic [ref=e61]:
+              - textbox "密码" [ref=e62]: TestPassword123!
+              - button [ref=e63]:
+                - img [ref=e64]
+            - generic [ref=e71]: 很强
+          - generic [ref=e72]:
+            - generic [ref=e73]: 确认密码
+            - generic [ref=e74]:
+              - textbox "确认密码" [ref=e75]
+              - button [ref=e76]:
+                - img [ref=e77]
+          - generic [ref=e80]:
+            - checkbox "我同意 服务条款 和 隐私政策" [ref=e82]
+            - generic [ref=e84]:
+              - text: 我同意
+              - link "服务条款" [ref=e85] [cursor=pointer]:
+                - /url: /terms
+              - text: 和
+              - link "隐私政策" [ref=e86] [cursor=pointer]:
+                - /url: /privacy
+          - button "创建账户" [ref=e87]
+        - generic [ref=e88]:
+          - generic [ref=e89]: 已有账户？
+          - link "立即登录" [ref=e90] [cursor=pointer]:
+            - /url: /login
+    - paragraph [ref=e92]: © 2025 OLIVER. 专注于算法面试题目练习
+```

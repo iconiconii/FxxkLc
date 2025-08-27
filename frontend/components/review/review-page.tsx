@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RefreshCw, AlertTriangle, Clock, CheckCircle, BookOpen, CircleCheckBig, Filter } from "lucide-react"
+import { RefreshCw, AlertTriangle, Clock, CheckCircle, BookOpen, CircleCheckBig, Filter, StickyNote } from "lucide-react"
 import { reviewApi, type ReviewQueue, type ReviewQueueCard, type SubmitReviewRequest } from "@/lib/review-api"
 import ReviewAssessmentModal from "@/components/modals/review-assessment-modal"
+import { NoteViewer } from "@/components/notes"
+import { useNotes } from "@/hooks/use-notes"
 
 interface DisplayReviewProblem {
   id: number
@@ -63,6 +65,10 @@ function ReviewProblemRow({
   const [isCompleted, setIsCompleted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  
+  // Get user notes for this problem
+  const { userNote, isLoading: isNotesLoading } = useNotes(problem.id)
 
   const handleComplete = () => {
     // Open the assessment modal instead of directly submitting
@@ -158,13 +164,84 @@ function ReviewProblemRow({
                 </>
               )}
             </Button>
-            <Button size="sm" variant="ghost" className="h-8 px-2">
-              <BookOpen className="h-4 w-4" />
-              <span className="sr-only">查看笔记</span>
+            <Button 
+              size="sm" 
+              variant={showNotes ? "default" : "ghost"} 
+              className="h-8 px-2"
+              onClick={() => setShowNotes(!showNotes)}
+              disabled={isNotesLoading}
+              title={userNote ? "查看笔记" : "暂无笔记"}
+            >
+              {userNote ? (
+                <StickyNote className="h-4 w-4" />
+              ) : (
+                <BookOpen className="h-4 w-4" />
+              )}
+              <span className="sr-only">
+                {userNote ? "查看笔记" : "暂无笔记"}
+              </span>
             </Button>
           </div>
         </td>
       </tr>
+      
+      {/* Notes row - shows when showNotes is true */}
+      {showNotes && userNote && (
+        <tr className="border-b border-gray-100 dark:border-gray-800">
+          <td colSpan={5} className="px-4 md:px-6 py-4">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <StickyNote className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">我的笔记</span>
+                <Badge variant="outline" className="text-xs">
+                  {userNote.isPublic ? "公开" : "私有"}
+                </Badge>
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                <NoteViewer 
+                  note={userNote} 
+                  showEdit={false} 
+                  showVoting={false}
+                />
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+      
+      {/* Loading state for notes */}
+      {showNotes && isNotesLoading && (
+        <tr className="border-b border-gray-100 dark:border-gray-800">
+          <td colSpan={5} className="px-4 md:px-6 py-4">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 text-center">
+              <div className="text-sm text-gray-500">加载笔记中...</div>
+            </div>
+          </td>
+        </tr>
+      )}
+      
+      {/* No notes state */}
+      {showNotes && !isNotesLoading && !userNote && (
+        <tr className="border-b border-gray-100 dark:border-gray-800">
+          <td colSpan={5} className="px-4 md:px-6 py-4">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 text-center">
+              <div className="text-sm text-gray-500 mb-2">此题目暂无笔记</div>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  // Could open assessment modal to create a note
+                  setModalOpen(true);
+                }}
+              >
+                创建笔记
+              </Button>
+            </div>
+          </td>
+        </tr>
+      )}
+      
       <ReviewAssessmentModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}

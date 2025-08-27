@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap } from "lucide-react"
+import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap, StickyNote, Globe } from "lucide-react"
 
 import { Home } from "lucide-react"
 import Link from "next/link"
@@ -94,6 +94,20 @@ export default function Sidebar() {
                   </NavItem>
                   <NavItem href="/report" icon={Zap}>
                     我要爆料
+                  </NavItem>
+                </div>
+              </div>
+
+              <div>
+                <div className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  笔记管理
+                </div>
+                <div className="space-y-1">
+                  <NavItem href="/notes/my" icon={StickyNote}>
+                    我的笔记
+                  </NavItem>
+                  <NavItem href="/notes/public" icon={Globe}>
+                    社区笔记
                   </NavItem>
                 </div>
               </div>

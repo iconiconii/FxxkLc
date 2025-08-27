@@ -1,0 +1,408 @@
+package com.codetop.health;
+
+import com.codetop.mapper.ProblemNoteMapper;
+import com.codetop.repository.mongo.ProblemNoteContentRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuator.health.Health;
+import org.springframework.boot.actuator.health.HealthIndicator;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Health indicator for the Notes functionality.
+ * 
+ * This health check monitors:
+ * - MySQL connectivity and performance
+ * - MongoDB connectivity and performance
+ * - Data consistency between databases
+ * - System resource utilization
+ * - Key performance metrics
+ * 
+ * @author CodeTop Team
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class NotesHealthIndicator implements HealthIndicator {
+    
+    private final ProblemNoteMapper problemNoteMapper;
+    private final ProblemNoteContentRepository contentRepository;
+    private final MongoTemplate mongoTemplate;
+    
+    // Health check thresholds
+    private static final long MAX_QUERY_TIME_MS = 1000; // 1 second
+    private static final long MAX_ACCEPTABLE_QUERY_TIME_MS = 500; // 500ms for good performance
+    
+    @Override
+    public Health health() {
+        try {
+            Map<String, Object> details = new HashMap<>();
+            boolean overallHealthy = true;
+            
+            // Check MySQL connectivity and performance
+            MySQLHealthStatus mysqlHealth = checkMySQLHealth();
+            details.put("mysql", mysqlHealth.getDetails());
+            if (!mysqlHealth.isHealthy()) {
+                overallHealthy = false;
+            }
+            
+            // Check MongoDB connectivity and performance
+            MongoDBHealthStatus mongoHealth = checkMongoDBHealth();
+            details.put("mongodb", mongoHealth.getDetails());
+            if (!mongoHealth.isHealthy()) {
+                overallHealthy = false;
+            }
+            
+            // Check data consistency
+            ConsistencyCheckStatus consistencyStatus = checkDataConsistency();
+            details.put("dataConsistency", consistencyStatus.getDetails());
+            if (!consistencyStatus.isHealthy()) {
+                overallHealthy = false;
+            }
+            
+            // System resource check
+            SystemResourceStatus resourceStatus = checkSystemResources();
+            details.put("systemResources", resourceStatus.getDetails());
+            if (!resourceStatus.isHealthy()) {
+                overallHealthy = false;
+            }
+            
+            // Performance metrics
+            PerformanceMetrics performanceMetrics = gatherPerformanceMetrics();
+            details.put("performance", performanceMetrics.getDetails());
+            
+            // Overall health summary
+            details.put("summary", createHealthSummary(mysqlHealth, mongoHealth, consistencyStatus, resourceStatus));
+            
+            return overallHealthy ? Health.up().withDetails(details).build() 
+                                 : Health.down().withDetails(details).build();
+            
+        } catch (Exception e) {
+            log.error("Health check failed with exception", e);
+            return Health.down()
+                .withException(e)
+                .withDetail("error", "Health check execution failed")
+                .build();
+        }
+    }
+    
+    /**
+     * Check MySQL database health and performance.
+     */
+    private MySQLHealthStatus checkMySQLHealth() {
+        Map<String, Object> details = new HashMap<>();
+        boolean healthy = true;
+        
+        try {
+            long startTime = System.currentTimeMillis();
+            
+            // Test basic connectivity with a simple count query
+            Long noteCount = problemNoteMapper.selectCount(null);
+            
+            long queryTime = System.currentTimeMillis() - startTime;
+            details.put("queryTime", queryTime + "ms");
+            details.put("noteCount", noteCount);
+            details.put("connectionStatus", "connected");
+            
+            // Performance evaluation
+            if (queryTime > MAX_QUERY_TIME_MS) {
+                healthy = false;
+                details.put("performance", "poor");
+                details.put("warning", "Query time exceeds threshold: " + queryTime + "ms");
+            } else if (queryTime > MAX_ACCEPTABLE_QUERY_TIME_MS) {
+                details.put("performance", "acceptable");
+                details.put("warning", "Query time higher than optimal: " + queryTime + "ms");
+            } else {
+                details.put("performance", "excellent");
+            }
+            
+        } catch (Exception e) {
+            healthy = false;
+            details.put("connectionStatus", "failed");
+            details.put("error", e.getMessage());
+            log.error("MySQL health check failed", e);
+        }
+        
+        return new MySQLHealthStatus(healthy, details);
+    }
+    
+    /**
+     * Check MongoDB health and performance.
+     */
+    private MongoDBHealthStatus checkMongoDBHealth() {
+        Map<String, Object> details = new HashMap<>();
+        boolean healthy = true;
+        
+        try {
+            long startTime = System.currentTimeMillis();
+            
+            // Test basic connectivity with a count operation
+            long documentCount = contentRepository.count();
+            
+            long queryTime = System.currentTimeMillis() - startTime;
+            details.put("queryTime", queryTime + "ms");
+            details.put("documentCount", documentCount);
+            details.put("connectionStatus", "connected");
+            
+            // Test index availability
+            boolean indexesHealthy = checkMongoIndexes();
+            details.put("indexesHealthy", indexesHealthy);
+            if (!indexesHealthy) {
+                healthy = false;
+                details.put("indexWarning", "Some indexes may be missing or not optimal");
+            }
+            
+            // Performance evaluation
+            if (queryTime > MAX_QUERY_TIME_MS) {
+                healthy = false;
+                details.put("performance", "poor");
+                details.put("warning", "Query time exceeds threshold: " + queryTime + "ms");
+            } else if (queryTime > MAX_ACCEPTABLE_QUERY_TIME_MS) {
+                details.put("performance", "acceptable");
+                details.put("warning", "Query time higher than optimal: " + queryTime + "ms");
+            } else {
+                details.put("performance", "excellent");
+            }
+            
+        } catch (Exception e) {
+            healthy = false;
+            details.put("connectionStatus", "failed");
+            details.put("error", e.getMessage());
+            log.error("MongoDB health check failed", e);
+        }
+        
+        return new MongoDBHealthStatus(healthy, details);
+    }
+    
+    /**
+     * Check if MongoDB indexes are healthy.
+     */
+    private boolean checkMongoIndexes() {
+        try {
+            // Check if key indexes exist
+            boolean hasProblemnNoteIdIndex = mongoTemplate.indexOps("problem_note_contents")
+                .getIndexInfo()
+                .stream()
+                .anyMatch(index -> index.getName().contains("problemNoteId"));
+            
+            boolean hasTextSearchIndex = mongoTemplate.indexOps("problem_note_contents")
+                .getIndexInfo()
+                .stream()
+                .anyMatch(index -> index.getName().contains("content_fulltext"));
+            
+            return hasProblemnNoteIdIndex && hasTextSearchIndex;
+            
+        } catch (Exception e) {
+            log.warn("Index health check failed", e);
+            return false;
+        }
+    }
+    
+    /**
+     * Check data consistency between MySQL and MongoDB.
+     */
+    private ConsistencyCheckStatus checkDataConsistency() {
+        Map<String, Object> details = new HashMap<>();
+        boolean healthy = true;
+        
+        try {
+            // Sample consistency check - compare counts
+            Long mysqlNoteCount = problemNoteMapper.selectCount(null);
+            long mongoDocumentCount = contentRepository.count();
+            
+            details.put("mysqlNotes", mysqlNoteCount);
+            details.put("mongoDocuments", mongoDocumentCount);
+            
+            // Allow for some variance due to timing differences
+            double variance = Math.abs(mysqlNoteCount - mongoDocumentCount) / (double) Math.max(mysqlNoteCount, 1);
+            details.put("variance", String.format("%.2f%%", variance * 100));
+            
+            if (variance > 0.1) { // More than 10% variance
+                healthy = false;
+                details.put("consistencyStatus", "inconsistent");
+                details.put("warning", "Significant data inconsistency detected");
+            } else if (variance > 0.05) { // More than 5% variance
+                details.put("consistencyStatus", "acceptable");
+                details.put("warning", "Minor data inconsistency detected");
+            } else {
+                details.put("consistencyStatus", "consistent");
+            }
+            
+        } catch (Exception e) {
+            healthy = false;
+            details.put("consistencyStatus", "unknown");
+            details.put("error", e.getMessage());
+            log.error("Data consistency check failed", e);
+        }
+        
+        return new ConsistencyCheckStatus(healthy, details);
+    }
+    
+    /**
+     * Check system resource utilization.
+     */
+    private SystemResourceStatus checkSystemResources() {
+        Map<String, Object> details = new HashMap<>();
+        boolean healthy = true;
+        
+        try {
+            Runtime runtime = Runtime.getRuntime();
+            
+            // Memory usage
+            long maxMemory = runtime.maxMemory();
+            long totalMemory = runtime.totalMemory();
+            long freeMemory = runtime.freeMemory();
+            long usedMemory = totalMemory - freeMemory;
+            
+            double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
+            
+            details.put("maxMemoryMB", maxMemory / (1024 * 1024));
+            details.put("usedMemoryMB", usedMemory / (1024 * 1024));
+            details.put("memoryUsagePercent", String.format("%.1f%%", memoryUsagePercent));
+            
+            if (memoryUsagePercent > 90) {
+                healthy = false;
+                details.put("memoryStatus", "critical");
+                details.put("warning", "Memory usage is critically high");
+            } else if (memoryUsagePercent > 80) {
+                details.put("memoryStatus", "warning");
+                details.put("warning", "Memory usage is high");
+            } else {
+                details.put("memoryStatus", "good");
+            }
+            
+            // Thread count
+            int activeThreads = Thread.activeCount();
+            details.put("activeThreads", activeThreads);
+            
+            if (activeThreads > 200) {
+                healthy = false;
+                details.put("threadStatus", "critical");
+            } else if (activeThreads > 100) {
+                details.put("threadStatus", "warning");
+            } else {
+                details.put("threadStatus", "good");
+            }
+            
+        } catch (Exception e) {
+            healthy = false;
+            details.put("resourceStatus", "unknown");
+            details.put("error", e.getMessage());
+            log.error("System resource check failed", e);
+        }
+        
+        return new SystemResourceStatus(healthy, details);
+    }
+    
+    /**
+     * Gather performance metrics.
+     */
+    private PerformanceMetrics gatherPerformanceMetrics() {
+        Map<String, Object> details = new HashMap<>();
+        
+        try {
+            // JVM uptime
+            long uptime = java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime();
+            details.put("uptimeHours", TimeUnit.MILLISECONDS.toHours(uptime));
+            
+            // GC information
+            java.lang.management.MemoryMXBean memoryBean = java.lang.management.ManagementFactory.getMemoryMXBean();
+            details.put("heapMemoryUsage", memoryBean.getHeapMemoryUsage().toString());
+            details.put("nonHeapMemoryUsage", memoryBean.getNonHeapMemoryUsage().toString());
+            
+            // Processor information
+            details.put("availableProcessors", Runtime.getRuntime().availableProcessors());
+            
+        } catch (Exception e) {
+            details.put("error", e.getMessage());
+            log.warn("Performance metrics collection failed", e);
+        }
+        
+        return new PerformanceMetrics(details);
+    }
+    
+    /**
+     * Create overall health summary.
+     */
+    private Map<String, Object> createHealthSummary(MySQLHealthStatus mysql, MongoDBHealthStatus mongo, 
+                                                    ConsistencyCheckStatus consistency, SystemResourceStatus resources) {
+        Map<String, Object> summary = new HashMap<>();
+        
+        summary.put("overallStatus", mysql.isHealthy() && mongo.isHealthy() && consistency.isHealthy() && resources.isHealthy() ? "HEALTHY" : "UNHEALTHY");
+        summary.put("mysqlStatus", mysql.isHealthy() ? "UP" : "DOWN");
+        summary.put("mongodbStatus", mongo.isHealthy() ? "UP" : "DOWN");
+        summary.put("dataConsistency", consistency.isHealthy() ? "CONSISTENT" : "INCONSISTENT");
+        summary.put("systemResources", resources.isHealthy() ? "NORMAL" : "STRESSED");
+        summary.put("timestamp", java.time.Instant.now().toString());
+        
+        return summary;
+    }
+    
+    // Status holder classes
+    private static class MySQLHealthStatus {
+        private final boolean healthy;
+        private final Map<String, Object> details;
+        
+        public MySQLHealthStatus(boolean healthy, Map<String, Object> details) {
+            this.healthy = healthy;
+            this.details = details;
+        }
+        
+        public boolean isHealthy() { return healthy; }
+        public Map<String, Object> getDetails() { return details; }
+    }
+    
+    private static class MongoDBHealthStatus {
+        private final boolean healthy;
+        private final Map<String, Object> details;
+        
+        public MongoDBHealthStatus(boolean healthy, Map<String, Object> details) {
+            this.healthy = healthy;
+            this.details = details;
+        }
+        
+        public boolean isHealthy() { return healthy; }
+        public Map<String, Object> getDetails() { return details; }
+    }
+    
+    private static class ConsistencyCheckStatus {
+        private final boolean healthy;
+        private final Map<String, Object> details;
+        
+        public ConsistencyCheckStatus(boolean healthy, Map<String, Object> details) {
+            this.healthy = healthy;
+            this.details = details;
+        }
+        
+        public boolean isHealthy() { return healthy; }
+        public Map<String, Object> getDetails() { return details; }
+    }
+    
+    private static class SystemResourceStatus {
+        private final boolean healthy;
+        private final Map<String, Object> details;
+        
+        public SystemResourceStatus(boolean healthy, Map<String, Object> details) {
+            this.healthy = healthy;
+            this.details = details;
+        }
+        
+        public boolean isHealthy() { return healthy; }
+        public Map<String, Object> getDetails() { return details; }
+    }
+    
+    private static class PerformanceMetrics {
+        private final Map<String, Object> details;
+        
+        public PerformanceMetrics(Map<String, Object> details) {
+            this.details = details;
+        }
+        
+        public Map<String, Object> getDetails() { return details; }
+    }
+}
