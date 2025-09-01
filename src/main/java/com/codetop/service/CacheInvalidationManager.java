@@ -1,9 +1,11 @@
 package com.codetop.service;
 
+import com.codetop.service.CacheKeyBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
+// Removed CacheManager dependency after cache migration
+// import org.springframework.cache.Cache;
+// import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -25,7 +27,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CacheInvalidationManager {
     
-    private final CacheManager cacheManager;
+    // Removed CacheManager dependency - using RedisTemplate directly after cache migration
+    // private final CacheManager cacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
     
     /**
@@ -128,10 +131,18 @@ public class CacheInvalidationManager {
     public void flushAllCaches() {
         log.warn("Emergency cache flush initiated");
         
-        // Clear all application caches
-        cacheManager.getCacheNames().forEach(this::clearCacheByName);
+        // Clear all Redis keys with our cache prefixes
+        try {
+            Set<String> keys = redisTemplate.keys("codetop:*");
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.warn("Deleted {} cache keys during emergency flush", keys.size());
+            }
+        } catch (Exception e) {
+            log.error("Error during emergency cache flush", e);
+        }
         
-        // Alternatively, flush entire Redis database (more aggressive)
+        // Alternative: flush entire Redis database (more aggressive)
         // redisTemplate.getConnectionFactory().getConnection().flushDb();
         
         log.warn("Emergency cache flush completed");
@@ -155,18 +166,13 @@ public class CacheInvalidationManager {
     }
     
     /**
-     * Clear entire cache by name
+     * Clear cache by pattern (Redis keys with wildcards)
+     * This method now handles all cache clearing since we migrated from Spring Cache
      */
-    private void clearCacheByName(String cacheName) {
-        try {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                cache.clear();
-                log.debug("Cleared cache: {}", cacheName);
-            }
-        } catch (Exception e) {
-            log.error("Error clearing cache: {}", cacheName, e);
-        }
+    private void clearCacheByName(String pattern) {
+        // Convert cache name to pattern if needed
+        String cachePattern = pattern.contains(":") ? pattern : "codetop:" + pattern + ":*";
+        clearCache(cachePattern);
     }
     
     /**
@@ -174,9 +180,10 @@ public class CacheInvalidationManager {
      */
     public void evictCacheEntry(String cacheName, String key) {
         try {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                cache.evict(key);
+            // Build the actual Redis key
+            String redisKey = cacheName.contains(":") ? cacheName + ":" + key : "codetop:" + cacheName + ":" + key;
+            Boolean deleted = redisTemplate.delete(redisKey);
+            if (Boolean.TRUE.equals(deleted)) {
                 log.debug("Evicted cache entry - cache: {}, key: {}", cacheName, key);
             }
         } catch (Exception e) {

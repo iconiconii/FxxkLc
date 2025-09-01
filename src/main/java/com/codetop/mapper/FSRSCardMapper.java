@@ -524,6 +524,10 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
         private Long dueCardsSystem;
         private Double avgLapses;
         
+        // Additional fields for compatibility
+        private Long totalUsers;
+        private Long totalReviews;
+        
         // Getters and setters
         public Long getTotalCards() { return totalCards; }
         public void setTotalCards(Long totalCards) { this.totalCards = totalCards; }
@@ -539,6 +543,12 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
         public void setDueCardsSystem(Long dueCardsSystem) { this.dueCardsSystem = dueCardsSystem; }
         public Double getAvgLapses() { return avgLapses; }
         public void setAvgLapses(Double avgLapses) { this.avgLapses = avgLapses; }
+        
+        // Additional getters
+        public Long getTotalUsers() { return totalUsers != null ? totalUsers : activeUsers; }
+        public void setTotalUsers(Long totalUsers) { this.totalUsers = totalUsers; }
+        public Long getTotalReviews() { return totalReviews; }
+        public void setTotalReviews(Long totalReviews) { this.totalReviews = totalReviews; }
     }
     
     /**

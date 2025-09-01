@@ -31,23 +31,9 @@ export default function LoginForm({ showRegister, onToggleRegister }: LoginFormP
 
     try {
       if (showRegister) {
-        // 注册逻辑
-        if (formData.password !== formData.confirmPassword) {
-          setError("密码确认不匹配")
-          return
-        }
-        
-        await authApi.register({
-          username: formData.email.split('@')[0], // Use email prefix as username
-          email: formData.email,
-          password: formData.password,
-        })
-        
-        // 注册成功后自动登录
-        await login({
-          identifier: formData.email,
-          password: formData.password,
-        })
+        // 注册功能暂时关闭
+        setError("注册功能暂时关闭，请稍后再试")
+        return
       } else {
         // 登录逻辑
         await login({
@@ -203,16 +189,20 @@ export default function LoginForm({ showRegister, onToggleRegister }: LoginFormP
         {/* Toggle */}
         <div className="text-center text-sm mt-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
           <span className="text-gray-600 dark:text-gray-400">
-            {showRegister ? "已有账户？" : "还没有账户？"}
+            {showRegister ? "已有账户？" : "注册功能暂时关闭"}
           </span>
-          <Button
-            type="button"
-            variant="link"
-            className="p-0 ml-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-            onClick={onToggleRegister}
-          >
-            {showRegister ? "立即登录" : "免费注册"}
-          </Button>
+          {showRegister ? (
+            <Button
+              type="button"
+              variant="link"
+              className="p-0 ml-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+              onClick={onToggleRegister}
+            >
+              立即登录
+            </Button>
+          ) : (
+            <span className="ml-1 text-gray-500 dark:text-gray-400">，仅限已有账户登录</span>
+          )}
         </div>
       </div>
     </div>

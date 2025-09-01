@@ -16,15 +16,17 @@ import com.codetop.mapper.FSRSCardMapper;
 import com.codetop.mapper.ProblemMapper;
 import com.codetop.mapper.ReviewLogMapper;
 import com.codetop.mapper.UserMapper;
+import com.codetop.service.cache.CacheService;
+import com.codetop.util.CacheHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.codetop.logging.TraceContext;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +55,19 @@ public class FSRSService {
     private final FSRSAlgorithm fsrsAlgorithm;
     private final UserParametersService userParametersService;
     private final CacheInvalidationManager cacheInvalidationManager;
+    
+    // 新增缓存相关依赖
+    private final CacheService cacheService;
+    private final CacheHelper cacheHelper;
+    
+    // 缓存相关常量
+    private static final String CACHE_PREFIX_FSRS_QUEUE = "fsrs-queue";
+    private static final String CACHE_PREFIX_FSRS_STATS = "fsrs-stats"; 
+    private static final String CACHE_PREFIX_FSRS_METRICS = "fsrs-metrics";
+    
+    private static final Duration FSRS_QUEUE_TTL = Duration.ofMinutes(5);
+    private static final Duration FSRS_STATS_TTL = Duration.ofMinutes(10);
+    private static final Duration FSRS_METRICS_TTL = Duration.ofHours(1);
 
     /**
      * Get or create FSRS card for user-problem combination.
@@ -217,12 +232,27 @@ public class FSRSService {
                     .build();
 
             reviewLogMapper.insert(reviewLog);
+            log.info("Review log inserted successfully: userId={}, problemId={}, cardId={}", userId, problemId, card.getId());
 
             // Update user parameters review count
-            userParametersService.updateReviewCount(userId, 1);
+            log.info("Starting to update review count: userId={}", userId);
+            try {
+                userParametersService.updateReviewCount(userId, 1);
+                log.info("Review count updated successfully: userId={}", userId);
+            } catch (Exception e) {
+                log.error("Failed to update review count: userId={}, error={}", userId, e.getMessage(), e);
+                throw e;
+            }
 
             // Clear cache for user's review queue
-            clearUserReviewQueueCache(userId);
+            log.info("Starting to clear review queue cache: userId={}", userId);
+            try {
+                clearUserReviewQueueCache(userId);
+                log.info("Review queue cache cleared successfully: userId={}", userId);
+            } catch (Exception e) {
+                log.error("Failed to clear review queue cache: userId={}, error={}", userId, e.getMessage(), e);
+                throw e;
+            }
 
             long totalDuration = System.currentTimeMillis() - startTime;
             
@@ -253,77 +283,17 @@ public class FSRSService {
     }
 
     /**
-     * Generate review queue for user.
+     * Generate review queue for user with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和5分钟TTL
+     * - 在用户提交复习后通过 clearUserReviewQueueCache 方法失效
      */
-    @Cacheable(value = "codetop-fsrs-queue", key = "T(com.codetop.service.CacheKeyBuilder).fsrsReviewQueue(#userId, #limit)")
     public FSRSReviewQueueDTO generateReviewQueue(Long userId, int limit) {
-        TraceContext.setOperation("FSRS_GENERATE_REVIEW_QUEUE");
-        TraceContext.setUserId(userId);
-        
-        long startTime = System.currentTimeMillis();
-        log.info("Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
-        
-        try {
-            LocalDateTime now = LocalDateTime.now();
-            
-            // Get optimal mix of card types
-            int newLimit = Math.min(limit / 3, 10); // Limit new cards
-            int learningLimit = Math.min(limit / 2, 20); // Prioritize learning cards
-            int reviewLimit = limit; // Fill remaining with review cards
-            
-            log.debug("Queue generation limits: userId={}, newLimit={}, learningLimit={}, reviewLimit={}", 
-                    userId, newLimit, learningLimit, reviewLimit);
-
-            long dbStartTime = System.currentTimeMillis();
-            List<FSRSCardMapper.ReviewQueueCard> cards = fsrsCardMapper.generateOptimalReviewQueue(
-                    userId, now, newLimit, learningLimit, reviewLimit);
-            long dbDuration = System.currentTimeMillis() - dbStartTime;
-
-            // Get user learning statistics (handle null gracefully)
-            FSRSCardMapper.UserLearningStats stats;
-            try {
-                long statsStartTime = System.currentTimeMillis();
-                stats = fsrsCardMapper.getUserLearningStats(userId, now);
-                long statsDuration = System.currentTimeMillis() - statsStartTime;
-                
-                if (stats == null) {
-                    log.debug("No learning stats found for user {}, using empty stats", userId);
-                    stats = createEmptyUserLearningStats();
-                } else {
-                    log.debug("Retrieved learning stats: userId={}, totalCards={}, dueCards={}, duration={}ms", 
-                            userId, stats.getTotalCards(), stats.getDueCards(), statsDuration);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to get user learning stats for user {}, returning empty stats: {}", 
-                        userId, e.getMessage());
-                stats = createEmptyUserLearningStats();
-            }
-
-            int actualCardCount = cards != null ? cards.size() : 0;
-            long totalDuration = System.currentTimeMillis() - startTime;
-            
-            // Business metrics logging
-            log.info("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
-                    "totalDuration={}ms, dbDuration={}ms, cacheHit={}", 
-                    userId, limit, actualCardCount, totalDuration, dbDuration, false);
-            
-            if (actualCardCount < limit) {
-                log.debug("Generated fewer cards than requested: userId={}, requested={}, actual={}, " +
-                        "possibleReasons=[insufficient_due_cards, learning_cards_prioritized]", 
-                        userId, limit, actualCardCount);
-            }
-
-            return FSRSReviewQueueDTO.builder()
-                    .cards(cards != null ? cards : List.of())
-                    .totalCount(actualCardCount)
-                    .stats(stats)
-                    .generatedAt(now)
-                    .build();
-                    
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.error("Failed to generate review queue: userId={}, limit={}, duration={}ms, error={}", 
-                    userId, limit, duration, e.getMessage(), e);
+        if (userId == null) {
+            log.warn("generateReviewQueue called with null userId");
             return FSRSReviewQueueDTO.builder()
                     .cards(List.of())
                     .totalCount(0)
@@ -331,6 +301,90 @@ public class FSRSService {
                     .generatedAt(LocalDateTime.now())
                     .build();
         }
+        
+        String cacheKey = CacheKeyBuilder.fsrsReviewQueue(userId, limit);
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            FSRSReviewQueueDTO.class,
+            FSRS_QUEUE_TTL,
+            () -> {
+                TraceContext.setOperation("FSRS_GENERATE_REVIEW_QUEUE");
+                TraceContext.setUserId(userId);
+                
+                long startTime = System.currentTimeMillis();
+                log.info("Cache MISS - Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
+                
+                try {
+                    LocalDateTime now = LocalDateTime.now();
+                    
+                    // Get optimal mix of card types
+                    int newLimit = Math.min(limit / 3, 10); // Limit new cards
+                    int learningLimit = Math.min(limit / 2, 20); // Prioritize learning cards
+                    int reviewLimit = limit; // Fill remaining with review cards
+                    
+                    log.debug("Queue generation limits: userId={}, newLimit={}, learningLimit={}, reviewLimit={}", 
+                            userId, newLimit, learningLimit, reviewLimit);
+
+                    long dbStartTime = System.currentTimeMillis();
+                    List<FSRSCardMapper.ReviewQueueCard> cards = fsrsCardMapper.generateOptimalReviewQueue(
+                            userId, now, newLimit, learningLimit, reviewLimit);
+                    long dbDuration = System.currentTimeMillis() - dbStartTime;
+
+                    // Get user learning statistics (handle null gracefully)
+                    FSRSCardMapper.UserLearningStats stats;
+                    try {
+                        long statsStartTime = System.currentTimeMillis();
+                        stats = fsrsCardMapper.getUserLearningStats(userId, now);
+                        long statsDuration = System.currentTimeMillis() - statsStartTime;
+                        
+                        if (stats == null) {
+                            log.debug("No learning stats found for user {}, using empty stats", userId);
+                            stats = createEmptyUserLearningStats();
+                        } else {
+                            log.debug("Retrieved learning stats: userId={}, totalCards={}, dueCards={}, duration={}ms", 
+                                    userId, stats.getTotalCards(), stats.getDueCards(), statsDuration);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to get user learning stats for user {}, returning empty stats: {}", 
+                                userId, e.getMessage());
+                        stats = createEmptyUserLearningStats();
+                    }
+
+                    int actualCardCount = cards != null ? cards.size() : 0;
+                    long totalDuration = System.currentTimeMillis() - startTime;
+                    
+                    // Business metrics logging
+                    log.info("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
+                            "totalDuration={}ms, dbDuration={}ms, cacheHit={}", 
+                            userId, limit, actualCardCount, totalDuration, dbDuration, false);
+                    
+                    if (actualCardCount < limit) {
+                        log.debug("Generated fewer cards than requested: userId={}, requested={}, actual={}, " +
+                                "possibleReasons=[insufficient_due_cards, learning_cards_prioritized]", 
+                                userId, limit, actualCardCount);
+                    }
+
+                    return FSRSReviewQueueDTO.builder()
+                            .cards(cards != null ? cards : List.of())
+                            .totalCount(actualCardCount)
+                            .stats(stats)
+                            .generatedAt(now)
+                            .build();
+                            
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("Failed to generate review queue: userId={}, limit={}, duration={}ms, error={}", 
+                            userId, limit, duration, e.getMessage(), e);
+                    return FSRSReviewQueueDTO.builder()
+                            .cards(List.of())
+                            .totalCount(0)
+                            .stats(createEmptyUserLearningStats())
+                            .generatedAt(LocalDateTime.now())
+                            .build();
+                }
+            }
+        );
     }
 
     /**
@@ -387,17 +441,46 @@ public class FSRSService {
     }
 
     /**
-     * Get user learning statistics.
+     * Get user learning statistics with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和10分钟TTL
+     * - 优雅处理空统计数据
      */
-    @Cacheable(value = "codetop-fsrs-stats", key = "T(com.codetop.service.CacheKeyBuilder).fsrsUserStats(#userId)")
     public FSRSCardMapper.UserLearningStats getUserLearningStats(Long userId) {
-        try {
-            FSRSCardMapper.UserLearningStats stats = fsrsCardMapper.getUserLearningStats(userId, LocalDateTime.now());
-            return stats != null ? stats : createEmptyUserLearningStats();
-        } catch (Exception e) {
-            log.warn("Failed to get user learning stats for user {}, returning empty stats: {}", userId, e.getMessage());
+        if (userId == null) {
+            log.warn("getUserLearningStats called with null userId");
             return createEmptyUserLearningStats();
         }
+        
+        String cacheKey = CacheKeyBuilder.fsrsUserStats(userId);
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            FSRSCardMapper.UserLearningStats.class,
+            FSRS_STATS_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading user learning stats from database: userId={}", userId);
+                
+                try {
+                    FSRSCardMapper.UserLearningStats stats = fsrsCardMapper.getUserLearningStats(userId, LocalDateTime.now());
+                    
+                    if (stats != null) {
+                        log.debug("Retrieved learning stats: userId={}, totalCards={}, dueCards={}", 
+                                userId, stats.getTotalCards(), stats.getDueCards());
+                        return stats;
+                    } else {
+                        log.debug("No learning stats found for user {}, returning empty stats", userId);
+                        return createEmptyUserLearningStats();
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to get user learning stats for user {}, returning empty stats: {}", userId, e.getMessage());
+                    return createEmptyUserLearningStats();
+                }
+            }
+        );
     }
 
     /**
@@ -465,18 +548,83 @@ public class FSRSService {
     }
 
     /**
-     * Clear user's review queue cache.
+     * Clear user's FSRS related caches after review submission.
+     * 
+     * 更新为手动缓存管理：
+     * - 清理用户复习队列缓存（所有limit的组合）
+     * - 清理用户学习统计缓存
+     * - 保留系统指标缓存（不受单个用户影响）
+     * - 保持向后兼容性，同时调用旧的缓存失效管理器
      */
     public void clearUserReviewQueueCache(Long userId) {
-        cacheInvalidationManager.invalidateFSRSCaches(userId);
+        if (userId == null) {
+            log.warn("clearUserReviewQueueCache called with null userId");
+            return;
+        }
+        
+        try {
+            // 清理FSRS复习队列缓存（使用通配符模式）
+            String queuePattern = CacheKeyBuilder.buildUserDomainPattern("fsrs", userId);
+            long deletedQueueCount = cacheService.deleteByPattern(queuePattern);
+            
+            // 清理用户学习统计缓存
+            String statsKey = CacheKeyBuilder.fsrsUserStats(userId);
+            boolean statsDeleted = cacheService.delete(statsKey);
+            
+            log.debug("FSRS cache invalidation completed: userId={}, queueCacheDeleted={}, statsDeleted={}", 
+                    userId, deletedQueueCount, statsDeleted);
+            
+            // 保持向后兼容性 - 同时调用旧的缓存失效管理器
+            cacheInvalidationManager.invalidateFSRSCaches(userId);
+            
+        } catch (Exception e) {
+            log.error("Failed to clear FSRS caches for user {}: {}", userId, e.getMessage(), e);
+            
+            // 如果手动缓存清理失败，仍然尝试旧的方式
+            try {
+                cacheInvalidationManager.invalidateFSRSCaches(userId);
+            } catch (Exception fallbackError) {
+                log.error("Fallback cache invalidation also failed for user {}: {}", userId, fallbackError.getMessage(), fallbackError);
+            }
+        }
     }
 
     /**
-     * Get system-wide FSRS performance metrics.
+     * Get system-wide FSRS performance metrics with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和1小时TTL
+     * - 系统级指标适合较长的缓存时间
      */
-    @Cacheable(value = "codetop-fsrs-metrics", key = "T(com.codetop.service.CacheKeyBuilder).fsrsMetrics(#days)")
     public FSRSCardMapper.SystemFSRSMetrics getSystemMetrics(int days) {
-        return fsrsCardMapper.getSystemFSRSMetrics(days);
+        String cacheKey = CacheKeyBuilder.fsrsMetrics(days);
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            FSRSCardMapper.SystemFSRSMetrics.class,
+            FSRS_METRICS_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading system FSRS metrics from database: days={}", days);
+                
+                try {
+                    FSRSCardMapper.SystemFSRSMetrics metrics = fsrsCardMapper.getSystemFSRSMetrics(days);
+                    
+                    if (metrics != null) {
+                        log.debug("Retrieved system metrics: days={}, totalUsers={}, totalReviews={}", 
+                                days, metrics.getTotalUsers(), metrics.getTotalReviews());
+                    } else {
+                        log.warn("No system metrics found for days={}", days);
+                    }
+                    
+                    return metrics;
+                } catch (Exception e) {
+                    log.error("Failed to get system FSRS metrics for days={}, error={}", days, e.getMessage(), e);
+                    throw e; // 重新抛出异常，让调用方处理
+                }
+            }
+        );
     }
 
     /**

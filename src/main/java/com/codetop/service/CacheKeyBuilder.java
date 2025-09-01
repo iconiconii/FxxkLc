@@ -224,6 +224,175 @@ public class CacheKeyBuilder {
     public static String leaderboardDomain() {
         return NAMESPACE + DELIMITER + "leaderboard" + DELIMITER + "*";
     }
+
+    // ========== 新增通用缓存键构建方法 ==========
+    
+    /**
+     * 通用缓存键构建器
+     * 
+     * @param prefix 前缀
+     * @param parts 键组成部分
+     * @return 完整的缓存键
+     */
+    public static String buildKey(String prefix, Object... parts) {
+        StringJoiner keyBuilder = new StringJoiner(DELIMITER);
+        keyBuilder.add(NAMESPACE);
+        keyBuilder.add(prefix);
+        
+        for (Object part : parts) {
+            if (part != null) {
+                String partStr = part.toString();
+                if (!partStr.trim().isEmpty()) {
+                    keyBuilder.add(sanitizeParam(partStr));
+                }
+            }
+        }
+        
+        return keyBuilder.toString();
+    }
+    
+    /**
+     * 构建用户相关的缓存键
+     * 
+     * @param prefix 前缀
+     * @param userId 用户ID
+     * @param parts 其他键组成部分
+     * @return 包含用户ID的缓存键
+     */
+    public static String buildUserKey(String prefix, Long userId, Object... parts) {
+        Object[] allParts = new Object[parts.length + 1];
+        allParts[0] = "userId" + PARAM_DELIMITER + userId;
+        System.arraycopy(parts, 0, allParts, 1, parts.length);
+        
+        return buildKey(prefix, allParts);
+    }
+    
+    /**
+     * 构建分页缓存键
+     * 
+     * @param prefix 前缀
+     * @param page 页码
+     * @param size 每页大小
+     * @param additionalParts 额外的键组成部分
+     * @return 包含分页信息的缓存键
+     */
+    public static String buildPageKey(String prefix, Integer page, Integer size, Object... additionalParts) {
+        Object[] allParts = new Object[additionalParts.length + 2];
+        allParts[0] = "page" + PARAM_DELIMITER + page;
+        allParts[1] = "size" + PARAM_DELIMITER + size;
+        System.arraycopy(additionalParts, 0, allParts, 2, additionalParts.length);
+        
+        return buildKey(prefix, allParts);
+    }
+    
+    /**
+     * 构建时间范围缓存键
+     * 
+     * @param prefix 前缀
+     * @param timeUnit 时间单位 (hour, day, week, month)
+     * @param value 时间值
+     * @param additionalParts 额外的键组成部分
+     * @return 包含时间信息的缓存键
+     */
+    public static String buildTimeKey(String prefix, String timeUnit, Integer value, Object... additionalParts) {
+        Object[] allParts = new Object[additionalParts.length + 1];
+        allParts[0] = timeUnit + PARAM_DELIMITER + value;
+        System.arraycopy(additionalParts, 0, allParts, 1, additionalParts.length);
+        
+        return buildKey(prefix, allParts);
+    }
+    
+    /**
+     * 构建基于哈希的缓存键（用于复杂对象）
+     * 
+     * @param prefix 前缀
+     * @param object 要哈希的对象
+     * @param additionalParts 额外的键组成部分
+     * @return 包含对象哈希的缓存键
+     */
+    public static String buildHashKey(String prefix, Object object, Object... additionalParts) {
+        Object[] allParts = new Object[additionalParts.length + 1];
+        allParts[0] = "hash" + PARAM_DELIMITER + Math.abs(object.hashCode());
+        System.arraycopy(additionalParts, 0, allParts, 1, additionalParts.length);
+        
+        return buildKey(prefix, allParts);
+    }
+    
+    /**
+     * 构建通用域模式 (用于批量删除)
+     * 
+     * @param domain 域名
+     * @return 域通配符模式
+     */
+    public static String buildDomainPattern(String domain) {
+        return NAMESPACE + DELIMITER + domain + DELIMITER + "*";
+    }
+    
+    /**
+     * 构建用户相关域模式 (用于用户相关缓存的批量删除)
+     * 
+     * @param domain 域名
+     * @param userId 用户ID
+     * @return 用户相关的通配符模式
+     */
+    public static String buildUserDomainPattern(String domain, Long userId) {
+        return NAMESPACE + DELIMITER + domain + DELIMITER + "*userId" + PARAM_DELIMITER + userId + "*";
+    }
+    
+    /**
+     * 验证缓存键格式
+     * 
+     * @param key 缓存键
+     * @return 是否符合规范
+     */
+    public static boolean validateKey(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            return false;
+        }
+        
+        // 检查是否以命名空间开头
+        if (!key.startsWith(NAMESPACE + DELIMITER)) {
+            return false;
+        }
+        
+        // 检查键长度 (Redis键建议不超过512字节)
+        if (key.length() > 500) {
+            return false;
+        }
+        
+        // 检查是否包含非法字符
+        return !key.matches(".*[\\s\\n\\r\\t].*");
+    }
+    
+    /**
+     * 从缓存键提取域名
+     * 
+     * @param key 缓存键
+     * @return 域名，如果格式不正确返回null
+     */
+    public static String extractDomain(String key) {
+        if (key == null || !key.startsWith(NAMESPACE + DELIMITER)) {
+            return null;
+        }
+        
+        String[] parts = key.split(DELIMITER);
+        return parts.length > 1 ? parts[1] : null;
+    }
+    
+    /**
+     * 从缓存键提取操作名
+     * 
+     * @param key 缓存键
+     * @return 操作名，如果格式不正确返回null
+     */
+    public static String extractOperation(String key) {
+        if (key == null || !key.startsWith(NAMESPACE + DELIMITER)) {
+            return null;
+        }
+        
+        String[] parts = key.split(DELIMITER);
+        return parts.length > 2 ? parts[2] : null;
+    }
     
     // Utility methods
     private static String buildKey(String domain, String operation, String... params) {

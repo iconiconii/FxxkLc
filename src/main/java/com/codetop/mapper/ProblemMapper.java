@@ -70,6 +70,22 @@ public interface ProblemMapper extends BaseMapper<Problem> {
     Page<Problem> searchProblems(Page<Problem> page, @Param("keyword") String keyword);
 
     /**
+     * Search problems by keyword with optional difficulty filter.
+     */
+    @Select("""
+            <script>
+            SELECT * FROM problems 
+            WHERE LOWER(title) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            AND deleted = 0 
+            <if test="difficulty != null and difficulty != ''">
+                AND difficulty = #{difficulty}
+            </if>
+            ORDER BY created_at DESC
+            </script>
+            """)
+    Page<Problem> searchProblemsByKeyword(Page<Problem> page, @Param("keyword") String keyword, @Param("difficulty") String difficulty);
+
+    /**
      * Find problems by difficulty and search keyword.
      */
     @Select("""
@@ -86,6 +102,12 @@ public interface ProblemMapper extends BaseMapper<Problem> {
      */
     @Select("SELECT * FROM problems WHERE JSON_CONTAINS(tags, JSON_QUOTE(#{tag})) AND deleted = 0 ORDER BY created_at DESC")
     Page<Problem> findByTag(Page<Problem> page, @Param("tag") String tag);
+
+    /**
+     * Find problems by tag with pagination.
+     */
+    @Select("SELECT * FROM problems WHERE JSON_CONTAINS(tags, JSON_QUOTE(#{tag})) AND deleted = 0 ORDER BY created_at DESC")
+    Page<Problem> findByTagWithPagination(Page<Problem> page, @Param("tag") String tag);
 
     /**
      * Advanced search with multiple filters.

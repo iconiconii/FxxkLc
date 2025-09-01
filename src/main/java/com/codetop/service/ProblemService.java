@@ -9,15 +9,17 @@ import com.codetop.mapper.ProblemMapper;
 import com.codetop.mapper.FSRSCardMapper;
 import com.codetop.entity.FSRSCard;
 import com.codetop.enums.ReviewType;
+import com.codetop.service.cache.CacheService;
+import com.codetop.util.CacheHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.codetop.logging.TraceContext;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,184 +51,294 @@ public class ProblemService {
     private final FSRSService fsrsService;
     private final CacheInvalidationManager cacheInvalidationManager;
     private final ApplicationEventPublisher eventPublisher;
+    
+    // 新增缓存相关依赖
+    private final CacheService cacheService;
+    private final CacheHelper cacheHelper;
+    
+    // 缓存相关常量
+    private static final String CACHE_PREFIX_PROBLEM_SINGLE = "problem-single";
+    private static final String CACHE_PREFIX_PROBLEM_LIST = "problem-list";
+    private static final String CACHE_PREFIX_PROBLEM_SEARCH = "problem-search";
+    private static final String CACHE_PREFIX_PROBLEM_ADVANCED = "problem-advanced";
+    private static final String CACHE_PREFIX_PROBLEM_ENHANCED = "problem-enhanced";
+    private static final String CACHE_PREFIX_PROBLEM_DIFFICULTY = "problem-difficulty";
+    private static final String CACHE_PREFIX_PROBLEM_HOT = "problem-hot";
+    private static final String CACHE_PREFIX_PROBLEM_RECENT = "problem-recent";
+    private static final String CACHE_PREFIX_PROBLEM_STATS = "problem-stats";
+    private static final String CACHE_PREFIX_TAG_STATS = "tag-stats";
+    private static final String CACHE_PREFIX_USER_PROGRESS = "user-progress";
+    private static final String CACHE_PREFIX_USER_MASTERY = "user-mastery";
+    
+    private static final Duration PROBLEM_CACHE_TTL = Duration.ofMinutes(30);
+    private static final Duration STATS_CACHE_TTL = Duration.ofHours(1);
+    private static final Duration USER_CACHE_TTL = Duration.ofMinutes(30);
 
     /**
-     * Get problem by ID with caching.
+     * Get problem by ID with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-single", key = "T(com.codetop.service.CacheKeyBuilder).problemSingle(#problemId)")
     public Optional<Problem> findById(Long problemId) {
+        if (problemId == null) {
+            log.warn("findById called with null problemId");
+            return Optional.empty();
+        }
+        
         TraceContext.setOperation("PROBLEM_FIND_BY_ID");
         
-        long startTime = System.currentTimeMillis();
-        log.debug("Finding problem by ID: problemId={}", problemId);
+        String cacheKey = CacheKeyBuilder.problemSingle(problemId);
         
-        try {
-            Optional<Problem> result = Optional.ofNullable(problemMapper.selectById(problemId));
-            long duration = System.currentTimeMillis() - startTime;
-            
-            if (result.isPresent()) {
-                Problem problem = result.get();
-                log.debug("Problem found: problemId={}, title='{}', difficulty={}, duration={}ms", 
-                        problemId, problem.getTitle(), problem.getDifficulty(), duration);
-            } else {
-                log.debug("Problem not found: problemId={}, duration={}ms", problemId, duration);
+        Problem cachedProblem = cacheHelper.cacheOrCompute(
+            cacheKey,
+            Problem.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                long startTime = System.currentTimeMillis();
+                log.debug("Cache MISS - Finding problem by ID: problemId={}", problemId);
+                
+                try {
+                    Problem problem = problemMapper.selectById(problemId);
+                    
+                    long duration = System.currentTimeMillis() - startTime;
+                    
+                    if (problem != null) {
+                        log.debug("Problem found successfully: problemId={}, title='{}', duration={}ms", 
+                                problemId, problem.getTitle(), duration);
+                    } else {
+                        log.debug("Problem not found: problemId={}, duration={}ms", problemId, duration);
+                    }
+                    
+                    return problem;
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("Failed to find problem: problemId={}, duration={}ms, error={}", 
+                            problemId, duration, e.getMessage(), e);
+                    throw e;
+                }
             }
-            
-            return result;
-            
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.error("Failed to find problem: problemId={}, duration={}ms, error={}", 
-                    problemId, duration, e.getMessage(), e);
-            throw e;
-        }
+        );
+        
+        return Optional.ofNullable(cachedProblem);
     }
 
     /**
-     * Find all problems with optional filters.
+     * Find all problems with optional filters and manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-list", key = "T(com.codetop.service.CacheKeyBuilder).problemList(#difficulty, #page.current, #page.size, #search)")
     public Page<Problem> findAllProblems(Page<Problem> page, String difficulty, String search) {
         TraceContext.setOperation("PROBLEM_FIND_ALL");
         
-        long startTime = System.currentTimeMillis();
-        log.debug("Finding all problems: page={}, size={}, difficulty='{}', search='{}'", 
-                page.getCurrent(), page.getSize(), difficulty, search);
+        String cacheKey = CacheKeyBuilder.problemList(difficulty, (int)page.getCurrent(), (int)page.getSize(), search);
         
-        try {
-            Page<Problem> result;
-            String queryType;
-            
-            if (difficulty != null && !difficulty.trim().isEmpty()) {
-                if (search != null && !search.trim().isEmpty()) {
-                    queryType = "difficulty_and_search";
-                    result = problemMapper.findByDifficultyAndSearch(page, difficulty, search.trim());
-                } else {
-                    queryType = "difficulty_only";
-                    result = problemMapper.findByDifficultyWithPagination(page, difficulty);
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            Page.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                long startTime = System.currentTimeMillis();
+                log.debug("Cache MISS - Finding all problems: page={}, size={}, difficulty='{}', search='{}'", 
+                        page.getCurrent(), page.getSize(), difficulty, search);
+                
+                try {
+                    Page<Problem> result;
+                    
+                    if (search != null && !search.trim().isEmpty()) {
+                        result = problemMapper.searchProblemsByKeyword(page, search.trim(), difficulty);
+                        log.debug("Search query executed: keyword='{}', difficulty='{}'", search.trim(), difficulty);
+                    } else if (difficulty != null && !difficulty.trim().isEmpty()) {
+                        result = problemMapper.findByDifficultyWithPagination(page, difficulty);
+                        log.debug("Difficulty filter applied: difficulty='{}'", difficulty);
+                    } else {
+                        result = problemMapper.selectPage(page, null);
+                        log.debug("No filters applied, returning all problems");
+                    }
+
+                    long duration = System.currentTimeMillis() - startTime;
+                    long actualRecords = result.getRecords().size();
+                    
+                    log.info("Problems found successfully: page={}, size={}, difficulty='{}', search='{}', " +
+                            "actualRecords={}, totalRecords={}, duration={}ms", 
+                            page.getCurrent(), page.getSize(), difficulty, search, 
+                            actualRecords, result.getTotal(), duration);
+
+                    return result;
+                    
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("Failed to find all problems: page={}, size={}, difficulty='{}', search='{}', " +
+                            "duration={}ms, error={}", 
+                            page.getCurrent(), page.getSize(), difficulty, search, duration, e.getMessage(), e);
+                    throw e;
                 }
-            } else if (search != null && !search.trim().isEmpty()) {
-                queryType = "search_only";
-                result = problemMapper.searchProblems(page, search.trim());
-            } else {
-                queryType = "all_problems";
-                result = problemMapper.selectPage(page, null);
             }
-            
-            long duration = System.currentTimeMillis() - startTime;
-            
-            log.info("Problems query completed: queryType={}, page={}, size={}, " +
-                    "totalResults={}, actualResults={}, duration={}ms", 
-                    queryType, page.getCurrent(), page.getSize(), 
-                    result.getTotal(), result.getRecords().size(), duration);
-            
-            return result;
-            
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.error("Failed to find problems: page={}, size={}, difficulty='{}', search='{}', " +
-                    "duration={}ms, error={}", 
-                    page.getCurrent(), page.getSize(), difficulty, search, duration, e.getMessage(), e);
-            throw e;
-        }
+        );
     }
 
     /**
-     * Search problems with pagination.
+     * Search problems with pagination and manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-search", key = "T(com.codetop.service.CacheKeyBuilder).problemSearch(#keyword, #page.current, #page.size)")
     public Page<Problem> searchProblems(String keyword, Page<Problem> page) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return problemMapper.selectPage(page, null);
-        }
-        return problemMapper.searchProblems(page, keyword.trim());
+        String cacheKey = CacheKeyBuilder.problemSearch(keyword, (int)page.getCurrent(), (int)page.getSize());
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            Page.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Searching problems: keyword='{}', page={}, size={}", keyword, page.getCurrent(), page.getSize());
+                
+                if (keyword == null || keyword.trim().isEmpty()) {
+                    return problemMapper.selectPage(page, null);
+                }
+                return problemMapper.searchProblems(page, keyword.trim());
+            }
+        );
     }
 
     /**
-     * Advanced search with multiple filters.
+     * Advanced search with multiple filters and manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-advanced", key = "T(com.codetop.service.CacheKeyBuilder).problemAdvancedSearch(#request, #page.current, #page.size)")
     public Page<Problem> advancedSearch(AdvancedSearchRequest request, Page<Problem> page) {
         TraceContext.setOperation("PROBLEM_ADVANCED_SEARCH");
         
-        long startTime = System.currentTimeMillis();
-        log.debug("Advanced search: keyword='{}', difficulty={}, tag='{}', difficulties={}, statuses={}, tags={}, userId={}", 
-                request.getKeyword(), request.getDifficulty(), request.getTag(), 
-                request.getDifficulties(), request.getStatuses(), request.getTags(), request.getUserId());
+        String cacheKey = CacheKeyBuilder.problemAdvancedSearch(request, (int)page.getCurrent(), (int)page.getSize());
         
-        try {
-            Page<Problem> result = problemMapper.advancedSearch(
-                page,
-                request.getKeyword(),
-                request.getDifficulty() != null ? request.getDifficulty().name() : null,
-                request.getTag(),
-                request.getIsPremium()
-            );
-            
-            // Apply additional filters if needed
-            if (request.getDifficulties() != null || request.getStatuses() != null || 
-                request.getTags() != null || request.getUserId() != null) {
-                result = enhancedFilterResults(result, request);
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            Page.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                long startTime = System.currentTimeMillis();
+                log.debug("Cache MISS - Advanced search: keyword='{}', difficulty={}, tag='{}', difficulties={}, statuses={}, tags={}, userId={}", 
+                        request.getKeyword(), request.getDifficulty(), request.getTag(), 
+                        request.getDifficulties(), request.getStatuses(), request.getTags(), request.getUserId());
+                
+                try {
+                    Page<Problem> baseResults;
+                    
+                    // Execute database query based on primary filters
+                    if (request.getKeyword() != null && !request.getKeyword().trim().isEmpty()) {
+                        String difficultyStr = request.getDifficulty() != null ? request.getDifficulty().name() : null;
+                        baseResults = problemMapper.searchProblemsByKeyword(page, request.getKeyword().trim(), difficultyStr);
+                    } else if (request.getTag() != null && !request.getTag().trim().isEmpty()) {
+                        baseResults = problemMapper.findByTagWithPagination(page, request.getTag().trim());
+                    } else if (request.getDifficulty() != null) {
+                        baseResults = problemMapper.findByDifficultyWithPagination(page, request.getDifficulty().name());
+                    } else {
+                        baseResults = problemMapper.selectPage(page, null);
+                    }
+                    
+                    // Apply additional filtering if needed
+                    Page<Problem> filteredResults = enhancedFilterResults(baseResults, request);
+                    
+                    long duration = System.currentTimeMillis() - startTime;
+                    
+                    log.info("Advanced search completed: keyword='{}', difficulty={}, results={}, duration={}ms", 
+                            request.getKeyword(), request.getDifficulty(), filteredResults.getRecords().size(), duration);
+                    
+                    return filteredResults;
+                    
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("Advanced search failed: keyword='{}', difficulty={}, duration={}ms, error={}", 
+                            request.getKeyword(), request.getDifficulty(), duration, e.getMessage(), e);
+                    throw e;
+                }
             }
-            
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("Advanced search completed: totalResults={}, actualResults={}, duration={}ms", 
-                    result.getTotal(), result.getRecords().size(), duration);
-            
-            return result;
-            
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.error("Failed advanced search: duration={}ms, error={}", duration, e.getMessage(), e);
-            throw e;
-        }
+        );
     }
 
     /**
-     * Enhanced search with comprehensive filters for CodeTop page.
+     * Enhanced search with comprehensive filters for CodeTop page and manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-enhanced", key = "T(com.codetop.service.CacheKeyBuilder).problemEnhancedSearch(#request, #page.current, #page.size)")
     public Page<Problem> enhancedSearch(EnhancedSearchRequest request, Page<Problem> page) {
         TraceContext.setOperation("PROBLEM_ENHANCED_SEARCH");
         
-        long startTime = System.currentTimeMillis();
-        log.debug("Enhanced search: search='{}', difficulties={}, statuses={}, tags={}, userId={}, sort='{}'", 
-                request.getSearch(), request.getDifficulties(), request.getStatuses(), 
-                request.getTags(), request.getUserId(), request.getSort());
+        String cacheKey = CacheKeyBuilder.problemEnhancedSearch(request, (int)page.getCurrent(), (int)page.getSize());
         
-        try {
-            Page<Problem> result;
-            
-            // Start with basic search if search term is provided
-            if (request.getSearch() != null && !request.getSearch().trim().isEmpty()) {
-                result = problemMapper.searchProblems(page, request.getSearch().trim());
-            } else {
-                result = problemMapper.selectPage(page, null);
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            Page.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                long startTime = System.currentTimeMillis();
+                log.debug("Cache MISS - Enhanced search: search='{}', difficulties={}, statuses={}, tags={}, userId={}, sort='{}'", 
+                        request.getSearch(), request.getDifficulties(), request.getStatuses(), 
+                        request.getTags(), request.getUserId(), request.getSort());
+                
+                try {
+                    Page<Problem> baseResults;
+                    
+                    // Execute database query based on search criteria
+                    if (request.getSearch() != null && !request.getSearch().trim().isEmpty()) {
+                        baseResults = problemMapper.searchProblemsByKeyword(page, request.getSearch().trim(), null);
+                    } else {
+                        baseResults = problemMapper.selectPage(page, null);
+                    }
+                    
+                    // Apply enhanced filtering
+                    Page<Problem> filteredResults = applyEnhancedFilters(baseResults, request, page);
+                    
+                    long duration = System.currentTimeMillis() - startTime;
+                    
+                    log.info("Enhanced search completed: search='{}', results={}, duration={}ms", 
+                            request.getSearch(), filteredResults.getRecords().size(), duration);
+                    
+                    return filteredResults;
+                    
+                } catch (Exception e) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("Enhanced search failed: search='{}', duration={}ms, error={}", 
+                            request.getSearch(), duration, e.getMessage(), e);
+                    throw e;
+                }
             }
-            
-            // Apply advanced filters
-            result = applyEnhancedFilters(result, request, page);
-            
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("Enhanced search completed: search='{}', totalResults={}, actualResults={}, duration={}ms", 
-                    request.getSearch(), result.getTotal(), result.getRecords().size(), duration);
-            
-            return result;
-            
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.error("Failed enhanced search: search='{}', duration={}ms, error={}", 
-                    request.getSearch(), duration, e.getMessage(), e);
-            throw e;
-        }
+        );
     }
 
     /**
-     * Get problems by difficulty.
+     * Get problems by difficulty with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-difficulty", key = "T(com.codetop.service.CacheKeyBuilder).problemsByDifficulty(#difficulty.name(), #page.current)")
     public Page<Problem> findByDifficulty(Difficulty difficulty, Page<Problem> page) {
-        return problemMapper.findByDifficultyWithPagination(page, difficulty.name());
+        String cacheKey = CacheKeyBuilder.problemsByDifficulty(difficulty.name(), (int)page.getCurrent());
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            Page.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Finding problems by difficulty: difficulty={}, page={}", difficulty.name(), page.getCurrent());
+                return problemMapper.findByDifficultyWithPagination(page, difficulty.name());
+            }
+        );
     }
 
     /**
@@ -251,47 +363,140 @@ public class ProblemService {
     }
 
     /**
-     * Get hot problems (frequently asked).
+     * Get hot problems (frequently asked) with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrComputeList() 进行列表缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-hot", key = "T(com.codetop.service.CacheKeyBuilder).problemsHot(#minCompanies, #limit)")
     public List<ProblemMapper.HotProblem> getHotProblems(int minCompanies, int limit) {
-        return problemMapper.findHotProblems(minCompanies, limit);
+        String cacheKey = CacheKeyBuilder.problemsHot(minCompanies, limit);
+        
+        return cacheHelper.cacheOrComputeList(
+            cacheKey,
+            ProblemMapper.HotProblem.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading hot problems: minCompanies={}, limit={}", minCompanies, limit);
+                
+                try {
+                    List<ProblemMapper.HotProblem> hotProblems = problemMapper.findHotProblems(minCompanies, limit);
+                    
+                    log.debug("Retrieved hot problems: count={}", hotProblems != null ? hotProblems.size() : 0);
+                    
+                    return hotProblems != null ? hotProblems : List.of();
+                } catch (Exception e) {
+                    log.error("Failed to get hot problems: minCompanies={}, limit={}, error={}", minCompanies, limit, e.getMessage(), e);
+                    throw e;
+                }
+            }
+        );
     }
 
     /**
-     * Get recently added problems.
+     * Get recently added problems with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrComputeList() 进行列表缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-problem-recent", key = "T(com.codetop.service.CacheKeyBuilder).problemsRecent(#limit)")
     public List<Problem> getRecentProblems(int limit) {
-        return problemMapper.findRecentProblems(limit);
+        String cacheKey = CacheKeyBuilder.problemsRecent(limit);
+        
+        return cacheHelper.cacheOrComputeList(
+            cacheKey,
+            Problem.class,
+            PROBLEM_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading recent problems: limit={}", limit);
+                
+                try {
+                    List<Problem> recentProblems = problemMapper.findRecentProblems(limit);
+                    
+                    log.debug("Retrieved recent problems: count={}", recentProblems != null ? recentProblems.size() : 0);
+                    
+                    return recentProblems != null ? recentProblems : List.of();
+                } catch (Exception e) {
+                    log.error("Failed to get recent problems: limit={}, error={}", limit, e.getMessage(), e);
+                    throw e;
+                }
+            }
+        );
     }
 
     /**
-     * Get all tags with usage statistics.
+     * Get all tags with usage statistics with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrComputeList() 进行列表缓存操作
+     * - 保持相同的缓存键和1小时TTL
      */
-    @Cacheable(value = "codetop-tag-stats", key = "T(com.codetop.service.CacheKeyBuilder).tagStatistics()")
     public List<ProblemMapper.TagUsage> getTagStatistics() {
-        return problemMapper.getTagUsageStatistics();
+        String cacheKey = CacheKeyBuilder.tagStatistics();
+        
+        return cacheHelper.cacheOrComputeList(
+            cacheKey,
+            ProblemMapper.TagUsage.class,
+            STATS_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading tag usage statistics from database");
+                
+                try {
+                    List<ProblemMapper.TagUsage> tagStats = problemMapper.getTagUsageStatistics();
+                    
+                    log.debug("Retrieved tag usage statistics: count={}", tagStats != null ? tagStats.size() : 0);
+                    
+                    return tagStats != null ? tagStats : List.of();
+                } catch (Exception e) {
+                    log.error("Failed to get tag usage statistics: error={}", e.getMessage(), e);
+                    throw e;
+                }
+            }
+        );
     }
 
     /**
-     * Get problem statistics.
+     * Get problem statistics with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和1小时TTL（统计数据适合较长缓存）
      */
-    @Cacheable(value = "codetop-problem-stats", key = "T(com.codetop.service.CacheKeyBuilder).problemStatistics()")
     public ProblemStatisticsDTO getStatistics() {
-        Long totalProblems = problemMapper.countActiveProblems();
-        Long easyCount = problemMapper.countByDifficulty(Difficulty.EASY.name());
-        Long mediumCount = problemMapper.countByDifficulty(Difficulty.MEDIUM.name());
-        Long hardCount = problemMapper.countByDifficulty(Difficulty.HARD.name());
-        Long premiumCount = problemMapper.countPremiumProblems();
-
-        return ProblemStatisticsDTO.builder()
-                .totalProblems(totalProblems)
-                .easyCount(easyCount)
-                .mediumCount(mediumCount)
-                .hardCount(hardCount)
-                .premiumCount(premiumCount)
-                .build();
+        String cacheKey = CacheKeyBuilder.problemStatistics();
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            ProblemStatisticsDTO.class,
+            STATS_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading problem statistics from database");
+                
+                try {
+                    Long totalProblems = problemMapper.countActiveProblems();
+                    Long easyCount = problemMapper.countByDifficulty(Difficulty.EASY.name());
+                    Long mediumCount = problemMapper.countByDifficulty(Difficulty.MEDIUM.name());
+                    Long hardCount = problemMapper.countByDifficulty(Difficulty.HARD.name());
+                    
+                    log.debug("Retrieved problem statistics: total={}, easy={}, medium={}, hard={}", 
+                            totalProblems, easyCount, mediumCount, hardCount);
+                    
+                    return ProblemStatisticsDTO.builder()
+                            .totalProblems(totalProblems != null ? totalProblems : 0L)
+                            .easyProblems(easyCount != null ? easyCount : 0L)
+                            .mediumProblems(mediumCount != null ? mediumCount : 0L)
+                            .hardProblems(hardCount != null ? hardCount : 0L)
+                            .build();
+                } catch (Exception e) {
+                    log.error("Failed to get problem statistics: error={}", e.getMessage(), e);
+                    throw e;
+                }
+            }
+        );
     }
 
     /**
@@ -622,65 +827,93 @@ public class ProblemService {
     }
 
     /**
-     * Get user's problem progress for all problems.
+     * Get user's problem progress for all problems with manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrComputeList() 进行列表缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-user-progress", key = "T(com.codetop.service.CacheKeyBuilder).userProblemProgress(#userId)")
     public List<UserProblemStatusDTO> getUserProblemProgress(Long userId) {
-        // Get all problems (limit to first 10 for now)
-        List<Problem> problems = problemMapper.selectList(null).stream()
-                .limit(10) // Limit for demo purposes
-                .collect(Collectors.toList());
+        if (userId == null) {
+            log.warn("getUserProblemProgress called with null userId");
+            return List.of();
+        }
         
-        // Get user's FSRS cards for these problems
-        Map<Long, FSRSCard> userCards = fsrsCardMapper.findByUserId(userId).stream()
-                .collect(Collectors.toMap(FSRSCard::getProblemId, Function.identity()));
+        String cacheKey = CacheKeyBuilder.userProblemProgress(userId);
         
-        return problems.stream()
-                .map(problem -> {
-                    FSRSCard card = userCards.get(problem.getId());
+        return cacheHelper.cacheOrComputeList(
+            cacheKey,
+            UserProblemStatusDTO.class,
+            USER_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading user problem progress: userId={}", userId);
+                
+                try {
+                    // Get all problems (limit to first 10 for now)
+                    List<Problem> problems = problemMapper.selectList(null).stream()
+                            .limit(10) // Limit for demo purposes
+                            .collect(Collectors.toList());
                     
-                    if (card == null) {
-                        // User hasn't started this problem yet
-                        return UserProblemStatusDTO.builder()
-                                .problemId(problem.getId())
-                                .title(problem.getTitle())
-                                .difficulty(problem.getDifficulty())
-                                .status("not_done")
-                                .mastery(0)
-                                .lastAttemptDate(null)
-                                .lastConsideredDate(null)
-                                .attemptCount(0)
-                                .accuracy(0.0)
-                                .notes("")
-                                .build();
-                    } else {
-                        // User has a card for this problem - calculate status based on FSRS data
-                        String status = determineStatusFromFSRSCard(card);
-                        Integer mastery = calculateMasteryFromFSRSCard(card);
-                        Double accuracy = calculateAccuracyFromFSRS(card);
-                        
-                        return UserProblemStatusDTO.builder()
-                                .problemId(problem.getId())
-                                .title(problem.getTitle())
-                                .difficulty(problem.getDifficulty())
-                                .status(status)
-                                .mastery(mastery)
-                                .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
-                                .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
-                                .attemptCount(card.getReviewCount())
-                                .accuracy(accuracy)
-                                .notes("")
-                                .build();
-                    }
-                })
-                .collect(Collectors.toList());
+                    // Get user's FSRS cards for these problems
+                    Map<Long, FSRSCard> userCards = fsrsCardMapper.findByUserId(userId).stream()
+                            .collect(Collectors.toMap(FSRSCard::getProblemId, Function.identity()));
+                    
+                    List<UserProblemStatusDTO> progress = problems.stream()
+                            .map(problem -> {
+                                FSRSCard card = userCards.get(problem.getId());
+                                
+                                if (card == null) {
+                                    // User hasn't started this problem yet
+                                    return UserProblemStatusDTO.builder()
+                                            .problemId(problem.getId())
+                                            .title(problem.getTitle())
+                                            .difficulty(problem.getDifficulty())
+                                            .status("not_done")
+                                            .mastery(0)
+                                            .lastAttemptDate(null)
+                                            .lastConsideredDate(null)
+                                            .attemptCount(0)
+                                            .accuracy(0.0)
+                                            .notes("")
+                                            .build();
+                                } else {
+                                    // User has a card for this problem - calculate status based on FSRS data
+                                    String status = determineStatusFromFSRSCard(card);
+                                    Integer mastery = calculateMasteryFromFSRSCard(card);
+                                    Double accuracy = calculateAccuracyFromFSRS(card);
+                                    
+                                    return UserProblemStatusDTO.builder()
+                                            .problemId(problem.getId())
+                                            .title(problem.getTitle())
+                                            .difficulty(problem.getDifficulty())
+                                            .status(status)
+                                            .mastery(mastery)
+                                            .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
+                                            .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
+                                            .attemptCount(card.getReviewCount())
+                                            .accuracy(accuracy)
+                                            .notes("")
+                                            .build();
+                                }
+                            })
+                            .collect(Collectors.toList());
+                    
+                    log.debug("Retrieved user problem progress: userId={}, count={}", userId, progress.size());
+                    
+                    return progress;
+                } catch (Exception e) {
+                    log.error("Failed to get user problem progress: userId={}, error={}", userId, e.getMessage(), e);
+                    throw e;
+                }
+            }
+        );
     }
 
     /**
      * Update problem status for user.
      */
     @Transactional
-    @CacheEvict(value = "codetop-user-progress", key = "T(com.codetop.service.CacheKeyBuilder).userProblemProgress(#userId)")
     public UserProblemStatusLegacyDTO updateProblemStatus(
             Long userId, Long problemId, UpdateProblemStatusRequest request) {
         
@@ -721,6 +954,17 @@ public class ProblemService {
                     .notes(request.getNotes())
                     .build();
             
+            // 手动缓存失效 - 清理用户进度和掌握度缓存
+            try {
+                cacheService.delete(CacheKeyBuilder.userProblemProgress(userId));
+                cacheService.delete(CacheKeyBuilder.userProblemMastery(userId, problemId));
+                log.debug("Cache invalidated for user {} problem {} progress update", userId, problemId);
+            } catch (Exception cacheException) {
+                log.warn("Cache invalidation failed for user {} problem {}: {}", 
+                        userId, problemId, cacheException.getMessage());
+                // 缓存失效失败不影响主流程
+            }
+            
             // Publish event to clear user status cache
             eventPublisher.publishEvent(new Events.UserEvent(
                     Events.UserEvent.UserEventType.PROGRESS_UPDATED, userId, null));
@@ -744,6 +988,16 @@ public class ProblemService {
                     .notes(request.getNotes())
                     .build();
             
+            // 手动缓存失效 - 即使是后备方案也需要清理缓存
+            try {
+                cacheService.delete(CacheKeyBuilder.userProblemProgress(userId));
+                cacheService.delete(CacheKeyBuilder.userProblemMastery(userId, problemId));
+                log.debug("Cache invalidated for user {} problem {} (fallback)", userId, problemId);
+            } catch (Exception cacheException) {
+                log.warn("Cache invalidation failed for user {} problem {} (fallback): {}", 
+                        userId, problemId, cacheException.getMessage());
+            }
+            
             // Publish event to clear user status cache even for fallback case
             eventPublisher.publishEvent(new Events.UserEvent(
                     Events.UserEvent.UserEventType.PROGRESS_UPDATED, userId, null));
@@ -753,61 +1007,85 @@ public class ProblemService {
     }
 
     /**
-     * Get problem mastery level for user with FSRS integration.
+     * Get problem mastery level for user with FSRS integration and manual Redis caching.
+     * 
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和30分钟TTL
      */
-    @Cacheable(value = "codetop-user-mastery", key = "T(com.codetop.service.CacheKeyBuilder).userProblemMastery(#userId, #problemId)")
     public ProblemMasteryDTO getProblemMastery(Long userId, Long problemId) {
-        Problem problem = problemMapper.selectById(problemId);
-        if (problem == null) {
-            throw new IllegalArgumentException("Problem not found");
+        if (userId == null || problemId == null) {
+            throw new IllegalArgumentException("userId and problemId cannot be null");
         }
         
-        try {
-            // Get or create FSRS card for this user-problem combination
-            FSRSCard card = fsrsService.getOrCreateCard(userId, problemId);
-            
-            // Calculate mastery level based on FSRS state and stability
-            Integer masteryLevel = calculateMasteryLevel(card);
-            
-            // Calculate accuracy from FSRS metrics
-            Double accuracy = calculateAccuracyFromFSRS(card);
-            
-            // Format dates for response
-            String lastAttemptDate = card.getLastReview() != null ? 
-                    card.getLastReview().toString() : null;
-            String nextReviewDate = card.getNextReview() != null ? 
-                    card.getNextReview().toString() : null;
-            
-            return ProblemMasteryDTO.builder()
-                    .problemId(problemId)
-                    .masteryLevel(masteryLevel)
-                    .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
-                    .accuracy(accuracy)
-                    .lastAttemptDate(lastAttemptDate)
-                    .nextReviewDate(nextReviewDate)
-                    .difficulty(problem.getDifficulty().name())
-                    .notes(String.format("Stability: %.2f, Difficulty: %.2f, State: %s, Lapses: %d", 
-                            card.getStabilityAsDouble(), 
-                            card.getDifficultyAsDouble(),
-                            card.getState().name(),
-                            card.getLapses() != null ? card.getLapses() : 0))
-                    .build();
+        String cacheKey = CacheKeyBuilder.userProblemMastery(userId, problemId);
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            ProblemMasteryDTO.class,
+            USER_CACHE_TTL,
+            () -> {
+                log.debug("Cache MISS - Loading problem mastery: userId={}, problemId={}", userId, problemId);
+                
+                Problem problem = problemMapper.selectById(problemId);
+                if (problem == null) {
+                    throw new IllegalArgumentException("Problem not found");
+                }
+                
+                try {
+                    // Get or create FSRS card for this user-problem combination
+                    FSRSCard card = fsrsService.getOrCreateCard(userId, problemId);
                     
-        } catch (Exception e) {
-            log.error("Failed to get FSRS mastery for user {} problem {}: {}", userId, problemId, e.getMessage());
-            
-            // Fallback to basic response
-            return ProblemMasteryDTO.builder()
-                    .problemId(problemId)
-                    .masteryLevel(0)
-                    .attemptCount(0)
-                    .accuracy(0.0)
-                    .lastAttemptDate(null)
-                    .nextReviewDate(null)
-                    .difficulty(problem.getDifficulty().name())
-                    .notes("FSRS data unavailable")
-                    .build();
-        }
+                    // Calculate mastery level based on FSRS state and stability
+                    Integer masteryLevel = calculateMasteryLevel(card);
+                    
+                    // Calculate accuracy from FSRS metrics
+                    Double accuracy = calculateAccuracyFromFSRS(card);
+                    
+                    // Format dates for response
+                    String lastAttemptDate = card.getLastReview() != null ? 
+                            card.getLastReview().toString() : null;
+                    String nextReviewDate = card.getNextReview() != null ? 
+                            card.getNextReview().toString() : null;
+                    
+                    ProblemMasteryDTO result = ProblemMasteryDTO.builder()
+                            .problemId(problemId)
+                            .masteryLevel(masteryLevel)
+                            .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
+                            .accuracy(accuracy)
+                            .lastAttemptDate(lastAttemptDate)
+                            .nextReviewDate(nextReviewDate)
+                            .difficulty(problem.getDifficulty().name())
+                            .notes(String.format("Stability: %.2f, Difficulty: %.2f, State: %s, Lapses: %d", 
+                                    card.getStabilityAsDouble(), 
+                                    card.getDifficultyAsDouble(),
+                                    card.getState().name(),
+                                    card.getLapses() != null ? card.getLapses() : 0))
+                            .build();
+                    
+                    log.debug("Retrieved problem mastery: userId={}, problemId={}, masteryLevel={}", 
+                            userId, problemId, masteryLevel);
+                    
+                    return result;
+                            
+                } catch (Exception e) {
+                    log.error("Failed to get FSRS mastery for user {} problem {}: {}", userId, problemId, e.getMessage());
+                    
+                    // Fallback to basic response
+                    return ProblemMasteryDTO.builder()
+                            .problemId(problemId)
+                            .masteryLevel(0)
+                            .attemptCount(0)
+                            .accuracy(0.0)
+                            .lastAttemptDate(null)
+                            .nextReviewDate(null)
+                            .difficulty(problem.getDifficulty().name())
+                            .notes("FSRS data unavailable")
+                            .build();
+                }
+            }
+        );
     }
 
     /**

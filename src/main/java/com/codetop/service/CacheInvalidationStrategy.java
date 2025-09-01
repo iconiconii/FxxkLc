@@ -1,9 +1,11 @@
 package com.codetop.service;
 
+import com.codetop.service.CacheKeyBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
+// Removed CacheManager dependency after cache migration
+// import org.springframework.cache.Cache;
+// import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -31,7 +33,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CacheInvalidationStrategy {
     
-    private final CacheManager cacheManager;
+    // Removed CacheManager dependency - using RedisTemplate directly after cache migration
+    // private final CacheManager cacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
     
     /**
@@ -178,17 +181,17 @@ public class CacheInvalidationStrategy {
     }
     
     /**
-     * Clear entire cache by name
+     * Clear cache by pattern (using Redis pattern matching)
+     * This method now handles all cache clearing since we migrated from Spring Cache
      */
-    private void clearCacheByName(String cacheName) {
+    private void clearCacheByName(String pattern) {
         try {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                cache.clear();
-                log.debug("Cleared cache: {}", cacheName);
-            }
+            // Convert cache name to pattern if needed
+            String cachePattern = pattern.contains(":") ? pattern + ":*" : "codetop:" + pattern + ":*";
+            clearCacheSafely(cachePattern);
+            log.debug("Cleared cache pattern: {}", cachePattern);
         } catch (Exception e) {
-            log.error("Error clearing cache: {}", cacheName, e);
+            log.error("Error clearing cache pattern: {}", pattern, e);
             // Don't throw exception to avoid breaking the main transaction
         }
     }
@@ -199,9 +202,10 @@ public class CacheInvalidationStrategy {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void evictCacheEntrySync(String cacheName, String key) {
         try {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                cache.evict(key);
+            // Build the actual Redis key
+            String redisKey = cacheName.contains(":") ? cacheName + ":" + key : "codetop:" + cacheName + ":" + key;
+            Boolean deleted = redisTemplate.delete(redisKey);
+            if (Boolean.TRUE.equals(deleted)) {
                 log.debug("Evicted cache entry synchronously - cache: {}, key: {}", cacheName, key);
             }
         } catch (Exception e) {

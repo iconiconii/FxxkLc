@@ -16,8 +16,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProblemStatisticsDTO {
     private Long totalProblems;
+    private Long easyProblems;
     private Long easyCount;
+    private Long mediumProblems;
     private Long mediumCount;
+    private Long hardProblems;
     private Long hardCount;
     private Long premiumCount;
 }

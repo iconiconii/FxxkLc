@@ -91,15 +91,24 @@ public class UserParametersService {
      */
     @Transactional
     public void updateReviewCount(Long userId, int additionalReviews) {
-        int updated = userParametersMapper.incrementReviewCount(userId, additionalReviews);
+        log.info("updateReviewCount called: userId={}, additionalReviews={}", userId, additionalReviews);
         
-        if (updated == 0) {
-            log.warn("Failed to update review count for user {}, creating default parameters", userId);
-            createDefaultParameters(userId);
-            userParametersMapper.incrementReviewCount(userId, additionalReviews);
+        try {
+            int updated = userParametersMapper.incrementReviewCount(userId, additionalReviews);
+            log.info("incrementReviewCount result: userId={}, updated={}", userId, updated);
+            
+            if (updated == 0) {
+                log.warn("Failed to update review count for user {}, creating default parameters", userId);
+                createDefaultParameters(userId);
+                int secondAttempt = userParametersMapper.incrementReviewCount(userId, additionalReviews);
+                log.info("Second incrementReviewCount result: userId={}, updated={}", userId, secondAttempt);
+            }
+            
+            log.info("updateReviewCount completed successfully: userId={}, additionalReviews={}", userId, additionalReviews);
+        } catch (Exception e) {
+            log.error("updateReviewCount failed: userId={}, additionalReviews={}, error={}", userId, additionalReviews, e.getMessage(), e);
+            throw e;
         }
-        
-        log.debug("Updated review count for user {} with {} additional reviews", userId, additionalReviews);
     }
 
     /**

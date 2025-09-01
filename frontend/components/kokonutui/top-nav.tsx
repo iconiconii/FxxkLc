@@ -109,8 +109,8 @@ export default function TopNav() {
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/login">登录</Link>
               </Button>
-              <Button size="sm" asChild className="bg-blue-600 hover:bg-blue-700">
-                <Link href="/register">注册</Link>
+              <Button size="sm" disabled className="bg-gray-400 cursor-not-allowed opacity-50">
+                注册暂时关闭
               </Button>
             </div>
           </>

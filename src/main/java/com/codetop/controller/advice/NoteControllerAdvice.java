@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  * 
  * @author CodeTop Team
  */
-@RestControllerAdvice(basePackages = "com.codetop.controller")
+@RestControllerAdvice(assignableTypes = com.codetop.controller.ProblemNoteController.class)
 @Slf4j
 public class NoteControllerAdvice {
     
