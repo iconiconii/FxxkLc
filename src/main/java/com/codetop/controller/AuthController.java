@@ -78,7 +78,7 @@ public class AuthController {
     }
 
     /**
-     * User registration.
+     * User registration - TEMPORARILY DISABLED
      */
     @PostMapping("/register")
     @Operation(summary = "User registration", description = "Register new user account")
@@ -87,23 +87,8 @@ public class AuthController {
         returnCachedResult = false
     )
     public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
-        AuthService.RegisterRequest serviceRequest = new AuthService.RegisterRequest();
-        serviceRequest.setUsername(request.getUsername());
-        serviceRequest.setEmail(request.getEmail());
-        serviceRequest.setPassword(request.getPassword());
-        serviceRequest.setFirstName(request.getFirstName());
-        serviceRequest.setLastName(request.getLastName());
-        serviceRequest.setTimezone(request.getTimezone());
-
-        AuthService.AuthResult result = authService.register(serviceRequest);
-        
-        return ResponseEntity.ok(AuthResponseDTO.builder()
-                .accessToken(result.getAccessToken())
-                .refreshToken(result.getRefreshToken())
-                .tokenType("Bearer")
-                .expiresIn(result.getExpiresIn())
-                .user(UserInfo.from(result.getUser()))
-                .build());
+        log.warn("Registration attempt blocked - registration currently disabled");
+        throw new RuntimeException("注册功能暂时关闭，请稍后再试");
     }
 
     /**

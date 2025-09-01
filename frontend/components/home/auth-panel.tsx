@@ -60,26 +60,23 @@ export default function AuthPanel() {
         </Link>
       </div>
 
-      {/* 注册卡片 */}
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl p-6 border border-white/20 dark:border-gray-700/50 shadow-xl">
+      {/* 注册暂时关闭 */}
+      <div className="bg-yellow-50/80 dark:bg-yellow-900/20 backdrop-blur-xl rounded-3xl p-6 border border-yellow-200/50 dark:border-yellow-800/50 shadow-xl">
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-400/20 to-violet-400/20 rounded-2xl flex items-center justify-center">
-            <UserPlus className="w-6 h-6 text-purple-600" />
+          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400/20 to-orange-400/20 rounded-2xl flex items-center justify-center">
+            <UserPlus className="w-6 h-6 text-yellow-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-800 dark:text-white">新用户？</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">免费注册开始刷题</p>
+            <h3 className="font-semibold text-gray-800 dark:text-white">注册功能暂时关闭</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">系统维护中，暂时无法注册新账户</p>
           </div>
         </div>
-        <Link href="/register">
-          <Button 
-            variant="outline"
-            className="w-full border-2 border-purple-200 hover:border-purple-400 hover:bg-purple-50 dark:border-purple-700 dark:hover:border-purple-500 dark:hover:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-2xl py-3 transition-all duration-200 group"
-          >
-            <span>免费注册</span>
-            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-          </Button>
-        </Link>
+        <Button 
+          disabled
+          className="w-full bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed rounded-2xl py-3"
+        >
+          <span>注册暂时关闭</span>
+        </Button>
       </div>
 
       {/* FSRS 核心功能介绍 */}

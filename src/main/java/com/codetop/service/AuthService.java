@@ -6,16 +6,18 @@ import com.codetop.entity.User;
 import com.codetop.enums.AuthProvider;
 import com.codetop.logging.TraceContext;
 import com.codetop.mapper.UserMapper;
+import com.codetop.service.cache.CacheService;
+import com.codetop.util.CacheHelper;
 import com.codetop.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -28,7 +30,7 @@ import java.util.Optional;
  * - OAuth integration (Google, GitHub)
  * - JWT token generation and validation
  * - Account security (lockout, verification)
- * - Redis caching for performance
+ * - Manual Redis caching for performance optimization
  * 
  * @author CodeTop Team
  */
@@ -41,6 +43,14 @@ public class AuthService {
     private final @Lazy PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
+    
+    // 新增缓存相关依赖
+    private final CacheService cacheService;
+    private final CacheHelper cacheHelper;
+    
+    // 缓存相关常量
+    private static final String CACHE_PREFIX_USER_PROFILE = "user-profile";
+    private static final Duration USER_PROFILE_TTL = Duration.ofHours(1);
 
     /**
      * Authenticate user with email/username and password.
@@ -104,6 +114,9 @@ public class AuthService {
             userMapper.updateById(user);
             log.debug("Updated last login time for user: {} - TraceId: {}", 
                 user.getUsername(), TraceContext.getTraceId());
+            
+            // 更新用户缓存
+            invalidateUserCache(user.getId());
             
             String accessToken = jwtUtil.generateAccessToken(user);
             String refreshToken = jwtUtil.generateRefreshToken(user);
@@ -197,6 +210,9 @@ public class AuthService {
             }
             
             userMapper.updateById(user);
+            
+            // 更新用户缓存
+            invalidateUserCache(user.getId());
         } else {
             // Create new user from OAuth
             String username = generateUniqueUsername(request.getEmail(), request.getName());
@@ -257,35 +273,53 @@ public class AuthService {
     }
 
     /**
-     * Get user by ID with caching using UserCacheDTO.
+     * Get user by ID with manual Redis caching using UserCacheDTO.
      * 
-     * This approach uses a dedicated DTO for caching to avoid serialization
-     * issues with complex entity objects that have transient fields.
+     * 迁移后的缓存实现：
+     * - 移除 @Cacheable 注解
+     * - 使用 CacheHelper.cacheOrCompute() 进行缓存操作
+     * - 保持相同的缓存键和TTL策略
      */
-    @Cacheable(value = "codetop-user-profile", key = "T(com.codetop.service.CacheKeyBuilder).userProfile(#userId)")
     public UserCacheDTO getUserCacheDTOById(Long userId) {
-        log.info("Cache MISS - Loading user from database for userId: {}", userId);
-        User user = userMapper.selectById(userId);
-        if (user != null) {
-            // Assign default USER role for all users
-            user.addRole("USER");
-            return UserCacheDTO.fromUser(user);
+        if (userId == null) {
+            log.warn("getUserCacheDTOById called with null userId");
+            return null;
         }
-        return null;
+        
+        String cacheKey = CacheKeyBuilder.userProfile(userId);
+        
+        return cacheHelper.cacheOrCompute(
+            cacheKey,
+            UserCacheDTO.class,
+            USER_PROFILE_TTL,
+            () -> {
+                log.info("Cache MISS - Loading user from database for userId: {}", userId);
+                
+                User user = userMapper.selectById(userId);
+                if (user != null) {
+                    // Assign default USER role for all users
+                    user.addRole("USER");
+                    return UserCacheDTO.fromUser(user);
+                }
+                return null;
+            }
+        );
     }
     
     /**
      * Get user by ID, using cache when possible.
      */
     public User getUserById(Long userId) {
-        log.info("Getting user by ID: {} - checking cache first", userId);
+        log.debug("Getting user by ID: {} - checking cache first", userId);
+        
         UserCacheDTO cachedUser = getUserCacheDTOById(userId);
         if (cachedUser != null) {
-            log.info("Cache HIT for userId: {}", userId);
+            log.debug("Cache HIT for userId: {}", userId);
+            return cachedUser.toUser();
         } else {
-            log.warn("Cache returned null for userId: {}", userId);
+            log.warn("User not found for userId: {}", userId);
+            return null;
         }
-        return cachedUser != null ? cachedUser.toUser() : null;
     }
 
     /**
@@ -304,6 +338,18 @@ public class AuthService {
         try {
             // Add token to blacklist to prevent further use
             tokenBlacklistService.blacklistToken(accessToken);
+            
+            // 如果能从token中获取用户ID，清理用户缓存
+            try {
+                if (jwtUtil.validateAccessToken(accessToken)) {
+                    Long userIdFromToken = jwtUtil.getUserIdFromAccessToken(accessToken);
+                    if (userIdFromToken != null) {
+                        invalidateUserCache(userIdFromToken);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Could not extract user ID from token for cache invalidation: {}", e.getMessage());
+            }
             
             long duration = System.currentTimeMillis() - startTime;
             log.info("User {} logged out successfully - Duration: {}ms - TraceId: {}", 
@@ -337,6 +383,9 @@ public class AuthService {
         
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userMapper.updateById(user);
+        
+        // 清理用户缓存
+        invalidateUserCache(userId);
         
         log.info("Password changed for user: {}", user.getUsername());
     }
@@ -398,6 +447,10 @@ public class AuthService {
         }
         
         userMapper.updateById(user);
+        
+        // 清理用户缓存
+        invalidateUserCache(userId);
+        
         return user;
     }
 
@@ -425,7 +478,32 @@ public class AuthService {
         
         user.setPreferences(preferencesJson);
         userMapper.updateById(user);
+        
+        // 清理用户缓存
+        invalidateUserCache(userId);
+        
         return user;
+    }
+    
+    /**
+     * 清理用户相关缓存
+     * 
+     * @param userId 用户ID
+     */
+    private void invalidateUserCache(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        
+        try {
+            String cacheKey = CacheKeyBuilder.userProfile(userId);
+            boolean deleted = cacheService.delete(cacheKey);
+            log.debug("User cache invalidated: userId={}, cacheKey={}, deleted={}", 
+                userId, cacheKey, deleted);
+        } catch (Exception e) {
+            log.error("Failed to invalidate user cache: userId={}, error={}", 
+                userId, e.getMessage(), e);
+        }
     }
 
     // DTOs

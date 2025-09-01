@@ -170,13 +170,7 @@ export default function LoginForm() {
       </form>
 
       <div className="text-center">
-        <span className="text-sm text-gray-600 dark:text-gray-400">还没有账户？</span>
-        <Link
-          href="/register"
-          className="ml-1 text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          立即注册
-        </Link>
+        <span className="text-sm text-gray-600 dark:text-gray-400">注册功能暂时关闭，仅限已有账户登录</span>
       </div>
     </div>
   )

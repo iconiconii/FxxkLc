@@ -60,7 +60,7 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      port: ${REDIS_PORT:6380}
       database: 0
       timeout: 6000ms
       jedis:
@@ -72,7 +72,7 @@ spring:
     
     # MongoDB Configuration
     mongodb:
-      uri: mongodb://localhost:27017/codetop_notes
+      uri: mongodb://localhost:27018/codetop_notes
       auto-index-creation: true
   
   # Cache Configuration
