@@ -46,7 +46,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             
             if (StringUtils.hasText(jwt) && jwtUtil.validateAccessToken(jwt)) {
                 Long userId = jwtUtil.getUserIdFromAccessToken(jwt);
-                
+
+                // Prefer roles provided in JWT (useful for dev/test admin token issuance)
+                java.util.List<String> tokenRoles = jwtUtil.getRolesFromToken(jwt);
+
                 User user = authService.getUserById(userId);
                 if (user != null && user.getIsActive()) {
                     // 设置ThreadLocal用户信息
@@ -54,13 +57,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     log.debug("JwtAuthenticationFilter: 设置用户信息到ThreadLocal - userId={}, username={}, thread={}", 
                              user.getId(), user.getUsername(), Thread.currentThread().getId());
                     
-                    // 设置Spring Security上下文（保持兼容性）
-                    // 确保用户具有USER角色（AuthService.getUserById已经处理了这个）
-                    if (user.getRoles() == null || user.getRoles().isEmpty()) {
+                    // Build authorities: prefer roles from token if present; fallback to user roles
+                    java.util.Set<String> roles = new java.util.HashSet<>();
+                    if (tokenRoles != null && !tokenRoles.isEmpty()) {
+                        roles.addAll(tokenRoles);
+                    } else if (user.getRoles() != null && !user.getRoles().isEmpty()) {
+                        roles.addAll(user.getRoles());
+                    } else {
                         log.warn("User {} has no roles, adding default USER role", user.getUsername());
-                        user.addRole("USER");
+                        roles.add("USER");
                     }
-                    List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
+                    List<SimpleGrantedAuthority> authorities = roles.stream()
                             .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                             .collect(Collectors.toList());
 

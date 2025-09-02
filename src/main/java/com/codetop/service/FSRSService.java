@@ -17,6 +17,8 @@ import com.codetop.mapper.ProblemMapper;
 import com.codetop.mapper.ReviewLogMapper;
 import com.codetop.mapper.UserMapper;
 import com.codetop.service.cache.CacheService;
+import org.springframework.context.ApplicationEventPublisher;
+import com.codetop.event.Events;
 import com.codetop.util.CacheHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +61,7 @@ public class FSRSService {
     // 新增缓存相关依赖
     private final CacheService cacheService;
     private final CacheHelper cacheHelper;
+    private final ApplicationEventPublisher eventPublisher;
     
     // 缓存相关常量
     private static final String CACHE_PREFIX_FSRS_QUEUE = "fsrs-queue";
@@ -263,6 +266,18 @@ public class FSRSService {
                     userId, problemId, card.getId(), rating, reviewType, oldState, 
                     result.getNewState(), isLapse, result.getNextReviewTime(), result.getIntervalDays(),
                     totalDuration, algorithmDuration, dbUpdateDuration);
+
+            // Publish domain event for review completion (AFTER_COMMIT invalidation will handle cache)
+            try {
+                eventPublisher.publishEvent(new Events.ReviewEvent(
+                        Events.ReviewEvent.ReviewEventType.REVIEW_COMPLETED,
+                        userId,
+                        problemId,
+                        rating
+                ));
+            } catch (Exception evtEx) {
+                log.warn("Failed to publish ReviewEvent for user {} problem {}: {}", userId, problemId, evtEx.getMessage());
+            }
 
             return FSRSReviewResultDTO.builder()
                     .card(card)

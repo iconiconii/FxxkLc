@@ -140,6 +140,28 @@ public class JwtUtil {
     }
 
     /**
+     * Get roles from token claims if present.
+     */
+    @SuppressWarnings("unchecked")
+    public java.util.List<String> getRolesFromToken(String token) {
+        try {
+            Claims claims = getClaimsFromToken(token);
+            Object rolesObj = claims.get("roles");
+            if (rolesObj instanceof java.util.List) {
+                // Convert elements to String
+                java.util.List<?> raw = (java.util.List<?>) rolesObj;
+                java.util.List<String> roles = new java.util.ArrayList<>();
+                for (Object r : raw) {
+                    if (r != null) roles.add(r.toString());
+                }
+                return roles;
+            }
+        } catch (Exception ignored) {
+        }
+        return java.util.Collections.emptyList();
+    }
+
+    /**
      * Get expiration date from token.
      */
     public Date getExpirationDateFromToken(String token) {
