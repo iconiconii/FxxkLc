@@ -7,6 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 // import org.springframework.cache.Cache;
 // import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.Cursor;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -131,15 +136,24 @@ public class CacheInvalidationManager {
     public void flushAllCaches() {
         log.warn("Emergency cache flush initiated");
         
-        // Clear all Redis keys with our cache prefixes
+        // Clear all Redis keys with our cache prefixes using SCAN to avoid blocking
         try {
-            Set<String> keys = redisTemplate.keys("codetop:*");
-            if (keys != null && !keys.isEmpty()) {
+            Set<String> keys = new HashSet<>();
+            RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            ScanOptions options = ScanOptions.scanOptions().match("codetop:*").count(2000).build();
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            }
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.warn("Deleted {} cache keys during emergency flush", keys.size());
+                log.warn("Deleted {} cache keys during emergency flush (SCAN)", keys.size());
+            } else {
+                log.warn("No cache keys found to flush");
             }
         } catch (Exception e) {
-            log.error("Error during emergency cache flush", e);
+            log.error("Error during emergency cache flush (SCAN)", e);
         }
         
         // Alternative: flush entire Redis database (more aggressive)
@@ -153,15 +167,22 @@ public class CacheInvalidationManager {
      */
     private void clearCache(String pattern) {
         try {
-            Set<String> keys = redisTemplate.keys(pattern);
-            if (keys != null && !keys.isEmpty()) {
+            Set<String> keys = new HashSet<>();
+            RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            ScanOptions options = ScanOptions.scanOptions().match(pattern).count(1000).build();
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            }
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.info("Deleted {} cache keys matching pattern: {}", keys.size(), pattern);
+                log.info("Deleted {} cache keys matching pattern (SCAN): {}", keys.size(), pattern);
             } else {
-                log.info("No cache keys found matching pattern: {}", pattern);
+                log.info("No cache keys found matching pattern (SCAN): {}", pattern);
             }
         } catch (Exception e) {
-            log.error("Error clearing cache with pattern: {}", pattern, e);
+            log.error("Error clearing cache with pattern (SCAN): {}", pattern, e);
         }
     }
     

@@ -165,17 +165,25 @@ public class CacheInvalidationStrategy {
      */
     private void clearCacheSafely(String pattern) {
         try {
-            // Use existing implementation which handles KEYS operation safely
-            Set<String> keys = redisTemplate.keys(pattern);
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-                log.debug("Safely deleted {} cache keys matching pattern: {}", keys.size(), pattern);
-            } else {
-                log.debug("No cache keys found matching pattern: {}", pattern);
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            org.springframework.data.redis.connection.RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            org.springframework.data.redis.core.ScanOptions options = org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(1000)
+                    .build();
+            try (org.springframework.data.redis.core.Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), java.nio.charset.StandardCharsets.UTF_8));
+                }
             }
-            
+            if (!keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.debug("Safely deleted {} cache keys matching pattern (SCAN): {}", keys.size(), pattern);
+            } else {
+                log.debug("No cache keys found matching pattern (SCAN): {}", pattern);
+            }
         } catch (Exception e) {
-            log.error("Error safely clearing cache with pattern: {}", pattern, e);
+            log.error("Error safely clearing cache with pattern (SCAN): {}", pattern, e);
             // Don't throw exception to avoid breaking the main transaction
         }
     }

@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.codetop.util.CacheHelper;
 
 /**
  * CodeTop-style filtering service with comprehensive problem ranking and filtering capabilities.
@@ -46,6 +47,7 @@ public class CodeTopFilterService {
     private final PositionMapper positionMapper;
     private final FSRSCardMapper fsrsCardMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheHelper cacheHelper;
 
     /**
      * Get filtered and ranked problems using CodeTop-style filtering.
@@ -53,43 +55,44 @@ public class CodeTopFilterService {
     public CodeTopFilterResponse getFilteredProblems(CodeTopFilterRequest request) {
         log.info("Processing CodeTop filter request: company={}, department={}, position={}, keyword={}", 
                 request.getCompanyId(), request.getDepartmentId(), request.getPositionId(), request.getKeyword());
-        
-        try {
-            // Create pagination
-            Page<ProblemFrequencyStats> page = new Page<>(request.getPage(), request.getSize());
-            
-            // Build query based on request filters
-            Page<ProblemFrequencyStats> statsPage = buildFilteredQuery(request, page);
-            
-            // Convert to ProblemRankingDTO list
-            List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(statsPage.getRecords(), request);
-            
-            // Build summary statistics
-            CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(statsPage.getRecords());
-            
-            CodeTopFilterResponse response = CodeTopFilterResponse.builder()
-                .problems(problemRankings)
-                .totalElements(statsPage.getTotal())
-                .currentPage((long) request.getPage())
-                .pageSize((long) request.getSize())
-                .totalPages(statsPage.getPages())
-                .summary(summary)
-                .build();
-            
-            log.info("CodeTop filter completed: found {} problems", problemRankings.size());
-            return response;
-            
-        } catch (Exception e) {
-            log.error("Error processing CodeTop filter request: {}", e.getMessage(), e);
-            // Return empty response on error
-            return CodeTopFilterResponse.builder()
-                .problems(Collections.emptyList())
-                .totalElements(0L)
-                .currentPage((long) request.getPage())
-                .pageSize((long) request.getSize())
-                .totalPages(0L)
-                .build();
-        }
+
+        // Safer cache key: hash of full request + paging
+        String cacheKey = com.codetop.service.CacheKeyBuilder.buildHashKey(
+                "codetop",
+                request,
+                "filter",
+                "page_" + request.getPage(),
+                "size_" + request.getSize()
+        );
+
+        return cacheHelper.cacheOrCompute(cacheKey, CodeTopFilterResponse.class, Duration.ofMinutes(15), () -> {
+            try {
+                Page<ProblemFrequencyStats> page = new Page<>(request.getPage(), request.getSize());
+                Page<ProblemFrequencyStats> statsPage = buildFilteredQuery(request, page);
+                List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(statsPage.getRecords(), request);
+                CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(statsPage.getRecords());
+
+                CodeTopFilterResponse response = CodeTopFilterResponse.builder()
+                        .problems(problemRankings)
+                        .totalElements(statsPage.getTotal())
+                        .currentPage((long) request.getPage())
+                        .pageSize((long) request.getSize())
+                        .totalPages(statsPage.getPages())
+                        .summary(summary)
+                        .build();
+                log.info("CodeTop filter completed: found {} problems", problemRankings.size());
+                return response;
+            } catch (Exception e) {
+                log.error("Error processing CodeTop filter request: {}", e.getMessage(), e);
+                return CodeTopFilterResponse.builder()
+                        .problems(Collections.emptyList())
+                        .totalElements(0L)
+                        .currentPage((long) request.getPage())
+                        .pageSize((long) request.getSize())
+                        .totalPages(0L)
+                        .build();
+            }
+        });
     }
 
     /**
@@ -780,93 +783,55 @@ public class CodeTopFilterService {
      */
     public CodeTopFilterResponse getGlobalProblems(Integer page, Integer size, String sortBy, String sortOrder) {
         log.info("Getting global problems: page={}, size={}, sortBy={}, sortOrder={}", page, size, sortBy, sortOrder);
-        
-        // Generate cache key using CacheKeyBuilder
         String cacheKey = CacheKeyBuilder.codetopGlobalProblems(page, size, sortBy, sortOrder);
-        
-        // Try to get from cache first
-        try {
-            Object cachedResult = redisTemplate.opsForValue().get(cacheKey);
-            if (cachedResult instanceof CodeTopFilterResponse) {
-                log.info("Cache HIT for global problems: {}", cacheKey);
-                return (CodeTopFilterResponse) cachedResult;
-            }
-            log.info("Cache MISS for global problems: {}", cacheKey);
-        } catch (Exception e) {
-            log.warn("Error reading from cache: {}", e.getMessage());
-        }
-        
-        try {
-            // Create pagination
-            Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
-            
-            // Build query for GLOBAL scope only
-            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("stats_scope", "GLOBAL");
-            
-            // Sorting
-            boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
-            switch (sortBy) {
-                case "frequency_score":
-                    if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
-                    else queryWrapper.orderByAsc("total_frequency_score");
-                    break;
-                case "interview_count":
-                    if (isDesc) queryWrapper.orderByDesc("interview_count");
-                    else queryWrapper.orderByAsc("interview_count");
-                    break;
-                case "last_asked_date":
-                    if (isDesc) queryWrapper.orderByDesc("last_asked_date");
-                    else queryWrapper.orderByAsc("last_asked_date");
-                    break;
-                default:
-                    queryWrapper.orderByDesc("total_frequency_score");
-            }
-            
-            // Secondary sort by frequency rank
-            queryWrapper.orderByAsc("frequency_rank");
-            
-            Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
-            
-            // Convert to ProblemRankingDTO list
-            CodeTopFilterRequest emptyRequest = new CodeTopFilterRequest();
-            List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(globalStats.getRecords(), emptyRequest);
-            
-            // Build summary statistics
-            CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
-            
-            CodeTopFilterResponse response = CodeTopFilterResponse.builder()
-                .problems(problemRankings)
-                .totalElements(globalStats.getTotal())
-                .currentPage((long) page)
-                .pageSize((long) size)
-                .totalPages(globalStats.getPages())
-                .summary(summary)
-                .build();
-            
-            log.info("Global problems query completed: found {} problems", problemRankings.size());
-            
-            // Store in cache with TTL (1 hour)
+        return cacheHelper.cacheOrCompute(cacheKey, CodeTopFilterResponse.class, Duration.ofHours(1), () -> {
             try {
-                redisTemplate.opsForValue().set(cacheKey, response, Duration.ofHours(1));
-                log.info("Cached global problems result: {}", cacheKey);
+                Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
+                QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("stats_scope", "GLOBAL");
+                boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
+                switch (sortBy) {
+                    case "frequency_score":
+                        if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
+                        else queryWrapper.orderByAsc("total_frequency_score");
+                        break;
+                    case "interview_count":
+                        if (isDesc) queryWrapper.orderByDesc("interview_count");
+                        else queryWrapper.orderByAsc("interview_count");
+                        break;
+                    case "last_asked_date":
+                        if (isDesc) queryWrapper.orderByDesc("last_asked_date");
+                        else queryWrapper.orderByAsc("last_asked_date");
+                        break;
+                    default:
+                        queryWrapper.orderByDesc("total_frequency_score");
+                }
+                queryWrapper.orderByAsc("frequency_rank");
+                Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
+                CodeTopFilterRequest emptyRequest = new CodeTopFilterRequest();
+                List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOs(globalStats.getRecords(), emptyRequest);
+                CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
+                CodeTopFilterResponse response = CodeTopFilterResponse.builder()
+                        .problems(problemRankings)
+                        .totalElements(globalStats.getTotal())
+                        .currentPage((long) page)
+                        .pageSize((long) size)
+                        .totalPages(globalStats.getPages())
+                        .summary(summary)
+                        .build();
+                log.info("Global problems query completed: found {} problems", problemRankings.size());
+                return response;
             } catch (Exception e) {
-                log.warn("Error storing to cache: {}", e.getMessage());
+                log.error("Error getting global problems: {}", e.getMessage(), e);
+                return CodeTopFilterResponse.builder()
+                        .problems(Collections.emptyList())
+                        .totalElements(0L)
+                        .currentPage((long) page)
+                        .pageSize((long) size)
+                        .totalPages(0L)
+                        .build();
             }
-            
-            return response;
-            
-        } catch (Exception e) {
-            log.error("Error getting global problems: {}", e.getMessage(), e);
-            // Return empty response on error
-            return CodeTopFilterResponse.builder()
-                .problems(Collections.emptyList())
-                .totalElements(0L)
-                .currentPage((long) page)
-                .pageSize((long) size)
-                .totalPages(0L)
-                .build();
-        }
+        });
     }
 
     /**
@@ -877,22 +842,9 @@ public class CodeTopFilterService {
         log.info("Getting global problems with user status: userId={}, page={}, size={}, sortBy={}, sortOrder={}", 
                  userId, page, size, sortBy, sortOrder);
         
-        // Generate cache key using CacheKeyBuilder that includes user ID
         String cacheKey = CacheKeyBuilder.codetopGlobalProblemsWithUserStatus(userId, page, size, sortBy, sortOrder);
-        
-        // Try to get from cache first
-        try {
-            Object cachedResult = redisTemplate.opsForValue().get(cacheKey);
-            if (cachedResult instanceof CodeTopFilterResponse) {
-                log.info("Cache HIT for global problems with user status: {}", cacheKey);
-                return (CodeTopFilterResponse) cachedResult;
-            }
-            log.info("Cache MISS for global problems with user status: {}", cacheKey);
-        } catch (Exception e) {
-            log.warn("Error reading from cache: {}", e.getMessage());
-        }
-        
-        try {
+        return cacheHelper.cacheOrCompute(cacheKey, CodeTopFilterResponse.class, Duration.ofMinutes(15), () -> {
+            try {
             // Get base global problems data
             Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
             
@@ -956,30 +908,20 @@ public class CodeTopFilterService {
                 .summary(summary)
                 .build();
             
-            log.info("Global problems with user status query completed: found {} problems for user {}", 
-                     problemRankings.size(), userId);
-            
-            // Store in cache with shorter TTL (15 minutes for user-specific data)
-            try {
-                redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(15));
-                log.info("Cached global problems with user status result: {}", cacheKey);
+                log.info("Global problems with user status query completed: found {} problems for user {}", 
+                         problemRankings.size(), userId);
+                return response;
             } catch (Exception e) {
-                log.warn("Error storing to cache: {}", e.getMessage());
+                log.error("Error getting global problems with user status: {}", e.getMessage(), e);
+                return CodeTopFilterResponse.builder()
+                    .problems(Collections.emptyList())
+                    .totalElements(0L)
+                    .currentPage((long) page)
+                    .pageSize((long) size)
+                    .totalPages(0L)
+                    .build();
             }
-            
-            return response;
-            
-        } catch (Exception e) {
-            log.error("Error getting global problems with user status: {}", e.getMessage(), e);
-            // Return empty response on error
-            return CodeTopFilterResponse.builder()
-                .problems(Collections.emptyList())
-                .totalElements(0L)
-                .currentPage((long) page)
-                .pageSize((long) size)
-                .totalPages(0L)
-                .build();
-        }
+        });
     }
 
     /**
@@ -1057,13 +999,23 @@ public class CodeTopFilterService {
         }
         
         try {
-            // Clear all cached entries for this user's problem status using CacheKeyBuilder pattern
             String pattern = CacheKeyBuilder.codetopUserStatusDomain(userId);
-            Set<String> keys = redisTemplate.keys(pattern);
-            
-            if (keys != null && !keys.isEmpty()) {
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            org.springframework.data.redis.connection.RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            org.springframework.data.redis.core.ScanOptions options = org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(1000)
+                    .build();
+            try (org.springframework.data.redis.core.Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.info("Cleared {} user status cache entries for user {}", keys.size(), userId);
+                log.info("Cleared {} user status cache entries for user {} (SCAN)", keys.size(), userId);
+            } else {
+                log.debug("No user status cache entries found for user {}", userId);
             }
         } catch (Exception e) {
             log.error("Failed to clear user status cache for user {}: {}", userId, e.getMessage(), e);

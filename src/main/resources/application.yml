@@ -2,6 +2,8 @@ server:
   port: 8080
   servlet:
     context-path: /api/v1
+  # Trust reverse proxy forwarded headers (e.g., X-Forwarded-For / X-Real-IP)
+  forward-headers-strategy: native
 spring:
   application:
     name: codetop-fsrs-backend
@@ -375,9 +377,12 @@ spring:
   
   data:
     redis:
-      host: ${REDIS_URL}
-      password: ${REDIS_PASSWORD}
-      
+      # Prefer full URL in production (e.g. redis://:password@redis:6379/0)
+      url: ${REDIS_URL:}
+      # Fallback host/port if URL not provided
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       jedis:
         pool:
           max-active: 200

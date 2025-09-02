@@ -1,0 +1,306 @@
+12:45:31,736 |-INFO in ch.qos.logback.classic.LoggerContext[default] - This is logback-classic version 1.4.14
+12:45:31,743 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Here is a list of configurators discovered as a service, by rank: 
+12:45:31,743 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d -   org.springframework.boot.logging.logback.RootLogLevelConfigurator
+12:45:31,743 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - They will be invoked in order until ExecutionStatus.DO_NOT_INVOKE_NEXT_IF_ANY is returned.
+12:45:31,743 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Constructed configurator of type class org.springframework.boot.logging.logback.RootLogLevelConfigurator
+12:45:31,753 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - org.springframework.boot.logging.logback.RootLogLevelConfigurator.configure() call lasted 1 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
+12:45:31,753 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Trying to configure with ch.qos.logback.classic.joran.SerializedModelConfigurator
+12:45:31,755 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Constructed configurator of type class ch.qos.logback.classic.joran.SerializedModelConfigurator
+12:45:31,759 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.scmo]
+12:45:31,760 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback.scmo]
+12:45:31,760 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - ch.qos.logback.classic.joran.SerializedModelConfigurator.configure() call lasted 5 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
+12:45:31,760 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Trying to configure with ch.qos.logback.classic.util.DefaultJoranConfigurator
+12:45:31,761 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Constructed configurator of type class ch.qos.logback.classic.util.DefaultJoranConfigurator
+12:45:31,762 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.xml]
+12:45:31,763 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback.xml]
+12:45:31,763 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - ch.qos.logback.classic.util.DefaultJoranConfigurator.configure() call lasted 2 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
+12:45:31,763 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Trying to configure with ch.qos.logback.classic.BasicConfigurator
+12:45:31,767 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - Constructed configurator of type class ch.qos.logback.classic.BasicConfigurator
+12:45:31,767 |-INFO in ch.qos.logback.classic.BasicConfigurator@41925502 - Setting up default configuration.
+12:45:31,792 |-INFO in ch.qos.logback.classic.util.ContextInitializer@12bfd80d - ch.qos.logback.classic.BasicConfigurator.configure() call lasted 25 milliseconds. ExecutionStatus=NEUTRAL
+12:45:32,807 |-INFO in ch.qos.logback.core.joran.util.ConfigurationWatchListUtil@13e3c1c7 - Adding [jar:file:/home/icon/.m2/repository/org/springframework/boot/spring-boot/3.2.1/spring-boot-3.2.1.jar!/org/springframework/boot/logging/logback/defaults.xml] to configuration watch list.
+12:45:32,807 |-INFO in ch.qos.logback.core.joran.spi.ConfigurationWatchList@5316e95f - URL [jar:file:/home/icon/.m2/repository/org/springframework/boot/spring-boot/3.2.1/spring-boot-3.2.1.jar!/org/springframework/boot/logging/logback/defaults.xml] is not of type file
+12:45:32,810 |-INFO in ch.qos.logback.core.joran.action.ConversionRuleAction - registering conversion word clr with class [org.springframework.boot.logging.logback.ColorConverter]
+12:45:32,810 |-INFO in ch.qos.logback.core.joran.action.ConversionRuleAction - registering conversion word correlationId with class [org.springframework.boot.logging.logback.CorrelationIdConverter]
+12:45:32,810 |-INFO in ch.qos.logback.core.joran.action.ConversionRuleAction - registering conversion word wex with class [org.springframework.boot.logging.logback.WhitespaceThrowableProxyConverter]
+12:45:32,810 |-INFO in ch.qos.logback.core.joran.action.ConversionRuleAction - registering conversion word wEx with class [org.springframework.boot.logging.logback.ExtendedWhitespaceThrowableProxyConverter]
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - <springProfile> elements cannot be nested within an <appender>, <logger> or <root> element
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <appender> at line 24 contains a nested <springProfile> element at line 26
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <appender> at line 24 contains a nested <springProfile> element at line 29
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 212 contains a nested <springProfile> element at line 214
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 220 contains a nested <springProfile> element at line 222
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 228 contains a nested <springProfile> element at line 230
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 236 contains a nested <springProfile> element at line 238
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 244 contains a nested <springProfile> element at line 246
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 252 contains a nested <springProfile> element at line 254
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 260 contains a nested <springProfile> element at line 262
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 268 contains a nested <springProfile> element at line 270
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 276 contains a nested <springProfile> element at line 278
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 284 contains a nested <springProfile> element at line 286
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 292 contains a nested <springProfile> element at line 294
+12:45:32,825 |-WARN in org.springframework.boot.logging.logback.SpringProfileIfNestedWithinSecondPhaseElementSanityChecker@3f053c80 - Element <logger> at line 300 contains a nested <springProfile> element at line 302
+12:45:32,892 |-INFO in ch.qos.logback.classic.model.processor.ConfigurationModelHandlerFull - Registering a new ReconfigureOnChangeTask ReconfigureOnChangeTask(born:1756788332891)
+12:45:32,893 |-INFO in ch.qos.logback.classic.model.processor.ConfigurationModelHandlerFull - Will scan for changes in [file:/mnt/e/FxxkLC/target/classes/logback-spring.xml] 
+12:45:32,893 |-INFO in ch.qos.logback.classic.model.processor.ConfigurationModelHandlerFull - Setting ReconfigureOnChangeTask scanning period to 1 minutes
+12:45:32,900 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.catalina.startup.DigesterFactory] to ERROR
+12:45:32,900 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating ERROR level on Logger[org.apache.catalina.startup.DigesterFactory] onto the JUL framework
+12:45:32,901 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.catalina.util.LifecycleBase] to ERROR
+12:45:32,901 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating ERROR level on Logger[org.apache.catalina.util.LifecycleBase] onto the JUL framework
+12:45:32,901 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.coyote.http11.Http11NioProtocol] to WARN
+12:45:32,901 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.apache.coyote.http11.Http11NioProtocol] onto the JUL framework
+12:45:32,901 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.sshd.common.util.SecurityUtils] to WARN
+12:45:32,901 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.apache.sshd.common.util.SecurityUtils] onto the JUL framework
+12:45:32,901 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.tomcat.util.net.NioSelectorPool] to WARN
+12:45:32,901 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.apache.tomcat.util.net.NioSelectorPool] onto the JUL framework
+12:45:32,901 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.eclipse.jetty.util.component.AbstractLifeCycle] to ERROR
+12:45:32,901 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating ERROR level on Logger[org.eclipse.jetty.util.component.AbstractLifeCycle] onto the JUL framework
+12:45:32,902 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.hibernate.validator.internal.util.Version] to WARN
+12:45:32,902 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.hibernate.validator.internal.util.Version] onto the JUL framework
+12:45:32,902 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.springframework.boot.actuate.endpoint.jmx] to WARN
+12:45:32,902 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.springframework.boot.actuate.endpoint.jmx] onto the JUL framework
+12:45:32,902 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [CONSOLE]
+12:45:32,902 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.ConsoleAppender]
+12:45:32,962 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [FILE]
+12:45:32,962 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+12:45:32,979 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1636588948 - setting totalSizeCap to 5 GB
+12:45:32,983 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1636588948 - No compression will be used
+12:45:32,985 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1636588948 - Will use the pattern ./logs/codetop-fsrs.%d{yyyy-MM-dd}.%i.log for the active file
+12:45:33,002 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@5b40ceb - The date pattern is 'yyyy-MM-dd' from file name pattern './logs/codetop-fsrs.%d{yyyy-MM-dd}.%i.log'.
+12:45:33,002 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@5b40ceb - Roll-over at midnight.
+12:45:33,007 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@5b40ceb - Setting initial period to 2025-09-02T04:41:17.938Z
+12:45:33,007 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@5b40ceb - SizeAndTimeBasedFNATP is deprecated. Use SizeAndTimeBasedRollingPolicy instead
+12:45:33,007 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@5b40ceb - For more information see http://logback.qos.ch/manual/appenders.html#SizeAndTimeBasedRollingPolicy
+12:45:33,014 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - Active log file name: ./logs/codetop-fsrs.log
+12:45:33,014 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - File property is set to [./logs/codetop-fsrs.log]
+12:45:33,017 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ERROR_FILE]
+12:45:33,017 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+12:45:33,020 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@331596257 - setting totalSizeCap to 2 GB
+12:45:33,020 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@331596257 - No compression will be used
+12:45:33,020 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@331596257 - Will use the pattern ./logs/codetop-fsrs-error.%d{yyyy-MM-dd}.%i.log for the active file
+12:45:33,021 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@1d8062d2 - The date pattern is 'yyyy-MM-dd' from file name pattern './logs/codetop-fsrs-error.%d{yyyy-MM-dd}.%i.log'.
+12:45:33,021 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@1d8062d2 - Roll-over at midnight.
+12:45:33,022 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@1d8062d2 - Setting initial period to 2025-09-02T04:24:12.871Z
+12:45:33,022 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@1d8062d2 - SizeAndTimeBasedFNATP is deprecated. Use SizeAndTimeBasedRollingPolicy instead
+12:45:33,022 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@1d8062d2 - For more information see http://logback.qos.ch/manual/appenders.html#SizeAndTimeBasedRollingPolicy
+12:45:33,024 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[ERROR_FILE] - Active log file name: ./logs/codetop-fsrs-error.log
+12:45:33,024 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[ERROR_FILE] - File property is set to [./logs/codetop-fsrs-error.log]
+12:45:33,025 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [SQL_FILE]
+12:45:33,025 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+12:45:33,026 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@509864971 - setting totalSizeCap to 2 GB
+12:45:33,026 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@509864971 - No compression will be used
+12:45:33,026 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@509864971 - Will use the pattern ./logs/codetop-fsrs-sql.%d{yyyy-MM-dd}.%i.log for the active file
+12:45:33,027 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3b956878 - The date pattern is 'yyyy-MM-dd' from file name pattern './logs/codetop-fsrs-sql.%d{yyyy-MM-dd}.%i.log'.
+12:45:33,027 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3b956878 - Roll-over at midnight.
+12:45:33,028 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3b956878 - Setting initial period to 2025-09-02T04:40:56.987Z
+12:45:33,028 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3b956878 - SizeAndTimeBasedFNATP is deprecated. Use SizeAndTimeBasedRollingPolicy instead
+12:45:33,028 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3b956878 - For more information see http://logback.qos.ch/manual/appenders.html#SizeAndTimeBasedRollingPolicy
+12:45:33,030 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[SQL_FILE] - Active log file name: ./logs/codetop-fsrs-sql.log
+12:45:33,030 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[SQL_FILE] - File property is set to [./logs/codetop-fsrs-sql.log]
+12:45:33,030 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [SECURITY_FILE]
+12:45:33,030 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+12:45:33,031 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@911501858 - setting totalSizeCap to 3 GB
+12:45:33,031 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@911501858 - No compression will be used
+12:45:33,031 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@911501858 - Will use the pattern ./logs/codetop-fsrs-security.%d{yyyy-MM-dd}.%i.log for the active file
+12:45:33,032 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@285c08c8 - The date pattern is 'yyyy-MM-dd' from file name pattern './logs/codetop-fsrs-security.%d{yyyy-MM-dd}.%i.log'.
+12:45:33,032 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@285c08c8 - Roll-over at midnight.
+12:45:33,033 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@285c08c8 - Setting initial period to 2025-09-01T07:26:28.152Z
+12:45:33,033 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@285c08c8 - SizeAndTimeBasedFNATP is deprecated. Use SizeAndTimeBasedRollingPolicy instead
+12:45:33,033 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@285c08c8 - For more information see http://logback.qos.ch/manual/appenders.html#SizeAndTimeBasedRollingPolicy
+12:45:33,035 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[SECURITY_FILE] - Active log file name: ./logs/codetop-fsrs-security.log
+12:45:33,035 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[SECURITY_FILE] - File property is set to [./logs/codetop-fsrs-security.log]
+12:45:33,035 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [BUSINESS_FILE]
+12:45:33,035 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+12:45:33,036 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@694069884 - setting totalSizeCap to 5 GB
+12:45:33,036 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@694069884 - No compression will be used
+12:45:33,036 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@694069884 - Will use the pattern ./logs/codetop-fsrs-business.%d{yyyy-MM-dd}.%i.log for the active file
+12:45:33,037 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3918c187 - The date pattern is 'yyyy-MM-dd' from file name pattern './logs/codetop-fsrs-business.%d{yyyy-MM-dd}.%i.log'.
+12:45:33,037 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3918c187 - Roll-over at midnight.
+12:45:33,038 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3918c187 - Setting initial period to 2025-09-02T04:41:17.736Z
+12:45:33,038 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3918c187 - SizeAndTimeBasedFNATP is deprecated. Use SizeAndTimeBasedRollingPolicy instead
+12:45:33,038 |-WARN in ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP@3918c187 - For more information see http://logback.qos.ch/manual/appenders.html#SizeAndTimeBasedRollingPolicy
+12:45:33,039 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[BUSINESS_FILE] - Active log file name: ./logs/codetop-fsrs-business.log
+12:45:33,039 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[BUSINESS_FILE] - File property is set to [./logs/codetop-fsrs-business.log]
+12:45:33,040 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ASYNC_FILE]
+12:45:33,040 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.classic.AsyncAppender]
+12:45:33,043 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [FILE] to ch.qos.logback.classic.AsyncAppender[ASYNC_FILE]
+12:45:33,043 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_FILE] - Attaching appender named [FILE] to AsyncAppender.
+12:45:33,044 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_FILE] - Setting discardingThreshold to 820
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ASYNC_ERROR_FILE]
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.classic.AsyncAppender]
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ERROR_FILE] to ch.qos.logback.classic.AsyncAppender[ASYNC_ERROR_FILE]
+12:45:33,044 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_ERROR_FILE] - Attaching appender named [ERROR_FILE] to AsyncAppender.
+12:45:33,044 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_ERROR_FILE] - Setting discardingThreshold to 410
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ASYNC_BUSINESS_FILE]
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.classic.AsyncAppender]
+12:45:33,044 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [BUSINESS_FILE] to ch.qos.logback.classic.AsyncAppender[ASYNC_BUSINESS_FILE]
+12:45:33,044 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_BUSINESS_FILE] - Attaching appender named [BUSINESS_FILE] to AsyncAppender.
+12:45:33,044 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_BUSINESS_FILE] - Setting discardingThreshold to 410
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ASYNC_SECURITY_FILE]
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.classic.AsyncAppender]
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [SECURITY_FILE] to ch.qos.logback.classic.AsyncAppender[ASYNC_SECURITY_FILE]
+12:45:33,045 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_SECURITY_FILE] - Attaching appender named [SECURITY_FILE] to AsyncAppender.
+12:45:33,045 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_SECURITY_FILE] - Setting discardingThreshold to 205
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [ASYNC_SQL_FILE]
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.classic.AsyncAppender]
+12:45:33,045 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [SQL_FILE] to ch.qos.logback.classic.AsyncAppender[ASYNC_SQL_FILE]
+12:45:33,045 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_SQL_FILE] - Attaching appender named [SQL_FILE] to AsyncAppender.
+12:45:33,045 |-INFO in ch.qos.logback.classic.AsyncAppender[ASYNC_SQL_FILE] - Setting discardingThreshold to 410
+12:45:33,045 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.mapper] to DEBUG
+12:45:33,045 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating DEBUG level on Logger[com.codetop.mapper] onto the JUL framework
+12:45:33,046 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.mapper] to false
+12:45:33,046 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SQL_FILE] to Logger[com.codetop.mapper]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.mapper]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.ibatis] to DEBUG
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating DEBUG level on Logger[org.apache.ibatis] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [org.apache.ibatis] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SQL_FILE] to Logger[org.apache.ibatis]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[org.apache.ibatis]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.security] to INFO
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating INFO level on Logger[com.codetop.security] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.security] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SECURITY_FILE] to Logger[com.codetop.security]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.security]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.service.AuthService] to INFO
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating INFO level on Logger[com.codetop.service.AuthService] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.service.AuthService] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SECURITY_FILE] to Logger[com.codetop.service.AuthService]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.service.AuthService]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.util.JwtUtil] to INFO
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating INFO level on Logger[com.codetop.util.JwtUtil] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.util.JwtUtil] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SECURITY_FILE] to Logger[com.codetop.util.JwtUtil]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.util.JwtUtil]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.service] to INFO
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating INFO level on Logger[com.codetop.service] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.service] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_BUSINESS_FILE] to Logger[com.codetop.service]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.service]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.controller] to INFO
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating INFO level on Logger[com.codetop.controller] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.controller] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_BUSINESS_FILE] to Logger[com.codetop.controller]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.controller]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.codetop.algorithm] to DEBUG
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating DEBUG level on Logger[com.codetop.algorithm] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.codetop.algorithm] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_BUSINESS_FILE] to Logger[com.codetop.algorithm]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.codetop.algorithm]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.springframework.security] to WARN
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.springframework.security] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [org.springframework.security] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SECURITY_FILE] to Logger[org.springframework.security]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[org.springframework.security]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.redisson] to WARN
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.redisson] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [org.redisson] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_FILE] to Logger[org.redisson]
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[org.redisson]
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.alibaba.druid] to WARN
+12:45:33,047 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[com.alibaba.druid] onto the JUL framework
+12:45:33,047 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.alibaba.druid] to false
+12:45:33,047 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_SQL_FILE] to Logger[com.alibaba.druid]
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.alibaba.druid]
+12:45:33,048 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.springframework.web] to WARN
+12:45:33,048 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@6c6c5427 - Propagating WARN level on Logger[org.springframework.web] onto the JUL framework
+12:45:33,048 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [org.springframework.web] to false
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_FILE] to Logger[org.springframework.web]
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[org.springframework.web]
+12:45:33,048 |-INFO in ch.qos.logback.classic.model.processor.RootLoggerModelHandler - Setting level of ROOT logger to DEBUG
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[ROOT]
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_FILE] to Logger[ROOT]
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [ASYNC_ERROR_FILE] to Logger[ROOT]
+12:45:33,048 |-INFO in ch.qos.logback.core.model.processor.DefaultProcessor@2c88b9fc - End of configuration.
+12:45:33,049 |-INFO in org.springframework.boot.logging.logback.SpringBootJoranConfigurator@64dafeed - Registering current configuration as safe fallback point
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.1)
+
+2025-09-02 12:45:33.516 []  INFO 207477 --- [           main] com.codetop.CodetopFsrsApplication       : Starting CodetopFsrsApplication using Java 17.0.12 with PID 207477 (/mnt/e/FxxkLC/target/classes started by icon in /mnt/e/FxxkLC)
+2025-09-02 12:45:33.524 [] DEBUG 207477 --- [           main] com.codetop.CodetopFsrsApplication       : Running with Spring Boot v3.2.1, Spring v6.1.2
+2025-09-02 12:45:33.525 []  INFO 207477 --- [           main] com.codetop.CodetopFsrsApplication       : The following 1 profile is active: "dev"
+2025-09-02 12:45:39.407 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2025-09-02 12:45:39.409 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data MongoDB repositories in DEFAULT mode.
+2025-09-02 12:45:40.395 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 978 ms. Found 2 MongoDB repository interfaces.
+2025-09-02 12:45:41.467 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2025-09-02 12:45:41.469 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2025-09-02 12:45:42.146 []  INFO 207477 --- [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.codetop.repository.mongo.ProblemNoteContentRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2025-09-02 12:45:42.147 []  INFO 207477 --- [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.codetop.repository.mongo.ProblemNoteDetailRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2025-09-02 12:45:42.148 []  INFO 207477 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 663 ms. Found 0 Redis repository interfaces.
+2025-09-02 12:45:42.530 [] DEBUG 207477 --- [           main] org.apache.ibatis.logging.LogFactory     : Logging initialized using 'class org.apache.ibatis.logging.slf4j.Slf4jImpl' adapter.
+2025-09-02 12:45:47.197 []  INFO 207477 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2025-09-02 12:45:47.217 []  INFO 207477 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-09-02 12:45:47.218 []  INFO 207477 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.17]
+2025-09-02 12:45:47.304 []  INFO 207477 --- [           main] o.a.c.c.C.[.[localhost].[/api/v1]        : Initializing Spring embedded WebApplicationContext
+2025-09-02 12:45:47.304 []  INFO 207477 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 13637 ms
+2025-09-02 12:45:49.207 []  INFO 207477 --- [           main] com.codetop.config.MyBatisPlusConfig     : Custom IllegalSQL interceptor configured with relaxed OR clause restrictions
+2025-09-02 12:45:49.208 []  INFO 207477 --- [           main] com.codetop.config.MyBatisPlusConfig     : MyBatis-Plus interceptor configured with pagination, optimistic lock, and security plugins
+Logging initialized using 'class org.apache.ibatis.logging.stdout.StdOutImpl' adapter.
+2025-09-02 12:45:52.472 [] DEBUG 207477 --- [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Registered plugin: 'com.codetop.logging.SqlLoggingInterceptor@334d825c'
+2025-09-02 12:45:52.473 [] DEBUG 207477 --- [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Registered plugin: 'com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor@32c8d67'
+2025-09-02 12:45:52.736 [] DEBUG 207477 --- [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [/mnt/e/FxxkLC/target/classes/mapper/FSRSCardMapper.xml]'
+Initialization Sequence datacenterId:1 workerId:12
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.5 
+2025-09-02 12:45:53.438 []  INFO 207477 --- [           main] c.c.config.UniversalJsonRedisSerializer  : UniversalJsonRedisSerializer initialized with enhanced type information handling
+2025-09-02 12:45:53.439 []  INFO 207477 --- [           main] com.codetop.config.RedisConfig           : Redis template configured with UniversalJsonRedisSerializer for enhanced type handling
+2025-09-02 12:45:54.275 [] DEBUG 207477 --- [           main] o.s.w.f.ServerHttpObservationFilter      : Filter 'webMvcObservationFilter' configured for use
+2025-09-02 12:45:54.283 [] DEBUG 207477 --- [           main] o.s.web.filter.ForwardedHeaderFilter     : Filter 'forwardedHeaderFilter' configured for use
+2025-09-02 12:45:54.496 []  INFO 207477 --- [           main] c.codetop.config.MyBatisLoggingConfig    : SQL logging interceptor registered with 1 SqlSessionFactory instances
+2025-09-02 12:45:57.097 []  INFO 207477 --- [           main] org.mongodb.driver.client                : MongoClient with metadata {"driver": {"name": "mongo-java-driver|sync|spring-boot", "version": "4.11.1"}, "os": {"type": "Linux", "name": "Linux", "architecture": "amd64", "version": "6.6.87.2-microsoft-standard-WSL2"}, "platform": "Java/Oracle Corporation/17.0.12+8-LTS-286"} created with settings MongoClientSettings{readPreference=primary, writeConcern=WriteConcern{w=null, wTimeout=null ms, journal=null}, retryWrites=true, retryReads=true, readConcern=ReadConcern{level=null}, credential=MongoCredential{mechanism=null, userName='root', source='admin', password=<hidden>, mechanismProperties=<hidden>}, transportSettings=null, streamFactoryFactory=null, commandListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsCommandListener@5d180628], codecRegistry=ProvidersCodecRegistry{codecProviders=[ValueCodecProvider{}, BsonValueCodecProvider{}, DBRefCodecProvider{}, DBObjectCodecProvider{}, DocumentCodecProvider{}, CollectionCodecProvider{}, IterableCodecProvider{}, MapCodecProvider{}, GeoJsonCodecProvider{}, GridFSFileCodecProvider{}, Jsr310CodecProvider{}, JsonObjectCodecProvider{}, BsonCodecProvider{}, EnumCodecProvider{}, com.mongodb.client.model.mql.ExpressionCodecProvider@448c4742, com.mongodb.Jep395RecordCodecProvider@308498a8, com.mongodb.KotlinCodecProvider@118cbb26]}, loggerSettings=LoggerSettings{maxDocumentLength=1000}, clusterSettings={hosts=[localhost:27018], srvServiceName=mongodb, mode=SINGLE, requiredClusterType=UNKNOWN, requiredReplicaSetName='null', serverSelector='null', clusterListeners='[]', serverSelectionTimeout='30000 ms', localThreshold='15 ms'}, socketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=0, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, heartbeatSocketSettings=SocketSettings{connectTimeoutMS=10000, readTimeoutMS=10000, receiveBufferSize=0, proxySettings=ProxySettings{host=null, port=null, username=null, password=null}}, connectionPoolSettings=ConnectionPoolSettings{maxSize=100, minSize=0, maxWaitTimeMS=120000, maxConnectionLifeTimeMS=0, maxConnectionIdleTimeMS=0, maintenanceInitialDelayMS=0, maintenanceFrequencyMS=60000, connectionPoolListeners=[io.micrometer.core.instrument.binder.mongodb.MongoMetricsConnectionPoolListener@44233014], maxConnecting=2}, serverSettings=ServerSettings{heartbeatFrequencyMS=10000, minHeartbeatFrequencyMS=500, serverListeners='[]', serverMonitorListeners='[]'}, sslSettings=SslSettings{enabled=false, invalidHostNameAllowed=false, context=null}, applicationName='null', compressorList=[], uuidRepresentation=JAVA_LEGACY, serverApi=null, autoEncryptionSettings=null, dnsClient=null, inetAddressResolver=null, contextProvider=null}
+2025-09-02 12:45:57.122 []  INFO 207477 --- [localhost:27018] org.mongodb.driver.cluster               : Monitor thread successfully connected to server with description ServerDescription{address=localhost:27018, type=STANDALONE, state=CONNECTED, ok=true, minWireVersion=0, maxWireVersion=21, maxDocumentSize=16777216, logicalSessionTimeoutMinutes=30, roundTripTimeNanos=72036393}
+2025-09-02 12:46:00.178 [] DEBUG 207477 --- [           main] s.w.s.m.m.a.RequestMappingHandlerMapping : 98 mappings in 'requestMappingHandlerMapping'
+2025-09-02 12:46:00.331 [] DEBUG 207477 --- [           main] o.s.w.s.handler.SimpleUrlHandlerMapping  : Patterns [/webjars/**, /**, /swagger-ui*/*swagger-initializer.js, /swagger-ui*/**] in 'resourceHandlerMapping'
+2025-09-02 12:46:00.972 []  INFO 207477 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 5 endpoint(s) beneath base path '/actuator'
+2025-09-02 12:46:01.622 [] DEBUG 207477 --- [           main] s.w.s.m.m.a.RequestMappingHandlerAdapter : ControllerAdvice beans: 0 @ModelAttribute, 0 @InitBinder, 1 RequestBodyAdvice, 1 ResponseBodyAdvice
+2025-09-02 12:46:01.812 [] DEBUG 207477 --- [           main] .m.m.a.ExceptionHandlerExceptionResolver : ControllerAdvice beans: 3 @ExceptionHandler, 1 ResponseBodyAdvice
+2025-09-02 12:46:03.567 []  INFO 207477 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/api/v1'
+2025-09-02 12:46:03.580 []  INFO 207477 --- [           main] com.codetop.CodetopFsrsApplication       : Started CodetopFsrsApplication in 31.623 seconds (process running for 30.17)
+2025-09-02 12:46:03.588 [] DEBUG 207477 --- [           main] c.b.m.a.DdlApplicationRunner             :   ...  DDL start create  ...  
+2025-09-02 12:46:03.590 [] DEBUG 207477 --- [           main] c.b.m.a.DdlApplicationRunner             :   ...  DDL end create  ...  
+2025-09-02 12:46:04.552 []  INFO 207477 --- [nio-8080-exec-1] o.a.c.c.C.[.[localhost].[/api/v1]        : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-09-02 12:46:04.553 []  INFO 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-09-02 12:46:04.553 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Detected StandardServletMultipartResolver
+2025-09-02 12:46:04.553 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Detected AcceptHeaderLocaleResolver
+2025-09-02 12:46:04.553 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Detected FixedThemeResolver
+2025-09-02 12:46:04.555 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Detected org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator@2a654f27
+2025-09-02 12:46:04.556 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Detected org.springframework.web.servlet.support.SessionFlashMapManager@7b0a864e
+2025-09-02 12:46:04.556 [] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : enableLoggingRequestDetails='false': request parameters and headers will be masked to prevent unsafe logging of potentially sensitive data
+2025-09-02 12:46:04.556 []  INFO 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 3 ms
+2025-09-02 12:46:04.726 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] com.codetop.logging.RequestTraceFilter   : Request trace context initialized - TraceId: 3168423a0b83419dbd38619b0afba5d0, UserId: null, Operation: GET_ACTUATOR_HEALTH, ClientIP: 127.0.0.1
+2025-09-02 12:46:04.727 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] com.codetop.logging.RequestTraceFilter   : Processing request: GET /api/v1/actuator/health - TraceId: 3168423a0b83419dbd38619b0afba5d0
+2025-09-02 12:46:04.739 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : GET "/api/v1/actuator/health", parameters={}
+2025-09-02 12:46:04.774 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] m.m.a.RequestResponseBodyMethodProcessor : Read "application/octet-stream" to []
+2025-09-02 12:46:04.952 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/vnd.spring-boot.actuator.v3+json', given [*/*] and supported [application/vnd.spring-boot.actuator.v3+json, application/vnd.spring-boot.actuator.v2+json, application/json]
+2025-09-02 12:46:05.057 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [org.springframework.boot.actuate.health.SystemHealth@5c2f0e20]
+2025-09-02 12:46:05.110 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-09-02 12:46:05.115 [3168423a0b83419dbd38619b0afba5d0] DEBUG 207477 --- [nio-8080-exec-1] com.codetop.logging.RequestTraceFilter   : Request processing completed - Duration: 397ms - Status: 200 - TraceId: 3168423a0b83419dbd38619b0afba5d0
+2025-09-02 12:46:05.116 [] DEBUG 207477 --- [nio-8080-exec-1] com.codetop.util.UserContext             : Cleared UserContext ThreadLocal
+2025-09-02 12:46:05.137 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] com.codetop.logging.RequestTraceFilter   : Request trace context initialized - TraceId: 5e3a9cf2c4784e1395fa5c1486eba674, UserId: null, Operation: PROBLEM_GET, ClientIP: 127.0.0.1
+2025-09-02 12:46:05.138 [5e3a9cf2c4784e1395fa5c1486eba674]  INFO 207477 --- [nio-8080-exec-3] com.codetop.access                       : Request started - GET /api/v1/codetop/problems/global from 127.0.0.1 [2025-09-02T12:46:05.138483766]
+2025-09-02 12:46:05.139 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] com.codetop.logging.RequestTraceFilter   : Processing request: GET /api/v1/codetop/problems/global - TraceId: 5e3a9cf2c4784e1395fa5c1486eba674
+2025-09-02 12:46:05.139 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : GET "/api/v1/codetop/problems/global", parameters={}
+2025-09-02 12:46:05.140 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.codetop.controller.CodeTopFilterController#getGlobalProblems(Integer, Integer, String, String)
+2025-09-02 12:46:05.161 [5e3a9cf2c4784e1395fa5c1486eba674]  INFO 207477 --- [nio-8080-exec-3] c.c.logging.ControllerLoggingAspect      : Controller request started: class=CodeTopFilterController, method=CodeTopFilterController.getGlobalProblems(..), httpMethod=GET, uri=/api/v1/codetop/problems/global, queryString='null', clientIp=127.0.0.1, userAgent='curl/7.81.0'
+2025-09-02 12:46:05.162 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] c.c.logging.ControllerLoggingAspect      : Controller request parameters: class=CodeTopFilterController, method=CodeTopFilterController.getGlobalProblems(..), parameters=[1, 20, frequency_score, desc]
+2025-09-02 12:46:05.178 [5e3a9cf2c4784e1395fa5c1486eba674]  INFO 207477 --- [nio-8080-exec-3] c.codetop.service.CodeTopFilterService   : Getting global problems: page=1, size=20, sortBy=frequency_score, sortOrder=desc
+2025-09-02 12:46:05.185 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] c.c.config.UniversalJsonRedisSerializer  : Deserializing JSON (length: 21490): {"@class":"com.codetop.dto.CodeTopFilterResponse","problems":["java.util.ArrayList",[{"@class":"com.codetop.dto.ProblemRankingDTO","problemId":1,"title":"无重复字符的最长子串","difficulty":"MEDIUM","problemUrl"...
+2025-09-02 12:46:05.331 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] c.c.config.UniversalJsonRedisSerializer  : Successfully deserialized object: CodeTopFilterResponse (JSON length: 21490)
+2025-09-02 12:46:05.332 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] com.codetop.util.CacheHelper             : Cache hit: key=codetop:codetop:global:page_1:size_20:sort_frequency_score:order_desc
+2025-09-02 12:46:05.335 [5e3a9cf2c4784e1395fa5c1486eba674]  INFO 207477 --- [nio-8080-exec-3] c.c.logging.ControllerLoggingAspect      : Controller request completed: class=CodeTopFilterController, method=CodeTopFilterController.getGlobalProblems(..), httpStatus=200 OK, duration=177ms, success=true
+2025-09-02 12:46:05.386 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] c.c.logging.ControllerLoggingAspect      : Controller response body: class=CodeTopFilterController, method=CodeTopFilterController.getGlobalProblems(..), response={"problems":[{"problemId":1,"title":"无重复字符的最长子串","difficulty":"MEDIUM","problemUrl":"https://leetcode.cn/problems/longest-substring-without-repeating-characters","leetcodeId":"3","mastery":null,"status":null,"notes":null,"lastAttemptDate":null,"lastConsideredDate":null,"attemptCount":null,"accuracy":null,"frequencyScore":976.00,"interviewCount":200,"frequencyRank":1,"percentile":100.00,"lastAskedDate":"2025-08-26","trend":"STABLE","recencyScore":1.0,"isHotProblem":true,"isTrending":false,"isTopP...
+2025-09-02 12:46:05.391 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2025-09-02 12:46:05.413 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [CodeTopFilterResponse(problems=[ProblemRankingDTO(problemId=1, title=无重复字符的最长子串, difficulty=MEDIUM,  (truncated)...]
+2025-09-02 12:46:05.419 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-09-02 12:46:05.420 [5e3a9cf2c4784e1395fa5c1486eba674]  INFO 207477 --- [nio-8080-exec-3] com.codetop.access                       : Request completed - GET /api/v1/codetop/problems/global - Status: 200 - Duration: 283ms - TraceId: 5e3a9cf2c4784e1395fa5c1486eba674
+2025-09-02 12:46:05.421 [5e3a9cf2c4784e1395fa5c1486eba674] DEBUG 207477 --- [nio-8080-exec-3] com.codetop.logging.RequestTraceFilter   : Request processing completed - Duration: 283ms - Status: 200 - TraceId: 5e3a9cf2c4784e1395fa5c1486eba674
+2025-09-02 12:46:05.423 [] DEBUG 207477 --- [nio-8080-exec-3] com.codetop.util.UserContext             : Cleared UserContext ThreadLocal
+2025-09-02 12:46:05.480 [] ERROR 207477 --- [nio-8080-exec-5] c.c.s.JwtAuthenticationEntryPoint        : Unauthorized error: Full authentication is required to access this resource
+2025-09-02 12:46:05.493 [] DEBUG 207477 --- [nio-8080-exec-5] com.codetop.util.UserContext             : Cleared UserContext ThreadLocal

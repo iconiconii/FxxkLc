@@ -116,6 +116,13 @@ public class RateLimitService {
     }
 
     /**
+     * Get configured per-user request limit.
+     */
+    public int getPerUserLimit() {
+        return rateLimitProperties.getPerUserLimit();
+    }
+
+    /**
      * Check if IP address is currently in violation backoff period.
      */
     public boolean isInViolationBackoff(String ipAddress) {

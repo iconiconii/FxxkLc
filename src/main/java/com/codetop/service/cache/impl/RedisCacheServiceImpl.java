@@ -183,23 +183,30 @@ public class RedisCacheServiceImpl implements CacheService {
                 log.warn("Cache deleteByPattern operation ignored - pattern is null or empty");
                 return 0;
             }
-            
-            Set<String> keys = redisTemplate.keys(pattern);
-            if (keys == null || keys.isEmpty()) {
-                log.debug("Cache DELETE BY PATTERN: pattern={}, no keys found", pattern);
+            // Use SCAN to avoid blocking the Redis server
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            org.springframework.data.redis.connection.RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            org.springframework.data.redis.core.ScanOptions options = org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(2000)
+                    .build();
+            try (org.springframework.data.redis.core.Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+            if (keys.isEmpty()) {
+                log.debug("Cache DELETE BY PATTERN (SCAN): pattern={}, no keys found", pattern);
                 return 0;
             }
-            
             Long deleted = redisTemplate.delete(keys);
             long result = deleted != null ? deleted : 0;
-            log.debug("Cache DELETE BY PATTERN: pattern={}, keys={}, deleted={}", pattern, keys.size(), result);
-            
+            log.debug("Cache DELETE BY PATTERN (SCAN): pattern={}, keys={}, deleted={}", pattern, keys.size(), result);
             evictionCount.addAndGet(result);
-            
             return result;
             
         } catch (Exception e) {
-            log.error("Cache deleteByPattern operation failed: pattern={}, error={}", pattern, e.getMessage(), e);
+            log.error("Cache deleteByPattern operation failed (SCAN): pattern={}, error={}", pattern, e.getMessage(), e);
             return 0;
         }
     }
@@ -269,15 +276,23 @@ public class RedisCacheServiceImpl implements CacheService {
                 log.warn("Cache keys operation ignored - pattern is null");
                 return Set.of();
             }
-            
-            Set<String> keys = redisTemplate.keys(pattern);
-            Set<String> result = keys != null ? keys : Set.of();
-            log.debug("Cache KEYS: pattern={}, count={}", pattern, result.size());
-            
-            return result;
-            
+
+            java.util.Set<String> results = new java.util.HashSet<>();
+            org.springframework.data.redis.connection.RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+            org.springframework.data.redis.core.ScanOptions options = org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(1000)
+                    .build();
+            try (org.springframework.data.redis.core.Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    results.add(new String(cursor.next(), java.nio.charset.StandardCharsets.UTF_8));
+                }
+            }
+            log.debug("Cache KEYS (SCAN): pattern={}, count={}", pattern, results.size());
+            return results;
+
         } catch (Exception e) {
-            log.error("Cache keys operation failed: pattern={}, error={}", pattern, e.getMessage(), e);
+            log.error("Cache keys operation failed (SCAN): pattern={}, error={}", pattern, e.getMessage(), e);
             return Set.of();
         }
     }

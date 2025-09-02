@@ -1,5 +1,26 @@
 {
+  "name": "codetop-fsrs-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "build": "npm run backend:build && npm run frontend:build",
+    "test": "npm run backend:test",
+    "backend:dev": "mvn spring-boot:run -Dspring-boot.run.profiles=dev",
+    "backend:build": "mvn -q -DskipTests package",
+    "backend:test": "mvn test",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:start": "npm --prefix frontend run start",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "e2e": "npm --prefix frontend run test:e2e",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f --tail=100"
+  },
   "dependencies": {
     "axios": "^1.11.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   }
 }

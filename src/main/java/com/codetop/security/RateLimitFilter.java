@@ -97,12 +97,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private String getClientIpAddress(HttpServletRequest request) {
         // Check various headers for the real IP address
+        // Prefer proxy-provided real IP, avoid trusting client-provided XFF blindly
         String[] headerNames = {
-            "X-Forwarded-For",
-            "X-Real-IP", 
-            "X-Originating-IP",
+            "X-Real-IP",
             "CF-Connecting-IP",
-            "True-Client-IP"
+            "True-Client-IP",
+            "X-Originating-IP",
+            "X-Forwarded-For"
         };
 
         for (String headerName : headerNames) {
@@ -151,10 +152,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             int remaining = rateLimitService.getRemainingRequests(userId);
             response.setHeader("X-RateLimit-Remaining", String.valueOf(remaining));
         }
-        
         long resetTime = Instant.now().getEpochSecond() + rateLimitService.getTimeUntilReset();
         response.setHeader("X-RateLimit-Reset", String.valueOf(resetTime));
-        response.setHeader("X-RateLimit-Limit", "100"); // Per-user limit
+        response.setHeader("X-RateLimit-Limit", String.valueOf(rateLimitService.getPerUserLimit()));
     }
 
     private void handleRateLimitExceeded(HttpServletRequest request, HttpServletResponse response, 

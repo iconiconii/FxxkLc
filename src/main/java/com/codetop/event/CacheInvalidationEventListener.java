@@ -35,7 +35,7 @@ public class CacheInvalidationEventListener {
      * Handle problem-related events - Synchronous execution with cache-first strategy
      * Cache invalidation happens BEFORE database commit to ensure consistency
      */
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleProblemEvent(ProblemEvent event) {
         log.info("Synchronously handling problem event: type={}, problemId={}", event.getType(), event.getProblemId());
         
