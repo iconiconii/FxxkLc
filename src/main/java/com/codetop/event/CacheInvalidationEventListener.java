@@ -31,6 +31,7 @@ public class CacheInvalidationEventListener {
     private final CacheInvalidationStrategy cacheInvalidationStrategy;
     private final CodeTopFilterService codeTopFilterService;
     private final org.springframework.scheduling.TaskScheduler taskScheduler;
+    private final com.codetop.config.AppCacheProperties appCacheProperties;
     
     /**
      * Handle problem-related events - Synchronous execution with cache-first strategy
@@ -47,13 +48,13 @@ public class CacheInvalidationEventListener {
                 case DELETED:
                     // Use synchronous cache invalidation strategy
                     cacheInvalidationStrategy.invalidateProblemCachesSync();
-                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches();
                     log.info("Problem caches invalidated (double delete) for event: {}", event.getType());
                     break;
                 case STATUS_CHANGED:
                     // More targeted invalidation for status changes
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
-                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches();
                     log.info("CodeTop filter caches invalidated (double delete) for status change");
                     break;
             }
@@ -75,13 +76,13 @@ public class CacheInvalidationEventListener {
             switch (event.getType()) {
                 case PROFILE_UPDATED:
                     cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
-                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId(), 500);
+                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId());
                     log.info("User caches invalidated (double delete) for profile update: userId={}", event.getUserId());
                     break;
                 case PROGRESS_UPDATED:
                     // Clear user progress and mastery caches
                     cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
-                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId(), 500);
+                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId());
                     // Also clear unified API cache for this user
                     codeTopFilterService.clearUserStatusCache(event.getUserId());
                     scheduleUserStatusClear(event.getUserId(), 500);
@@ -90,7 +91,7 @@ public class CacheInvalidationEventListener {
                 case PARAMETERS_OPTIMIZED:
                     // Clear FSRS-related caches for the user
                     cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
-                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId(), 500);
+                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId());
                     log.info("FSRS caches invalidated (double delete) for parameter optimization: userId={}", event.getUserId());
                     break;
             }
@@ -114,7 +115,7 @@ public class CacheInvalidationEventListener {
                 case REVIEW_COMPLETED:
                     // Clear user-specific FSRS caches
                     cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
-                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId(), 500);
+                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId());
                     
                     // Update user mastery cache for this specific problem
                     cacheInvalidationStrategy.evictCacheEntrySync("codetop-user-mastery", 
@@ -153,16 +154,16 @@ public class CacheInvalidationEventListener {
                     // Company hierarchy changes affect CodeTop filter results
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
                     cacheInvalidationStrategy.invalidateProblemCachesSync();
-                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
-                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches();
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches();
                     log.info("Company hierarchy caches invalidated (double delete): companyId={}", event.getCompanyId());
                     break;
                 case FREQUENCY_UPDATED:
                     // Frequency updates affect rankings and statistics
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
                     cacheInvalidationStrategy.invalidateProblemCachesSync(); // Statistics may change
-                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
-                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches();
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches();
                     log.info("Frequency update caches invalidated (double delete): companyId={}", event.getCompanyId());
                     break;
             }
@@ -175,7 +176,7 @@ public class CacheInvalidationEventListener {
 
     private void scheduleUserStatusClear(Long userId, long delayMillis) {
         try {
-            java.time.Instant when = java.time.Instant.now().plusMillis(delayMillis);
+            java.time.Instant when = java.time.Instant.now().plusMillis(appCacheProperties.getDoubleDeleteDelayMillis());
             taskScheduler.schedule(() -> {
                 try {
                     codeTopFilterService.clearUserStatusCache(userId);

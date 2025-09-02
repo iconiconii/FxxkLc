@@ -11,6 +11,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import com.codetop.config.AppCacheProperties;
 
 import java.util.Set;
 
@@ -38,6 +39,7 @@ public class CacheInvalidationStrategy {
     // private final CacheManager cacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
     private final TaskScheduler taskScheduler;
+    private final AppCacheProperties appCacheProperties;
     
     /**
      * Invalidate problem-related caches BEFORE database update
@@ -80,6 +82,10 @@ public class CacheInvalidationStrategy {
             try { invalidateProblemCachesSync(); } catch (Exception e) { log.warn("Delayed problem cache invalidation failed", e); }
         }, delayMillis);
     }
+
+    public void scheduleInvalidateProblemCaches() {
+        scheduleInvalidateProblemCaches(appCacheProperties.getDoubleDeleteDelayMillis());
+    }
     
     /**
      * Invalidate user-specific caches BEFORE database update
@@ -119,6 +125,10 @@ public class CacheInvalidationStrategy {
             try { invalidateUserCachesSync(userId); } catch (Exception e) { log.warn("Delayed user cache invalidation failed for user {}", userId, e); }
         }, delayMillis);
     }
+
+    public void scheduleInvalidateUserCaches(Long userId) {
+        scheduleInvalidateUserCaches(userId, appCacheProperties.getDoubleDeleteDelayMillis());
+    }
     
     /**
      * Invalidate FSRS-related caches BEFORE database update
@@ -154,6 +164,10 @@ public class CacheInvalidationStrategy {
             try { invalidateFSRSCachesSync(userId); } catch (Exception e) { log.warn("Delayed FSRS cache invalidation failed for user {}", userId, e); }
         }, delayMillis);
     }
+
+    public void scheduleInvalidateFSRSCaches(Long userId) {
+        scheduleInvalidateFSRSCaches(userId, appCacheProperties.getDoubleDeleteDelayMillis());
+    }
     
     /**
      * Invalidate CodeTop filter caches BEFORE database update
@@ -186,6 +200,10 @@ public class CacheInvalidationStrategy {
         schedule(() -> {
             try { invalidateCodetopFilterCachesSync(); } catch (Exception e) { log.warn("Delayed CodeTop filter cache invalidation failed", e); }
         }, delayMillis);
+    }
+
+    public void scheduleInvalidateCodetopFilterCaches() {
+        scheduleInvalidateCodetopFilterCaches(appCacheProperties.getDoubleDeleteDelayMillis());
     }
     
     /**

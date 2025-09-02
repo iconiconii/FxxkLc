@@ -1,11 +1,13 @@
 package com.codetop.config;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 @Configuration
+@EnableConfigurationProperties(AppCacheProperties.class)
 public class SchedulingConfig {
 
     @Bean
@@ -17,4 +19,3 @@ public class SchedulingConfig {
         return scheduler;
     }
 }
-
