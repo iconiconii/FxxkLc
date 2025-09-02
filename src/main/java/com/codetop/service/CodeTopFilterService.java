@@ -519,22 +519,25 @@ public class CodeTopFilterService {
      */
     public List<ProblemRankingDTO> getTrendingProblems(Integer limit, Integer days) {
         log.info("Getting trending problems with limit={}, days={}", limit, days);
-        
-        try {
-            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("frequency_trend", "INCREASING")
-                       .orderByDesc("total_frequency_score")
-                       .last("LIMIT " + limit);
-            
-            List<ProblemFrequencyStats> trendingStats = problemFrequencyStatsMapper.selectList(queryWrapper);
-            
-            CodeTopFilterRequest request = new CodeTopFilterRequest(); // Empty request for trending
-            return convertToProblemRankingDTOs(trendingStats, request);
-            
-        } catch (Exception e) {
-            log.error("Error getting trending problems", e);
-            return Collections.emptyList();
-        }
+        String cacheKey = CacheKeyBuilder.buildKey("codetop", "trending",
+                "limit_" + limit,
+                "days_" + days);
+
+        return cacheHelper.cacheOrComputeList(cacheKey, ProblemRankingDTO.class, Duration.ofMinutes(15), () -> {
+            try {
+                QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("frequency_trend", "INCREASING")
+                           .orderByDesc("total_frequency_score")
+                           .last("LIMIT " + limit);
+
+                List<ProblemFrequencyStats> trendingStats = problemFrequencyStatsMapper.selectList(queryWrapper);
+                CodeTopFilterRequest request = new CodeTopFilterRequest();
+                return convertToProblemRankingDTOs(trendingStats, request);
+            } catch (Exception e) {
+                log.error("Error getting trending problems", e);
+                return Collections.emptyList();
+            }
+        });
     }
 
     /**
@@ -542,30 +545,30 @@ public class CodeTopFilterService {
      */
     public List<ProblemRankingDTO> getHotProblems(Long companyId, Integer limit) {
         log.info("Getting hot problems for company={}, limit={}", companyId, limit);
-        
-        try {
-            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
-            queryWrapper.ge("total_frequency_score", 60.0); // Hot threshold
-            
-            if (companyId != null) {
-                queryWrapper.eq("company_id", companyId);
+        String cacheKey = CacheKeyBuilder.buildKey("codetop", "hot",
+                companyId != null ? "companyId_" + companyId : null,
+                "limit_" + limit);
+
+        return cacheHelper.cacheOrComputeList(cacheKey, ProblemRankingDTO.class, Duration.ofMinutes(15), () -> {
+            try {
+                QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+                queryWrapper.ge("total_frequency_score", 60.0);
+                if (companyId != null) {
+                    queryWrapper.eq("company_id", companyId);
+                }
+                queryWrapper.orderByDesc("total_frequency_score")
+                           .orderByAsc("frequency_rank")
+                           .last("LIMIT " + limit);
+
+                List<ProblemFrequencyStats> hotStats = problemFrequencyStatsMapper.selectList(queryWrapper);
+                CodeTopFilterRequest request = new CodeTopFilterRequest();
+                request.setCompanyId(companyId);
+                return convertToProblemRankingDTOs(hotStats, request);
+            } catch (Exception e) {
+                log.error("Error getting hot problems", e);
+                return Collections.emptyList();
             }
-            
-            queryWrapper.orderByDesc("total_frequency_score")
-                       .orderByAsc("frequency_rank")
-                       .last("LIMIT " + limit);
-            
-            List<ProblemFrequencyStats> hotStats = problemFrequencyStatsMapper.selectList(queryWrapper);
-            
-            CodeTopFilterRequest request = new CodeTopFilterRequest();
-            request.setCompanyId(companyId);
-            
-            return convertToProblemRankingDTOs(hotStats, request);
-            
-        } catch (Exception e) {
-            log.error("Error getting hot problems", e);
-            return Collections.emptyList();
-        }
+        });
     }
 
     /**
@@ -575,44 +578,43 @@ public class CodeTopFilterService {
                                                             Long departmentId, Long positionId, Integer limit) {
         log.info("Getting top problems by frequency: scope={}, company={}, department={}, position={}, limit={}",
                 scope, companyId, departmentId, positionId, limit);
-        
-        try {
-            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
-            
-            // Apply scope filtering
-            if (scope != null) {
-                queryWrapper.eq("stats_scope", scope.toUpperCase());
+        String cacheKey = CacheKeyBuilder.buildKey("codetop", "topfreq",
+                scope != null ? "scope_" + scope.toUpperCase() : null,
+                companyId != null ? "companyId_" + companyId : null,
+                departmentId != null ? "departmentId_" + departmentId : null,
+                positionId != null ? "positionId_" + positionId : null,
+                "limit_" + limit);
+
+        return cacheHelper.cacheOrComputeList(cacheKey, ProblemRankingDTO.class, Duration.ofMinutes(15), () -> {
+            try {
+                QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+                if (scope != null) {
+                    queryWrapper.eq("stats_scope", scope.toUpperCase());
+                }
+                if (companyId != null) {
+                    queryWrapper.eq("company_id", companyId);
+                }
+                if (departmentId != null) {
+                    queryWrapper.eq("department_id", departmentId);
+                }
+                if (positionId != null) {
+                    queryWrapper.eq("position_id", positionId);
+                }
+                queryWrapper.orderByDesc("total_frequency_score")
+                           .orderByAsc("frequency_rank")
+                           .last("LIMIT " + limit);
+
+                List<ProblemFrequencyStats> topStats = problemFrequencyStatsMapper.selectList(queryWrapper);
+                CodeTopFilterRequest request = new CodeTopFilterRequest();
+                request.setCompanyId(companyId);
+                request.setDepartmentId(departmentId);
+                request.setPositionId(positionId);
+                return convertToProblemRankingDTOs(topStats, request);
+            } catch (Exception e) {
+                log.error("Error getting top problems by frequency", e);
+                return Collections.emptyList();
             }
-            
-            if (companyId != null) {
-                queryWrapper.eq("company_id", companyId);
-            }
-            
-            if (departmentId != null) {
-                queryWrapper.eq("department_id", departmentId);
-            }
-            
-            if (positionId != null) {
-                queryWrapper.eq("position_id", positionId);
-            }
-            
-            queryWrapper.orderByDesc("total_frequency_score")
-                       .orderByAsc("frequency_rank")
-                       .last("LIMIT " + limit);
-            
-            List<ProblemFrequencyStats> topStats = problemFrequencyStatsMapper.selectList(queryWrapper);
-            
-            CodeTopFilterRequest request = new CodeTopFilterRequest();
-            request.setCompanyId(companyId);
-            request.setDepartmentId(departmentId);
-            request.setPositionId(positionId);
-            
-            return convertToProblemRankingDTOs(topStats, request);
-            
-        } catch (Exception e) {
-            log.error("Error getting top problems by frequency", e);
-            return Collections.emptyList();
-        }
+        });
     }
 
     /**
@@ -698,48 +700,41 @@ public class CodeTopFilterService {
      */
     public List<ProblemRankingDTO> getSimilarProblems(Long problemId, Integer limit) {
         log.info("Getting similar problems for problemId={}, limit={}", problemId, limit);
-        
-        try {
-            // Get the target problem
-            Problem targetProblem = problemMapper.selectById(problemId);
-            if (targetProblem == null) {
-                log.warn("Target problem not found: {}", problemId);
+        String cacheKey = CacheKeyBuilder.buildKey("codetop", "similar",
+                "problemId_" + problemId,
+                "limit_" + limit);
+
+        return cacheHelper.cacheOrComputeList(cacheKey, ProblemRankingDTO.class, Duration.ofMinutes(30), () -> {
+            try {
+                Problem targetProblem = problemMapper.selectById(problemId);
+                if (targetProblem == null) {
+                    log.warn("Target problem not found: {}", problemId);
+                    return Collections.emptyList();
+                }
+                Page<Problem> similarPage = new Page<>(1, limit);
+                QueryWrapper<Problem> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("difficulty", targetProblem.getDifficulty())
+                           .ne("id", problemId)
+                           .eq("is_active", true)
+                           .eq("deleted", 0);
+                Page<Problem> problems = problemMapper.selectPage(similarPage, queryWrapper);
+                return problems.getRecords().stream().map(problem ->
+                    ProblemRankingDTO.builder()
+                        .problemId(problem.getId())
+                        .title(problem.getTitle())
+                        .difficulty(problem.getDifficulty().name())
+                        .problemUrl(problem.getProblemUrl())
+                        .leetcodeId(problem.getLeetcodeId())
+                        .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
+                        .isPremium(problem.getIsPremium())
+                        .tags(problem.getTags())
+                        .build()
+                ).collect(Collectors.toList());
+            } catch (Exception e) {
+                log.error("Error getting similar problems", e);
                 return Collections.emptyList();
             }
-            
-            // This would require more complex similarity analysis based on:
-            // - Shared categories
-            // - Similar difficulty
-            // - Common companies that ask both problems
-            // For now, return problems with same difficulty as a basic implementation
-            
-            Page<Problem> similarPage = new Page<>(1, limit);
-            QueryWrapper<Problem> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("difficulty", targetProblem.getDifficulty())
-                       .ne("id", problemId)
-                       .eq("is_active", true)
-                       .eq("deleted", 0);
-            
-            Page<Problem> problems = problemMapper.selectPage(similarPage, queryWrapper);
-            
-            // Convert to ProblemRankingDTO with basic info
-            return problems.getRecords().stream().map(problem -> 
-                ProblemRankingDTO.builder()
-                    .problemId(problem.getId())
-                    .title(problem.getTitle())
-                    .difficulty(problem.getDifficulty().name())
-                    .problemUrl(problem.getProblemUrl())
-                    .leetcodeId(problem.getLeetcodeId())
-                    .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
-                    .isPremium(problem.getIsPremium())
-                    .tags(problem.getTags())
-                    .build()
-            ).collect(Collectors.toList());
-            
-        } catch (Exception e) {
-            log.error("Error getting similar problems", e);
-            return Collections.emptyList();
-        }
+        });
     }
 
     /**
