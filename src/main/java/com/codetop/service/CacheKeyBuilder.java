@@ -412,7 +412,10 @@ public class CacheKeyBuilder {
     
     private static String sanitizeParam(String param) {
         if (param == null) return "";
-        return param.replaceAll("[^a-zA-Z0-9\\u4e00-\\u9fa5]", "")
-                   .substring(0, Math.min(param.length(), 50));
+        String sanitized = param.replaceAll("[^a-zA-Z0-9\\u4e00-\\u9fa5]", "");
+        if (sanitized.length() <= 50) {
+            return sanitized;
+        }
+        return sanitized.substring(0, 50);
     }
 }
