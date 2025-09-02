@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 // import org.springframework.cache.Cache;
 // import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class CacheInvalidationStrategy {
     // Removed CacheManager dependency - using RedisTemplate directly after cache migration
     // private final CacheManager cacheManager;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final TaskScheduler taskScheduler;
     
     /**
      * Invalidate problem-related caches BEFORE database update
@@ -68,6 +70,15 @@ public class CacheInvalidationStrategy {
             log.error("Failed to invalidate problem caches synchronously in {}ms", duration, e);
             throw new RuntimeException("Cache invalidation failed", e);
         }
+    }
+
+    /**
+     * Schedule a delayed problem caches invalidation (double delete).
+     */
+    public void scheduleInvalidateProblemCaches(long delayMillis) {
+        schedule(() -> {
+            try { invalidateProblemCachesSync(); } catch (Exception e) { log.warn("Delayed problem cache invalidation failed", e); }
+        }, delayMillis);
     }
     
     /**
@@ -102,6 +113,12 @@ public class CacheInvalidationStrategy {
             throw new RuntimeException("Cache invalidation failed", e);
         }
     }
+
+    public void scheduleInvalidateUserCaches(Long userId, long delayMillis) {
+        schedule(() -> {
+            try { invalidateUserCachesSync(userId); } catch (Exception e) { log.warn("Delayed user cache invalidation failed for user {}", userId, e); }
+        }, delayMillis);
+    }
     
     /**
      * Invalidate FSRS-related caches BEFORE database update
@@ -131,6 +148,12 @@ public class CacheInvalidationStrategy {
             throw new RuntimeException("Cache invalidation failed", e);
         }
     }
+
+    public void scheduleInvalidateFSRSCaches(Long userId, long delayMillis) {
+        schedule(() -> {
+            try { invalidateFSRSCachesSync(userId); } catch (Exception e) { log.warn("Delayed FSRS cache invalidation failed for user {}", userId, e); }
+        }, delayMillis);
+    }
     
     /**
      * Invalidate CodeTop filter caches BEFORE database update
@@ -157,6 +180,12 @@ public class CacheInvalidationStrategy {
             log.error("Failed to invalidate CodeTop filter caches in {}ms", duration, e);
             throw new RuntimeException("Cache invalidation failed", e);
         }
+    }
+
+    public void scheduleInvalidateCodetopFilterCaches(long delayMillis) {
+        schedule(() -> {
+            try { invalidateCodetopFilterCachesSync(); } catch (Exception e) { log.warn("Delayed CodeTop filter cache invalidation failed", e); }
+        }, delayMillis);
     }
     
     /**
@@ -185,6 +214,16 @@ public class CacheInvalidationStrategy {
         } catch (Exception e) {
             log.error("Error safely clearing cache with pattern (SCAN): {}", pattern, e);
             // Don't throw exception to avoid breaking the main transaction
+        }
+    }
+
+    private void schedule(Runnable task, long delayMillis) {
+        try {
+            java.time.Instant start = java.time.Instant.now().plusMillis(delayMillis);
+            taskScheduler.schedule(task, start);
+        } catch (Exception e) {
+            log.warn("Failed to schedule delayed cache invalidation, running inline", e);
+            try { task.run(); } catch (Exception ex) { log.warn("Inline delayed invalidation failed", ex); }
         }
     }
     

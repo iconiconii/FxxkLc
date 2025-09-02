@@ -30,6 +30,7 @@ public class CacheInvalidationEventListener {
     private final CacheInvalidationManager cacheInvalidationManager;
     private final CacheInvalidationStrategy cacheInvalidationStrategy;
     private final CodeTopFilterService codeTopFilterService;
+    private final org.springframework.scheduling.TaskScheduler taskScheduler;
     
     /**
      * Handle problem-related events - Synchronous execution with cache-first strategy
@@ -46,12 +47,14 @@ public class CacheInvalidationEventListener {
                 case DELETED:
                     // Use synchronous cache invalidation strategy
                     cacheInvalidationStrategy.invalidateProblemCachesSync();
-                    log.info("Problem caches invalidated synchronously for event: {}", event.getType());
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    log.info("Problem caches invalidated (double delete) for event: {}", event.getType());
                     break;
                 case STATUS_CHANGED:
                     // More targeted invalidation for status changes
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
-                    log.info("CodeTop filter caches invalidated synchronously for status change");
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
+                    log.info("CodeTop filter caches invalidated (double delete) for status change");
                     break;
             }
         } catch (Exception e) {
@@ -64,7 +67,7 @@ public class CacheInvalidationEventListener {
     /**
      * Handle user-related events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleUserEvent(UserEvent event) {
         log.info("Synchronously handling user event: type={}, userId={}", event.getType(), event.getUserId());
         
@@ -72,19 +75,23 @@ public class CacheInvalidationEventListener {
             switch (event.getType()) {
                 case PROFILE_UPDATED:
                     cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
-                    log.info("User caches invalidated synchronously for profile update: userId={}", event.getUserId());
+                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId(), 500);
+                    log.info("User caches invalidated (double delete) for profile update: userId={}", event.getUserId());
                     break;
                 case PROGRESS_UPDATED:
                     // Clear user progress and mastery caches
                     cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
+                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId(), 500);
                     // Also clear unified API cache for this user
                     codeTopFilterService.clearUserStatusCache(event.getUserId());
-                    log.info("User progress caches invalidated synchronously: userId={}", event.getUserId());
+                    scheduleUserStatusClear(event.getUserId(), 500);
+                    log.info("User progress caches invalidated (double delete): userId={}", event.getUserId());
                     break;
                 case PARAMETERS_OPTIMIZED:
                     // Clear FSRS-related caches for the user
                     cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
-                    log.info("FSRS caches invalidated synchronously for parameter optimization: userId={}", event.getUserId());
+                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId(), 500);
+                    log.info("FSRS caches invalidated (double delete) for parameter optimization: userId={}", event.getUserId());
                     break;
             }
         } catch (Exception e) {
@@ -97,7 +104,7 @@ public class CacheInvalidationEventListener {
     /**
      * Handle FSRS review events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleReviewEvent(ReviewEvent event) {
         log.info("Synchronously handling review event: type={}, userId={}, problemId={}", 
                 event.getType(), event.getUserId(), event.getProblemId());
@@ -107,6 +114,7 @@ public class CacheInvalidationEventListener {
                 case REVIEW_COMPLETED:
                     // Clear user-specific FSRS caches
                     cacheInvalidationStrategy.invalidateFSRSCachesSync(event.getUserId());
+                    cacheInvalidationStrategy.scheduleInvalidateFSRSCaches(event.getUserId(), 500);
                     
                     // Update user mastery cache for this specific problem
                     cacheInvalidationStrategy.evictCacheEntrySync("codetop-user-mastery", 
@@ -119,7 +127,8 @@ public class CacheInvalidationEventListener {
                 case BULK_REVIEWS:
                     // For bulk operations, clear broader caches
                     cacheInvalidationStrategy.invalidateUserCachesSync(event.getUserId());
-                    log.info("Bulk review caches invalidated synchronously: userId={}", event.getUserId());
+                    cacheInvalidationStrategy.scheduleInvalidateUserCaches(event.getUserId(), 500);
+                    log.info("Bulk review caches invalidated (double delete): userId={}", event.getUserId());
                     break;
             }
         } catch (Exception e) {
@@ -132,7 +141,7 @@ public class CacheInvalidationEventListener {
     /**
      * Handle company/organization events - Synchronous execution with cache-first strategy
      */
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleCompanyEvent(CompanyEvent event) {
         log.info("Synchronously handling company event: type={}, companyId={}", event.getType(), event.getCompanyId());
         
@@ -144,19 +153,39 @@ public class CacheInvalidationEventListener {
                     // Company hierarchy changes affect CodeTop filter results
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
                     cacheInvalidationStrategy.invalidateProblemCachesSync();
-                    log.info("Company hierarchy caches invalidated synchronously: companyId={}", event.getCompanyId());
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    log.info("Company hierarchy caches invalidated (double delete): companyId={}", event.getCompanyId());
                     break;
                 case FREQUENCY_UPDATED:
                     // Frequency updates affect rankings and statistics
                     cacheInvalidationStrategy.invalidateCodetopFilterCachesSync();
                     cacheInvalidationStrategy.invalidateProblemCachesSync(); // Statistics may change
-                    log.info("Frequency update caches invalidated synchronously: companyId={}", event.getCompanyId());
+                    cacheInvalidationStrategy.scheduleInvalidateCodetopFilterCaches(500);
+                    cacheInvalidationStrategy.scheduleInvalidateProblemCaches(500);
+                    log.info("Frequency update caches invalidated (double delete): companyId={}", event.getCompanyId());
                     break;
             }
         } catch (Exception e) {
             log.error("Failed to handle company event synchronously: type={}, companyId={}", 
                      event.getType(), event.getCompanyId(), e);
             // Don't re-throw to avoid breaking the main transaction
+        }
+    }
+
+    private void scheduleUserStatusClear(Long userId, long delayMillis) {
+        try {
+            java.time.Instant when = java.time.Instant.now().plusMillis(delayMillis);
+            taskScheduler.schedule(() -> {
+                try {
+                    codeTopFilterService.clearUserStatusCache(userId);
+                } catch (Exception ex) {
+                    log.warn("Delayed user status cache clear failed for user {}", userId, ex);
+                }
+            }, when);
+        } catch (Exception e) {
+            log.warn("Failed to schedule user status cache clear, running inline", e);
+            try { codeTopFilterService.clearUserStatusCache(userId); } catch (Exception ex) { log.warn("Inline delayed user status clear failed", ex); }
         }
     }
     
