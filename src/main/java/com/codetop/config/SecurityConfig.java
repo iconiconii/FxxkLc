@@ -45,6 +45,8 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final @Lazy JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitFilter rateLimitFilter;
+    @Value("${app.docs.enabled:false}")
+    private boolean docsEnabled;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -57,9 +59,17 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/codetop/problems/global").permitAll()
                         .requestMatchers(HttpMethod.GET, "/filter/companies").permitAll()
-                        
-                        // Development endpoints (keep for dev environment)
-                        .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // API docs - dev enabled or restrict to ADMIN
+                        .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                            .access((auth, ctx) -> {
+                                if (docsEnabled) {
+                                    return org.springframework.security.authorization.AuthorityAuthorizationManager.hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
+                                            .check(auth, ctx.getRequest());
+                                } else {
+                                    return org.springframework.security.authorization.AuthorityAuthorizationManager.hasAuthority("ROLE_ADMIN")
+                                            .check(auth, ctx.getRequest());
+                                }
+                            })
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/codetop/health").permitAll()
 

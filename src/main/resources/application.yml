@@ -122,8 +122,8 @@ mybatis-plus:
   configuration:
     # Camel case mapping
     map-underscore-to-camel-case: true
-    # Cache enabled
-    cache-enabled: true
+    # Disable MyBatis second-level cache to avoid stale data with external Redis caching
+    cache-enabled: false
     # Lazy loading
     lazy-loading-enabled: true
     aggressive-lazy-loading: false
@@ -301,6 +301,11 @@ spring:
 app:
   cors:
     allowed-origins: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://127.0.0.1:3000"
+  # Enable API docs in dev only
+  docs:
+    enabled: true
+  cache:
+    double-delete-delay-millis: 500
   cache:
     double-delete-delay-millis: 500
 
@@ -312,6 +317,10 @@ jwt:
   h2:
     console:
       enabled: false
+
+  # Disable Spring Session store in dev if not required
+  session:
+    store-type: none
 
 logging:
   level:

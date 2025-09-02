@@ -135,15 +135,15 @@
 ## 六、优先级执行清单（建议顺序）
 
 1) 缓存一致性
-- [ ] 统一缓存入口：将 `CodeTopFilterService` 等直接 Redis 使用改为 `CacheHelper/CacheService`，TTL 走 `CacheConfiguration`。
-- [ ] 事件监听改为 `AFTER_COMMIT`；为热点数据加“延迟双删”（提交后再次删除，或投递延迟任务）。
-- [ ] 将所有 `keys(pattern)` 替换为 SCAN 或域索引集合批删。
+- [x] 统一缓存入口：将 `CodeTopFilterService` 等直接 Redis 使用改为 `CacheHelper/CacheService`，TTL 走 `CacheConfiguration`。
+- [x] 事件监听改为 `AFTER_COMMIT`；为热点数据加“延迟双删”（提交后再次删除，或投递延迟任务）。
+- [x] 将所有 `keys(pattern)` 替换为 SCAN 或域索引集合批删。
 - [ ] 关闭 MyBatis 二级缓存或补充联动失效策略。
 
 2) 安全
 - [ ] 令牌改为 HttpOnly Cookie；前端移除 localStorage 令牌依赖，`fetch` 开启 `credentials: 'include'`；CORS 调整为白名单 + allow-credentials。
-- [ ] 启用 `ForwardedHeaderFilter`；后端仅信任受控代理头（优先 `X-Real-IP`），忽略客户端自带 XFF。
-- [ ] 修正 Redis PROD：改用 `spring.data.redis.url: ${REDIS_URL}` 或拆分 host/port。
+- [x] 启用 `ForwardedHeaderFilter`；后端仅信任受控代理头（优先 `X-Real-IP`），忽略客户端自带 XFF。
+- [x] 修正 Redis PROD：改用 `spring.data.redis.url: ${REDIS_URL}` 或拆分 host/port。
 - [ ] Nginx 增加 CSP；生产关闭 Swagger 或加鉴权/IP 白名单；dev Druid 加强保护。
 
 3) 业务一致性
@@ -154,7 +154,7 @@
 4) 运维
 - [ ] 明确是否保留 `spring.session`；如无需求则关闭。
 - [ ] 日志治理：杜绝日志提交、脱敏、追踪头统一。
-- [ ] 限流头部读取配置，移除硬编码。
+- [x] 限流头部读取配置，移除硬编码。
 
 ---
 
@@ -229,4 +229,3 @@
 - 里程碑 D（持续）：测试完善（安全/缓存/E2E）、日志与可观测性治理。
 
 > 如需，我可以基于此文档逐步提交 PR：先做“缓存统一 + KEYS→SCAN + AFTER_COMMIT + Redis 配置修正”的小步快跑改造。
-
