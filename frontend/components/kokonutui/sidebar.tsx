@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap, StickyNote, Globe } from "lucide-react"
+import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap, StickyNote, Globe, CheckCircle } from "lucide-react"
 
 import { Home } from "lucide-react"
 import Link from "next/link"
@@ -125,6 +125,9 @@ export default function Sidebar() {
                   </NavItem>
                   <NavItem href="/review" icon={RefreshCw}>
                     复习
+                  </NavItem>
+                  <NavItem href="/completed" icon={CheckCircle}>
+                    完成记录
                   </NavItem>
                 </div>
               </div>

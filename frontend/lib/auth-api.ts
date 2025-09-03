@@ -2,7 +2,7 @@
  * Authentication API client functions
  */
 
-import { apiRequest, setAuthToken, clearAuthToken } from './api'
+import { apiRequest, clearAuthToken } from './api'
 import { withIdempotency } from './idempotency-utils'
 
 export interface UserInfo {
@@ -18,10 +18,11 @@ export interface UserInfo {
 }
 
 export interface AuthResponse {
-  accessToken: string
-  refreshToken: string
-  tokenType: string
-  expiresIn: number
+  // Tokens may be omitted when using cookie-based auth (kept for compatibility)
+  accessToken?: string
+  refreshToken?: string
+  tokenType?: string
+  expiresIn?: number
   user: UserInfo
 }
 
@@ -55,16 +56,9 @@ export const authApi = {
       body: JSON.stringify(request),
     })
     
-    // Store tokens and user info after successful login
-    if (response.accessToken) {
-      setAuthToken(response.accessToken)
-      if (typeof window !== 'undefined') {
-        if (response.refreshToken) {
-          localStorage.setItem('refreshToken', response.refreshToken)
-        }
-        // Store user info for persistence across page refreshes
-        localStorage.setItem('userInfo', JSON.stringify(response.user))
-      }
+    // Cookies are set by server. Persist basic user info for UX only.
+    if (typeof window !== 'undefined' && response.user) {
+      try { localStorage.setItem('userInfo', JSON.stringify(response.user)) } catch {}
     }
     
     return response
@@ -82,16 +76,9 @@ export const authApi = {
       body: JSON.stringify(requestWithId),
     })
     
-    // Store tokens and user info after successful registration
-    if (response.accessToken) {
-      setAuthToken(response.accessToken)
-      if (typeof window !== 'undefined') {
-        if (response.refreshToken) {
-          localStorage.setItem('refreshToken', response.refreshToken)
-        }
-        // Store user info for persistence across page refreshes
-        localStorage.setItem('userInfo', JSON.stringify(response.user))
-      }
+    // Cookies are set by server. Persist basic user info for UX only.
+    if (typeof window !== 'undefined' && response.user) {
+      try { localStorage.setItem('userInfo', JSON.stringify(response.user)) } catch {}
     }
     
     return response
@@ -100,35 +87,10 @@ export const authApi = {
   /**
    * Refresh access token
    */
+  // Refresh is handled server-side via cookies; the frontend does not manage tokens.
+  // For session validation, call getCurrentUserFromServer instead.
   async refreshToken(): Promise<AuthResponse> {
-    const refreshToken = typeof window !== 'undefined' 
-      ? localStorage.getItem('refreshToken') 
-      : null
-    
-    if (!refreshToken) {
-      throw new Error('No refresh token available')
-    }
-
-    const response = await apiRequest<AuthResponse>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-    })
-    
-    // Update stored tokens and user info
-    if (response.accessToken) {
-      setAuthToken(response.accessToken)
-      if (typeof window !== 'undefined') {
-        if (response.refreshToken) {
-          localStorage.setItem('refreshToken', response.refreshToken)
-        }
-        // Update user info if provided in refresh response
-        if (response.user) {
-          localStorage.setItem('userInfo', JSON.stringify(response.user))
-        }
-      }
-    }
-    
-    return response
+    throw new Error('Token refresh is not supported on the client when using cookies')
   },
 
   /**
@@ -149,14 +111,12 @@ export const authApi = {
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
+    // With cookie auth, do not rely on local storage tokens
+    // This method is kept for compatibility; prefer server check via getCurrentUserFromServer
     if (typeof window === 'undefined') return false
-    
-    const accessToken = localStorage.getItem('accessToken')
-    const refreshToken = localStorage.getItem('refreshToken')
-    
-    // Consider authenticated if we have either token
-    // Access token takes priority, but refresh token can be used to get new access token
-    return !!(accessToken || refreshToken)
+    try {
+      return !!localStorage.getItem('userInfo')
+    } catch { return false }
   },
 
   /**
@@ -164,50 +124,19 @@ export const authApi = {
    */
   getCurrentUser(): UserInfo | null {
     if (typeof window === 'undefined') return null
-    
-    // First try to get user info from localStorage
-    const storedUserInfo = localStorage.getItem('userInfo')
+    const storedUserInfo = (() => { try { return localStorage.getItem('userInfo') } catch { return null } })()
     if (storedUserInfo) {
-      try {
-        return JSON.parse(storedUserInfo)
-      } catch (error) {
-        console.error('Error parsing stored user info:', error)
-        // Remove invalid stored user info
-        localStorage.removeItem('userInfo')
-      }
+      try { return JSON.parse(storedUserInfo) } catch { return null }
     }
-    
-    // Fallback to JWT token decoding if no stored user info
-    const token = localStorage.getItem('accessToken')
-    if (!token) return null
-    
-    try {
-      // Decode JWT token to get user info
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      
-      // Construct UserInfo from JWT payload with more flexible field matching
-      if (payload.userId || payload.sub) {
-        const userInfo = {
-          id: payload.userId || payload.sub,
-          username: payload.username || payload.preferred_username || payload.sub,
-          email: payload.email || payload.email_address,
-          firstName: payload.firstName || payload.given_name || payload.name?.split(' ')[0],
-          lastName: payload.lastName || payload.family_name || payload.name?.split(' ')[1],
-          avatarUrl: payload.avatarUrl || payload.picture,
-          timezone: payload.timezone || payload.zoneinfo,
-          authProvider: payload.authProvider || payload.provider || 'local',
-          emailVerified: payload.emailVerified || payload.email_verified || false,
-        }
-        
-        // Store the decoded user info for future use
-        localStorage.setItem('userInfo', JSON.stringify(userInfo))
-        return userInfo
-      }
-      
-      return null
-    } catch (error) {
-      console.error('Error decoding token:', error)
-      return null
+    return null
+  },
+
+  async getCurrentUserFromServer(): Promise<UserInfo> {
+    const user = await apiRequest<UserInfo>('/auth/me')
+    // Cache for UX improvements
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem('userInfo', JSON.stringify(user)) } catch {}
     }
+    return user
   },
 }

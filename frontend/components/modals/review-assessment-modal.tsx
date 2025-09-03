@@ -77,11 +77,9 @@ export default function ReviewAssessmentModal({
       return
     }
     
-    // 更稳健的登录判断
-    const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
-    
-    if (!isAuthenticated && !hasToken) {
-      console.log('Authentication check failed:', { isAuthenticated, hasToken, loading })
+    // 仅依赖全局认证状态
+    if (!isAuthenticated) {
+      console.log('Authentication check failed:', { isAuthenticated, loading })
       setError("请先登录后再进行操作")
       setTimeout(() => {
         window.location.href = '/login'
@@ -120,12 +118,6 @@ export default function ReviewAssessmentModal({
       if (error instanceof ApiError) {
         if (error.status === 401) {
           errorMessage = "登录已过期，请重新登录"
-          // Clear local tokens on 401
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-            localStorage.removeItem('userInfo')
-          }
           setTimeout(() => {
             window.location.href = '/login'
           }, 2000)

@@ -43,6 +43,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         
         try {
             String jwt = getJwtFromRequest(request);
+            if (!org.springframework.util.StringUtils.hasText(jwt)) {
+                // Fallback to cookie-based access token if present
+                String cookieToken = getJwtFromCookies(request);
+                if (org.springframework.util.StringUtils.hasText(cookieToken)) {
+                    jwt = cookieToken;
+                }
+            }
             
             if (StringUtils.hasText(jwt) && jwtUtil.validateAccessToken(jwt)) {
                 Long userId = jwtUtil.getUserIdFromAccessToken(jwt);
@@ -99,6 +106,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
+        return null;
+    }
+
+    private String getJwtFromCookies(HttpServletRequest request) {
+        try {
+            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+            if (cookies == null) return null;
+            // Default cookie name; align with CookieAuthProperties default
+            final String ACCESS_COOKIE = "ACCESS_TOKEN";
+            for (jakarta.servlet.http.Cookie c : cookies) {
+                if (ACCESS_COOKIE.equals(c.getName())) {
+                    return c.getValue();
+                }
+            }
+        } catch (Exception ignored) {}
         return null;
     }
 }

@@ -9,6 +9,7 @@ import com.codetop.mapper.ProblemMapper;
 import com.codetop.mapper.FSRSCardMapper;
 import com.codetop.entity.FSRSCard;
 import com.codetop.enums.ReviewType;
+import com.codetop.enums.FSRSState;
 import com.codetop.service.cache.CacheService;
 import com.codetop.util.CacheHelper;
 import lombok.RequiredArgsConstructor;
@@ -18,14 +19,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.codetop.logging.TraceContext;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -1511,6 +1510,123 @@ public class ProblemService {
             return 1; // Basic
         } else {
             return 0; // Learning
+        }
+    }
+
+    /**
+     * Get user's completed problems with pagination.
+     * Completed means status is "done" or "reviewed".
+     */
+    @Cacheable(value = "userCompletedProblems", key = "#userId + ':' + #page + ':' + #size + ':' + (#sortBy ?: 'date')")
+    public Page<UserProblemStatusDTO> getUserCompletedProblems(Long userId, int page, int size, String sortBy) {
+        if (userId == null) {
+            log.warn("getUserCompletedProblems called with null userId");
+            return new Page<UserProblemStatusDTO>(page + 1, size).setRecords(new ArrayList<>()).setTotal(0);
+        }
+        
+        log.debug("Getting completed problems for user: userId={}, page={}, size={}, sortBy={}", 
+                userId, page, size, sortBy);
+                
+        try {
+            // Get all problems that user has interacted with (has FSRS cards)
+            List<FSRSCard> userCards = fsrsCardMapper.findByUserId(userId);
+            
+            // Filter for completed cards (LEARNING, REVIEW, or RELEARNING states)
+            List<FSRSCard> completedCards = userCards.stream()
+                    .filter(card -> card.getState() == FSRSState.LEARNING || 
+                                   card.getState() == FSRSState.REVIEW || 
+                                   card.getState() == FSRSState.RELEARNING)
+                    .collect(Collectors.toList());
+            
+            // Get problem IDs
+            Set<Long> completedProblemIds = completedCards.stream()
+                    .map(FSRSCard::getProblemId)
+                    .collect(Collectors.toSet());
+            
+            if (completedProblemIds.isEmpty()) {
+                log.debug("No completed problems found for user: userId={}", userId);
+                return new Page<UserProblemStatusDTO>(page + 1, size).setRecords(new ArrayList<>()).setTotal(0);
+            }
+            
+            // Get problems by IDs
+            List<Problem> problems = problemMapper.selectBatchIds(completedProblemIds);
+            
+            // Create map for quick lookup
+            Map<Long, Problem> problemMap = problems.stream()
+                    .collect(Collectors.toMap(Problem::getId, Function.identity()));
+            Map<Long, FSRSCard> cardMap = completedCards.stream()
+                    .collect(Collectors.toMap(FSRSCard::getProblemId, Function.identity()));
+            
+            // Build DTOs
+            List<UserProblemStatusDTO> completedProblems = completedCards.stream()
+                    .map(card -> {
+                        Problem problem = problemMap.get(card.getProblemId());
+                        if (problem == null) return null;
+                        
+                        String status = determineStatusFromFSRSCard(card);
+                        Integer mastery = calculateMasteryFromFSRSCard(card);
+                        Double accuracy = calculateAccuracyFromFSRS(card);
+                        
+                        return UserProblemStatusDTO.builder()
+                                .problemId(problem.getId())
+                                .title(problem.getTitle())
+                                .difficulty(problem.getDifficulty())
+                                .status(status)
+                                .mastery(mastery)
+                                .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
+                                .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
+                                .attemptCount(card.getReviewCount())
+                                .accuracy(accuracy)
+                                .notes("")
+                                .build();
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            
+            // Sort based on sortBy parameter
+            Comparator<UserProblemStatusDTO> comparator;
+            switch (sortBy != null ? sortBy.toLowerCase() : "date") {
+                case "difficulty":
+                    comparator = Comparator.comparing(dto -> dto.getDifficulty().ordinal());
+                    break;
+                case "mastery":
+                    comparator = Comparator.comparing(UserProblemStatusDTO::getMastery).reversed();
+                    break;
+                case "title":
+                    comparator = Comparator.comparing(UserProblemStatusDTO::getTitle);
+                    break;
+                default: // "date"
+                    comparator = Comparator.comparing((UserProblemStatusDTO dto) -> {
+                        String date = dto.getLastAttemptDate();
+                        return date != null ? date : "0000-00-00";
+                    }).reversed();
+                    break;
+            }
+            
+            List<UserProblemStatusDTO> sortedProblems = completedProblems.stream()
+                    .sorted(comparator)
+                    .collect(Collectors.toList());
+            
+            // Manual pagination
+            int totalElements = sortedProblems.size();
+            int startIndex = page * size;
+            int endIndex = Math.min(startIndex + size, totalElements);
+            
+            List<UserProblemStatusDTO> pageContent = startIndex < totalElements ? 
+                    sortedProblems.subList(startIndex, endIndex) : new ArrayList<>();
+            
+            Page<UserProblemStatusDTO> result = new Page<UserProblemStatusDTO>(page + 1, size)
+                    .setRecords(pageContent)
+                    .setTotal(totalElements);
+            
+            log.debug("Retrieved completed problems: userId={}, total={}, page={}, size={}", 
+                    userId, totalElements, page, pageContent.size());
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("Failed to get completed problems: userId={}, error={}", userId, e.getMessage(), e);
+            throw e;
         }
     }
 }

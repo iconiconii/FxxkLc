@@ -40,62 +40,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
   const [initialCheckDone, setInitialCheckDone] = useState(false)
   
-  // Check for existing authentication on mount
+  // Check for existing authentication on mount via cookie session
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('AuthContext: Starting authentication check')
-        
-        // Check if we have tokens in localStorage
-        const hasAccessToken = typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
-        const hasRefreshToken = typeof window !== 'undefined' && !!localStorage.getItem('refreshToken')
-        
-        console.log('AuthContext: Token status - access:', hasAccessToken, 'refresh:', hasRefreshToken)
-        
-        if (hasAccessToken) {
-          // Try to get user info from stored data first
-          const currentUser = authApi.getCurrentUser()
-          if (currentUser) {
-            // Valid token and user data found
-            setUser(currentUser)
-            setIsAuthenticated(true)
-            console.log('AuthContext: Authentication restored from storage:', currentUser.username)
-          } else {
-            console.log('AuthContext: Token exists but user data invalid, clearing auth')
-            await authApi.logout()
-            setUser(null)
-            setIsAuthenticated(false)
-          }
-        } else if (hasRefreshToken) {
-          // No access token but have refresh token, try to refresh
-          try {
-            console.log('AuthContext: Attempting token refresh')
-            const response = await authApi.refreshToken()
-            setUser(response.user)
-            setIsAuthenticated(true)
-            console.log('AuthContext: Token refresh successful:', response.user.username)
-          } catch (refreshError) {
-            console.error('AuthContext: Token refresh failed:', refreshError)
-            // Refresh failed, clear all tokens
-            await authApi.logout()
-            setUser(null)
-            setIsAuthenticated(false)
-          }
-        } else {
-          console.log('AuthContext: No tokens found, user not authenticated')
-          setUser(null)
-          setIsAuthenticated(false)
-        }
+        console.log('AuthContext: Checking session with /auth/me')
+        const currentUser = await authApi.getCurrentUserFromServer()
+        setUser(currentUser)
+        setIsAuthenticated(true)
+        console.log('AuthContext: Session valid for:', currentUser.username)
       } catch (error) {
-        console.error('AuthContext: Auth check failed:', error)
-        // On any error, clear authentication state
-        await authApi.logout()
+        console.log('AuthContext: No valid session')
         setUser(null)
         setIsAuthenticated(false)
       } finally {
         setLoading(false)
         setInitialCheckDone(true)
-        console.log('AuthContext: Authentication check completed')
       }
     }
 

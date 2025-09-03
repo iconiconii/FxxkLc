@@ -94,27 +94,8 @@ class ApiError extends Error {
   }
 }
 
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('accessToken')
-}
-
-// Helper function to build headers with authentication
-const getHeaders = (includeAuth = true): HeadersInit => {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  }
-  
-  if (includeAuth) {
-    const token = getAuthToken()
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    }
-  }
-  
-  return headers
-}
+// Base JSON headers (auth via HttpOnly cookies)
+const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' }
 
 // Helper function to handle API responses
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -147,7 +128,8 @@ export class NotesAPI {
   async createOrUpdateNote(request: CreateNoteRequest): Promise<ProblemNoteDTO> {
     const response = await fetch(this.baseUrl, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
       body: JSON.stringify(request),
     });
     
@@ -160,7 +142,8 @@ export class NotesAPI {
   async updateNote(noteId: number, request: Partial<CreateNoteRequest>): Promise<ProblemNoteDTO> {
     const response = await fetch(`${this.baseUrl}/${noteId}`, {
       method: 'PUT',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
       body: JSON.stringify(request),
     });
     
@@ -172,7 +155,8 @@ export class NotesAPI {
    */
   async getUserNote(problemId: number): Promise<ProblemNoteDTO | null> {
     const response = await fetch(`${this.baseUrl}/problem/${problemId}`, {
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     if (response.status === 404) {
@@ -193,7 +177,8 @@ export class NotesAPI {
     });
     
     const response = await fetch(`${this.baseUrl}/my?${params}`, {
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<PageResponse<ProblemNoteDTO>>(response);
@@ -205,7 +190,8 @@ export class NotesAPI {
   async deleteNote(noteId: number): Promise<void> {
     const response = await fetch(`${this.baseUrl}/${noteId}`, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -229,7 +215,8 @@ export class NotesAPI {
     });
     
     const response = await fetch(`${this.baseUrl}/public/problem/${problemId}?${params}`, {
-      headers: getHeaders(false), // Public endpoint, no auth required
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<PageResponse<PublicNoteViewDTO>>(response);
@@ -252,7 +239,8 @@ export class NotesAPI {
     });
     
     const response = await fetch(`${this.baseUrl}/public/popular?${params}`, {
-      headers: getHeaders(false),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<PageResponse<PublicNoteViewDTO>>(response);
@@ -268,7 +256,8 @@ export class NotesAPI {
     
     const response = await fetch(`${this.baseUrl}/${noteId}/vote?${params}`, {
       method: 'PUT',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -286,7 +275,8 @@ export class NotesAPI {
     
     const response = await fetch(`${this.baseUrl}/${noteId}/visibility?${params}`, {
       method: 'PUT',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -309,7 +299,8 @@ export class NotesAPI {
     });
     
     const response = await fetch(`${this.baseUrl}/search?${params}`, {
-      headers: getHeaders(false),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<PageResponse<PublicNoteViewDTO>>(response);
@@ -324,7 +315,8 @@ export class NotesAPI {
     });
     
     const response = await fetch(`${this.baseUrl}/tags/${encodeURIComponent(tag)}?${params}`, {
-      headers: getHeaders(false),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<PublicNoteViewDTO[]>(response);
@@ -335,7 +327,8 @@ export class NotesAPI {
    */
   async getUserStats(): Promise<UserNoteStats> {
     const response = await fetch(`${this.baseUrl}/stats`, {
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
     });
     
     return handleResponse<UserNoteStats>(response);
@@ -351,7 +344,8 @@ export class NotesAPI {
     
     const response = await fetch(`${this.baseUrl}/batch/visibility?${params}`, {
       method: 'PUT',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
       body: JSON.stringify(noteIds),
     });
     
@@ -366,7 +360,8 @@ export class NotesAPI {
   async batchDeleteNotes(noteIds: number[]): Promise<void> {
     const response = await fetch(`${this.baseUrl}/batch`, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: jsonHeaders,
+      credentials: 'include',
       body: JSON.stringify(noteIds),
     });
     

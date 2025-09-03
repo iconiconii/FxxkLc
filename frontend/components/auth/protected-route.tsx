@@ -23,18 +23,8 @@ export default function ProtectedRoute({
     // Only redirect after loading is complete and initial auth check is done
     if (!loading) {
       if (requiredAuth && !isAuthenticated) {
-        // Double-check tokens in localStorage before redirecting
-        const hasAccessToken = typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
-        const hasRefreshToken = typeof window !== 'undefined' && !!localStorage.getItem('refreshToken')
-        
-        console.log('ProtectedRoute: Auth check - authenticated:', isAuthenticated, 'access token:', hasAccessToken, 'refresh token:', hasRefreshToken)
-        
-        if (!hasAccessToken && !hasRefreshToken) {
-          console.log('ProtectedRoute: No valid tokens found, redirecting to login')
-          router.push(redirectTo)
-        } else {
-          console.log('ProtectedRoute: Tokens found but auth state not updated yet, waiting...')
-        }
+        console.log('ProtectedRoute: Not authenticated, redirecting to login')
+        router.push(redirectTo)
       } else if (!requiredAuth && isAuthenticated) {
         // If user is authenticated but doesn't need to be (like login page), redirect to dashboard
         console.log('ProtectedRoute: User already authenticated, redirecting to dashboard')

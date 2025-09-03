@@ -23,26 +23,47 @@ class ApiError extends Error {
   }
 }
 
-// Helper function to get auth token from localStorage
-const getAuthToken = (): string | null => {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('accessToken')
-}
-
-// Helper function to set auth token
-export const setAuthToken = (token: string): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('accessToken', token)
-  }
-}
-
-// Helper function to clear auth token
+// Token storage is no longer used (HttpOnly cookies now carry tokens).
+// Keep a lightweight clear function for local user info only.
 export const clearAuthToken = (): void => {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('userInfo')
+    try { localStorage.removeItem('userInfo') } catch {}
   }
+}
+
+// Simple in-flight refresh lock to avoid multiple concurrent refreshes
+let refreshPromise: Promise<void> | null = null
+
+async function refreshSession(): Promise<void> {
+  if (refreshPromise) return refreshPromise
+  refreshPromise = (async () => {
+    try {
+      // Call refresh without explicit token; backend reads REFRESH_TOKEN cookie
+      const resp = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      })
+      if (!resp.ok) {
+        clearAuthToken()
+        throw new Error(`Refresh failed: ${resp.status}`)
+      }
+      // Optionally update cached userInfo if backend returns it
+      try {
+        const data = await resp.clone().json().catch(() => null)
+        if (data?.user && typeof window !== 'undefined') {
+          localStorage.setItem('userInfo', JSON.stringify(data.user))
+        }
+      } catch {}
+    } finally {
+      // Release lock regardless of outcome
+      const p = refreshPromise
+      refreshPromise = null
+      await Promise.resolve(p)
+    }
+  })()
+  return refreshPromise
 }
 
 // Base fetch wrapper with authentication and error handling
@@ -51,27 +72,43 @@ async function apiRequest<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
-  const token = getAuthToken()
 
   const config: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
+    // Always include cookies for same-origin and proxied requests
+    credentials: 'include',
     ...options,
   }
 
+  const shouldAttemptSilentRefresh = !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/logout') && !endpoint.startsWith('/auth/refresh')
+
   try {
-    const response = await fetch(url, config)
+    let response = await fetch(url, config)
     
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`
       
       // Handle specific HTTP status codes
       if (response.status === 401) {
+        if (shouldAttemptSilentRefresh) {
+          // Try silent refresh once
+          try {
+            await refreshSession()
+            // Retry original request once
+            response = await fetch(url, config)
+            if (response.ok) {
+              const contentType2 = response.headers.get('Content-Type')
+              if (!contentType2 || !contentType2.includes('application/json')) {
+                return null as T
+              }
+              return await response.json()
+            }
+          } catch {}
+        }
         errorMessage = "认证失败，请重新登录"
-        // Clear invalid token
         clearAuthToken()
       } else if (response.status === 403) {
         errorMessage = "权限不足，无法执行此操作"

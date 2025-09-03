@@ -304,8 +304,14 @@ app:
   # Enable API docs in dev only
   docs:
     enabled: true
-  cache:
-    double-delete-delay-millis: 500
+  # cache.double-delete-delay-millis configured above
+  security:
+    cookies:
+      enabled: true
+      access-name: ACCESS_TOKEN
+      refresh-name: REFRESH_TOKEN
+      same-site: Lax
+      secure: false
   cache:
     double-delete-delay-millis: 500
 
@@ -409,6 +415,14 @@ app:
     druid:
       enabled: true
       admin-role: ADMIN
+    cookies:
+      enabled: true
+      access-name: ACCESS_TOKEN
+      refresh-name: REFRESH_TOKEN
+      secure: true
+      same-site: Strict
+      domain: ${COOKIE_DOMAIN:}
+      path: /
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
 

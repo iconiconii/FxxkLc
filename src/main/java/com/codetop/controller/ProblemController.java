@@ -11,6 +11,7 @@ import com.codetop.dto.ProblemStatisticsDTO;
 import com.codetop.dto.UserProblemStatusVO;
 import com.codetop.dto.ProblemStatisticsVO;
 import com.codetop.dto.ProblemMasteryVO;
+import com.codetop.dto.PagedResponse;
 import com.codetop.entity.Problem;
 import com.codetop.enums.Difficulty;
 import com.codetop.mapper.ProblemMapper;
@@ -259,6 +260,38 @@ public class ProblemController {
         List<UserProblemStatusVO> response = progress.stream()
                 .map(this::convertUserStatusToVO)
                 .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Get user's completed problems with pagination.
+     */
+    @GetMapping("/user/completed")
+    @Operation(summary = "Get user completed problems", description = "Get user's completed problems with pagination")
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<PagedResponse<UserProblemStatusVO>> getUserCompletedProblems(
+            @CurrentUserId Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "date") String sortBy) {
+        
+        Page<UserProblemStatusDTO> completedProblems = problemService.getUserCompletedProblems(userId, page, size, sortBy);
+        List<UserProblemStatusVO> content = completedProblems.getRecords().stream()
+                .map(this::convertUserStatusToVO)
+                .collect(Collectors.toList());
+        
+        PagedResponse<UserProblemStatusVO> response = PagedResponse.<UserProblemStatusVO>builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(completedProblems.getTotal())
+                .totalPages((int) Math.ceil((double) completedProblems.getTotal() / size))
+                .first(page == 0)
+                .last(page >= (int) Math.ceil((double) completedProblems.getTotal() / size) - 1)
+                .hasNext(page < (int) Math.ceil((double) completedProblems.getTotal() / size) - 1)
+                .hasPrevious(page > 0)
+                .build();
+        
         return ResponseEntity.ok(response);
     }
 

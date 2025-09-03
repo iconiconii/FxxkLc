@@ -3,6 +3,7 @@ package com.codetop.controller;
 import com.codetop.annotation.CurrentUserId;
 import com.codetop.annotation.SimpleIdempotent;
 import com.codetop.service.AuthService;
+import com.codetop.config.CookieAuthProperties;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -19,7 +20,6 @@ import com.codetop.dto.LoginRequestDTO;
 import com.codetop.dto.RegisterRequestDTO;
 import com.codetop.dto.AuthResponseDTO;
 import com.codetop.dto.UserInfoDTO;
-import com.codetop.dto.RefreshTokenRequestDTO;
 import com.codetop.dto.AuthStatusResponseDTO;
 
 /**
@@ -35,6 +35,8 @@ import com.codetop.dto.AuthStatusResponseDTO;
 public class AuthController {
 
     private final AuthService authService;
+    private final com.codetop.security.TokenCookieService tokenCookieService;
+    private final CookieAuthProperties cookieProps;
 
     /**
      * User login with email/username and password.
@@ -42,7 +44,8 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "User login", description = "Authenticate user with credentials")
     public ResponseEntity<AuthResponseDTO> login(@Valid @RequestBody LoginRequestDTO request, 
-                                           HttpServletRequest httpRequest) {
+                                           HttpServletRequest httpRequest,
+                                           jakarta.servlet.http.HttpServletResponse httpResponse) {
         TraceContext.setOperation("AUTH_LOGIN");
         
         long startTime = System.currentTimeMillis();
@@ -61,6 +64,8 @@ public class AuthController {
             log.info("Login successful: userId={}, identifier='{}', clientIp={}, duration={}ms", 
                     result.getUser().getId(), maskIdentifier(request.getIdentifier()), clientIp, duration);
             
+            // Set auth cookies (HttpOnly) for browser-based clients
+            tokenCookieService.writeAuthCookies(httpResponse, result.getAccessToken(), result.getRefreshToken());
             return ResponseEntity.ok(AuthResponseDTO.builder()
                     .accessToken(result.getAccessToken())
                     .refreshToken(result.getRefreshToken())
@@ -96,9 +101,46 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     @Operation(summary = "Refresh token", description = "Refresh access token using refresh token")
-    public ResponseEntity<AuthResponseDTO> refresh(@Valid @RequestBody RefreshTokenRequestDTO request) {
-        AuthService.AuthResult result = authService.refreshToken(request.getRefreshToken());
-        
+    public ResponseEntity<AuthResponseDTO> refresh(@RequestBody(required = false) java.util.Map<String, Object> request,
+                                                   jakarta.servlet.http.HttpServletRequest httpRequest,
+                                                   jakarta.servlet.http.HttpServletResponse httpResponse) {
+        String refreshToken = null;
+        String tokenSource = "none";
+        // 1) Try reading from request body
+        if (request != null) {
+            Object rt = request.get("refreshToken");
+            if (rt instanceof String && !((String) rt).isBlank()) {
+                refreshToken = (String) rt;
+                tokenSource = "body";
+            }
+        }
+        // 2) Fallback to cookie if body missing or blank
+        if (refreshToken == null || refreshToken.isBlank()) {
+            try {
+                var cookies = httpRequest.getCookies();
+                if (cookies != null) {
+                    final String refreshName = cookieProps.getRefreshName();
+                    for (jakarta.servlet.http.Cookie c : cookies) {
+                        if (refreshName.equals(c.getName())) {
+                            refreshToken = c.getValue();
+                            tokenSource = "cookie";
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        log.info("AuthController.refresh: source={}, tokenLen={}", tokenSource, refreshToken == null ? 0 : refreshToken.length());
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED,
+                    "Refresh token is required"
+            );
+        }
+
+        AuthService.AuthResult result = authService.refreshToken(refreshToken);
+        // Refresh cookies
+        tokenCookieService.writeAuthCookies(httpResponse, result.getAccessToken(), result.getRefreshToken());
         return ResponseEntity.ok(AuthResponseDTO.builder()
                 .accessToken(result.getAccessToken())
                 .refreshToken(result.getRefreshToken())
@@ -108,17 +150,22 @@ public class AuthController {
                 .build());
     }
 
+    // Note: /auth/refresh-cookie has been removed in favor of unified /auth/refresh
+
     /**
      * User logout.
      */
     @PostMapping("/logout")
     @Operation(summary = "User logout", description = "Logout user and invalidate token")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authorization,
-                                      @Valid @RequestBody LogoutRequest request) {
+    public ResponseEntity<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                      @Valid @RequestBody LogoutRequest request,
+                                      jakarta.servlet.http.HttpServletResponse httpResponse) {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             String token = authorization.substring(7);
             authService.logout(token);
         }
+        // Clear cookies regardless of header
+        tokenCookieService.clearAuthCookies(httpResponse);
         return ResponseEntity.ok().build();
     }
 
