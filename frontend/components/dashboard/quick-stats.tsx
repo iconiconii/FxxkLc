@@ -2,14 +2,10 @@
 
 import { cn } from "@/lib/utils"
 import { 
-  Calendar, 
   Flame, 
   Target, 
   TrendingUp, 
-  Clock,
-  CheckCircle,
-  Award,
-  BarChart3
+  CheckCircle
 } from "lucide-react"
 import type { AnalyticsOverview } from "@/lib/analytics-api"
 
@@ -81,7 +77,6 @@ export default function QuickStats({
     // Calculate meaningful statistics from FSRS data
     const totalCards = analyticsData.totalCards || 0
     const reviewCards = analyticsData.reviewCards || 0
-    const learningCards = analyticsData.learningCards || 0
     const dueCards = analyticsData.dueCards || 0
     const avgStability = analyticsData.avgStability || 0
     const totalLapses = analyticsData.totalLapses || 0

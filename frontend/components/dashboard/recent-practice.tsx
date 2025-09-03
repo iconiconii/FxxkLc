@@ -50,7 +50,7 @@ export default function RecentPractice({
     const records: PracticeRecord[] = []
     
     // 从复习队列生成记录
-    reviewQueue.slice(0, 4).forEach((card, index) => {
+    reviewQueue.slice(0, 4).forEach((card) => {
       const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
         'EASY': 'easy',
         'MEDIUM': 'medium', 

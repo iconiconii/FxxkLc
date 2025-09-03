@@ -89,7 +89,7 @@ export default function OliverPage() {
       frequencyScore: apiProblem.frequency || apiProblem.frequencyScore || 0,
       lastAskedDate: apiProblem.lastAskedDate || apiProblem.updatedAt?.split('T')[0] || '2024-01-01',
       problemUrl: apiProblem.problemUrl || `https://leetcode.cn/problems/problem-${apiProblem.id || apiProblem.problemId}/`,
-    }
+    } as DisplayProblem
   }, [])
 
   // Load companies on component mount

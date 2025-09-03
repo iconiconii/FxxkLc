@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils"
 import { 
   Brain, 
   Clock, 
-  Target, 
   TrendingUp, 
   PlayCircle, 
   BookOpen, 

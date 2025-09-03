@@ -9,12 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NoteCard } from '@/components/notes';
 import { usePopularNotes, useNoteSearch } from '@/hooks/use-notes';
-import { Search, TrendingUp, Star, Eye, Filter } from 'lucide-react';
+import { Search, TrendingUp, Star, Eye } from 'lucide-react';
 
 export default function PublicNotesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('popular');
-  const [sortBy, setSortBy] = useState('helpfulVotes,desc');
+  const [, /* sortBy */] = useState('helpfulVotes,desc');
   const [page, setPage] = useState(0);
   const [minVotes, setMinVotes] = useState(1);
   const [minViews, setMinViews] = useState(10);
@@ -228,7 +228,7 @@ export default function PublicNotesPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      搜索 "<span className="font-medium">{searchQuery}</span>"
+                      搜索 &quot;<span className="font-medium">{searchQuery}</span>&quot;
                     </p>
                     {searchResults && (
                       <p className="text-sm text-gray-500 mt-1">

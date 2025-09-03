@@ -7,8 +7,6 @@ import {
   Brain, 
   Zap,
   Target,
-  AlertCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Settings,
@@ -48,10 +46,8 @@ export default function LearningInsights({
     const insights: Insight[] = []
     const {
       totalCards,
-      newCards,
       learningCards,
       reviewCards,
-      relearningCards,
       dueCards,
       avgReviews,
       avgDifficulty,

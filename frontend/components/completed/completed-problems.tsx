@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, Clock, Trophy, Filter, Search } from "lucide-react"
+import { CheckCircle, Clock, Trophy, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -151,7 +151,7 @@ export default function CompletedProblems() {
           setError(null)
           return
         }
-      } catch (apiError) {
+      } catch {
         console.log('API not available, using mock data')
       }
 

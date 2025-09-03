@@ -138,13 +138,15 @@
 - [x] 统一缓存入口：将 `CodeTopFilterService` 等直接 Redis 使用改为 `CacheHelper/CacheService`，TTL 走 `CacheConfiguration`。
 - [x] 事件监听改为 `AFTER_COMMIT`；为热点数据加“延迟双删”（提交后再次删除，或投递延迟任务）。
 - [x] 将所有 `keys(pattern)` 替换为 SCAN 或域索引集合批删。
-- [ ] 关闭 MyBatis 二级缓存或补充联动失效策略。
+ - [x] 关闭 MyBatis 二级缓存或补充联动失效策略。（application.yml 已设置 cache-enabled=false）
 
 2) 安全
-- [ ] 令牌改为 HttpOnly Cookie；前端移除 localStorage 令牌依赖，`fetch` 开启 `credentials: 'include'`；CORS 调整为白名单 + allow-credentials。
+- [x] 令牌改为 HttpOnly Cookie；前端移除 localStorage 令牌依赖，`fetch` 开启 `credentials: 'include'`；CORS 调整为白名单 + allow-credentials。（dev 已完成并通过脚本验证：`scripts/test-cookie-auth.sh`、`scripts/test-cookie-auth-via-next.sh`）
 - [x] 启用 `ForwardedHeaderFilter`；后端仅信任受控代理头（优先 `X-Real-IP`），忽略客户端自带 XFF。
 - [x] 修正 Redis PROD：改用 `spring.data.redis.url: ${REDIS_URL}` 或拆分 host/port。
-- [ ] Nginx 增加 CSP；生产关闭 Swagger 或加鉴权/IP 白名单；dev Druid 加强保护。
+- [x] Nginx 增加 CSP（`nginx/conf.d/default.conf` 已配置）；生产 Swagger 走角色鉴权（默认仅 ADMIN 可访问），可按需叠加 IP 白名单。
+- [x] 生产 Cookie 参数收口（`secure=true`、`SameSite=Strict`、支持 `COOKIE_DOMAIN`），与 CORS 白名单保持一致。
+- [x] 无感续期：统一 `/auth/refresh` 同时支持请求体和 Cookie；前端在 401 时自动调用刷新并重试一次。（已移除 `/auth/refresh-cookie` 别名）
 
 3) 业务一致性
 - [ ] 为笔记 MySQL→Mongo 写入落地 Outbox + 异步消费者 或补偿重试；事件发布改 AFTER_COMMIT。
@@ -199,6 +201,33 @@
   add_header Content-Security-Policy "default-src 'self'; img-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-ancestors 'none'" always;
   ```
 
+- 生产 Cookie 配置（示例）
+  ```yaml
+  # application.yml (prod)
+  app:
+    security:
+      cookies:
+        enabled: true
+        access-name: ACCESS_TOKEN
+        refresh-name: REFRESH_TOKEN
+        secure: true           # 生产必须 true（HTTPS）
+        same-site: Strict      # 若前端需要跨站跳转回调，可用 Lax
+        domain: yourdomain.com # 如使用子域名，设置顶级域名
+        path: /
+
+  # CORS（仅白名单，允许凭证）
+  app:
+    cors:
+      allowed-origins: "https://your-frontend.yourdomain.com"
+
+  # SecurityConfig 中需保持 allowCredentials=true
+  ```
+
+- 前端 fetch（已完成）
+  ```ts
+  const resp = await fetch('/api/v1/xxx', { credentials: 'include' })
+  ```
+
 ---
 
 ## 八、关联文件（供实施参考）
@@ -215,6 +244,7 @@
   - `src/main/resources/application.yml`（Redis、CORS、profiles）
   - `nginx/nginx.conf`、`nginx/conf.d/default.conf`
   - 前端：`frontend/lib/auth-api.ts`、`frontend/lib/api.ts`
+  - 脚本：`scripts/test-cookie-auth.sh`、`scripts/test-cookie-auth-via-next.sh`
 - 业务一致性：
   - `src/main/java/com/codetop/service/ProblemNoteService.java`（MySQL+Mongo）
   - `src/main/java/com/codetop/service/IdempotencyService.java`、`src/main/java/com/codetop/aspect/IdempotentAspect.java`
@@ -224,7 +254,7 @@
 ## 九、后续工作与里程碑
 
 - 里程碑 A（1 周）：缓存统一与 KEYS→SCAN 改造、事件 AFTER_COMMIT、限流与真实 IP 信任链修正、Redis 配置修正。
-- 里程碑 B（1–2 周）：令牌 Cookie 化（前后端联调）、CSP 与 Swagger 策略、MyBatis 二级缓存策略调整。
+- 里程碑 B（1–2 周）：令牌 Cookie 化（前后端联调）【dev 已完成，prod 配置收口中】、CSP 与 Swagger 策略、MyBatis 二级缓存策略【已关闭】。
 - 里程碑 C（2–3 周）：MySQL→Mongo 最终一致性（Outbox + 消费者）落地、幂等结果JSON化、精准失效/索引集合。
 - 里程碑 D（持续）：测试完善（安全/缓存/E2E）、日志与可观测性治理。
 

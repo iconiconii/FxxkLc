@@ -1,11 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { authApi } from "@/lib/auth-api"
 import { useAuth } from "@/lib/auth-context"
 
 interface LoginFormProps {
@@ -14,7 +12,6 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ showRegister, onToggleRegister }: LoginFormProps) {
-  const router = useRouter()
   const { login } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -41,8 +38,8 @@ export default function LoginForm({ showRegister, onToggleRegister }: LoginFormP
           password: formData.password,
         })
       }
-    } catch (err: any) {
-      setError(err.message || (showRegister ? "注册失败" : "登录失败"))
+    } catch (err) {
+      setError((err as Error)?.message || (showRegister ? "注册失败" : "登录失败"))
     } finally {
       setLoading(false)
     }

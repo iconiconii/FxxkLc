@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils"
 import { 
   Clock, 
   AlertTriangle, 
-  Zap, 
   CheckCircle,
   ArrowRight,
   Brain,
@@ -13,8 +12,8 @@ import {
   TrendingDown,
   TrendingUp
 } from "lucide-react"
-import { useState, useEffect } from "react"
-import { reviewApi, type ReviewQueueCard } from "@/lib/review-api"
+import { useState } from "react"
+import { reviewApi } from "@/lib/review-api"
 import type { AnalyticsOverview } from "@/lib/analytics-api"
 
 interface ReviewQueuePreviewProps {

@@ -5,7 +5,7 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   data?: T
   message?: string
   error?: string
@@ -16,7 +16,7 @@ class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public response?: any
+    public response?: unknown
   ) {
     super(message)
     this.name = 'ApiError'
@@ -67,7 +67,7 @@ async function refreshSession(): Promise<void> {
 }
 
 // Base fetch wrapper with authentication and error handling
-async function apiRequest<T = any>(
+async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
@@ -116,7 +116,7 @@ async function apiRequest<T = any>(
         try {
           const errorData = await response.json()
           errorMessage = errorData.message || errorData.error || errorMessage
-        } catch (e) {
+        } catch {
           // Response is not JSON, use status text
         }
       }

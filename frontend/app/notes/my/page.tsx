@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { NoteCard } from '@/components/notes';
 import { useUserNotes, useUserNoteStats } from '@/hooks/use-notes';
-import { Eye, ThumbsUp, FileText, Globe, Lock, Search, Filter } from 'lucide-react';
+import { Eye, ThumbsUp, FileText, Globe, Lock, Search } from 'lucide-react';
 
 export default function MyNotesPage() {
   const [search, setSearch] = useState('');
