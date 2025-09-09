@@ -14,6 +14,7 @@ LLM Service Integration
   - [ ] 支持在 `application.yml` 中以声明式方式组装责任链（按 profile 可差异化）
   - [ ] 每个节点可配置超时、重试、限流与“哪些错误转下游”条件（如 TIMEOUT/HTTP_429/CIRCUIT_OPEN）
   - [ ] 输出链路指标与日志（命中节点、跳数、失败原因、最终策略）
+  - [ ] 根据用户消费/会员等级、AB组、路由等选择不同责任链（策略解析 + 多链注册表）
 
 [ ] Configuration Management
   - [ ] Add LLM configuration section to `application.yml` (API keys, endpoints, models)
@@ -499,3 +500,86 @@ API 规格（后端）
 - POST /api/v1/problems/{id}/recommendation-feedback
   - requestBody: FeedbackRequest
   - responses: 200 { status }
+
+---
+
+按消费等级/用户分层的责任链设计（高级）
+- 目标：
+  - 按用户消费/会员等级（FREE/BRONZE/SILVER/GOLD/PLATINUM）、AB 组、路由、地域，选择不同责任链，控制成本与体验。
+  - 新增/调整链无需改码，仅改配置；同用户在一段时间内命中同一条链（粘性）。
+- 组件：
+  - `ProviderCatalog`：可用 Provider 模板库（openai/azure/mock/default）。
+  - `LlmChainRegistry`：注册多条链（`chainId/version/nodes/defaultProvider`）。
+  - `ChainPolicyResolver`：依据 `RequestContext{ userId,tier,abGroup,route,region,time }` 选择 `chainId`，支持优先级、权重分流、粘性。
+  - `RequestContext`：从 `RecommendationFacade` 注入（含 `traceId`）。
+- 缓存：
+  - 结果 Key 纳入链维度：`rec:{userId}:{prefsHash}:{chainId}:{promptV}`，不同链互不污染；链可定义不同 TTL。
+- 响应头与指标：
+  - 头部：`X-Chain-Id`, `X-Chain-Version`, `X-Policy-Id`, `X-Provider-Chain`。
+  - 指标：`llm.chain.requests_total{chainId,policyId,outcome}`, `llm.chain.hops`, `llm.chain.default_hits_total`；成本指标 `llm.cost.tokens{chainId,model}`。
+
+YAML 高级配置（多链 + 等级 + 策略）
+```yaml
+llm:
+  enabled: true
+  provider: chain
+  chains:
+    - id: std_chain
+      version: v1
+      nodes:
+        - providerRef: openai.gpt4o-mini
+          timeoutMs: 1800
+          rateLimit: { rps: 5, perUserRps: 1 }
+          retry: { attempts: 1, backoffMs: 200 }
+          onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
+          costCap: { tokensPerReq: 4000 }
+        - providerRef: azure.gpt4o-mini
+          onErrorsToNext: [TIMEOUT, HTTP_5XX, PARSING_ERROR]
+      defaultProvider: { strategy: fsrs_fallback, message: "系统繁忙，请稍后重试", httpStatus: 503 }
+    - id: gold_chain
+      version: v2
+      nodes:
+        - providerRef: openai.gpt4o
+          timeoutMs: 2000
+          rateLimit: { rps: 20, perUserRps: 3 }
+          retry: { attempts: 1 }
+          costCap: { tokensPerReq: 12000 }
+        - providerRef: openai.gpt4o-mini
+          onErrorsToNext: [TIMEOUT, HTTP_429, COST_EXCEEDED]
+      defaultProvider: { strategy: fsrs_fallback }
+    - id: bronze_chain
+      version: v1
+      nodes:
+        - providerRef: openai.gpt4o-mini
+          costCap: { tokensPerReq: 2000 }
+      defaultProvider: { strategy: busy_message }
+  providers:
+    openai:
+      gpt4o: { model: gpt-4o, baseUrl: https://api.openai.com/v1, apiKeyEnv: OPENAI_API_KEY }
+      gpt4o-mini: { model: gpt-4o-mini, baseUrl: https://api.openai.com/v1, apiKeyEnv: OPENAI_API_KEY }
+    azure:
+      gpt4o-mini: { endpoint: https://xxx.openai.azure.com, deployment: gpt4o-mini, apiKeyEnv: AZURE_OPENAI_KEY }
+  policies:
+    - id: gold-users
+      priority: 10
+      match: { tier: [GOLD, PLATINUM], route: [ai-recommendations] }
+      chainId: gold_chain
+      sticky: { key: userId, ttlHours: 72 }
+    - id: ab-test
+      priority: 20
+      match: { tier: [SILVER], abGroup: [A] }
+      weighted:
+        - { chainId: std_chain, weight: 70 }
+        - { chainId: gold_chain, weight: 30 }
+      sticky: { key: userId, ttlHours: 72 }
+    - id: bronze-default
+      priority: 100
+      match: { tier: [BRONZE, FREE] }
+      chainId: bronze_chain
+  defaultChainId: std_chain
+```
+
+执行与测试要点
+- 策略匹配：按 `priority` 自顶向下；权重分流用一致性哈希基于 `sticky.key` 保证同用户粘性。
+- 链执行：覆盖 TIMEOUT/429/5XX/PARSING_ERROR/COST_EXCEEDED 的下钻；全部失败由 `DefaultProvider` 兜底（busy_message/fsrs_fallback/empty）。
+- 验证观测：响应头含 `X-Chain-Id/X-Chain-Version/X-Policy-Id`；指标含 `chainId/policyId` 维度；缓存命中按 `chainId` 隔离。
