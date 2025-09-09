@@ -238,6 +238,27 @@ springdoc:
     title: CodeTop FSRS Backend API
     description: Intelligent algorithm problem management with FSRS spaced repetition
     version: 1.0.0
+
+# LLM minimal configuration (disabled by default)
+llm:
+  enabled: false
+  provider: chain
+  chain:
+    nodes:
+      - name: mock
+        enabled: true
+        timeoutMs: 100
+        retry:
+          attempts: 0
+    defaultProvider:
+      strategy: busy_message
+      message: "系统繁忙，请稍后重试"
+      httpStatus: 503
+  openai:
+    baseUrl: https://api.openai.com/v1
+    model: gpt-4o-mini
+    apiKeyEnv: OPENAI_API_KEY
+    timeoutMs: 1800
     contact:
       name: CodeTop Team
       email: support@codetop.com
