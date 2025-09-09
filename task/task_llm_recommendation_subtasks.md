@@ -5,8 +5,8 @@ LLM Service Integration
   - [x] Create `AIRecommendationService` class in `service/` package with LLM client integration
   - [ ] Implement OpenAI GPT-4 or alternative LLM API client with async support（已提供 OpenAI 同步占位实现，异步与完整解析待补）
   - [ ] Design prompt engineering templates for recommendation generation
-  - [ ] Add retry mechanism, timeout control, and graceful error handling（已具备超时与基础错误处理；重试未实现）
-  - [ ] Configure rate limiting to prevent API quota exhaustion
+  - [x] Add retry mechanism, timeout control, and graceful error handling（已引入 Resilience4j Retry；OpenAI/HTTP 超时；错误处理基础版）
+  - [x] Configure rate limiting to prevent API quota exhaustion（已引入全局与每用户限流）
 
 [ ] Provider Chain (多模型责任链)
   - [x] 引入 `ProviderChain` 责任链，按配置顺序尝试多个模型/提供商，失败则切到下一个
@@ -77,7 +77,7 @@ Acceptance Criteria
 - [ ] `AIRecommendationService` successfully calls LLM API and parses responses（当前 MockProvider 可产出占位结果；OpenAI 占位未解析结构化响应）
 - [ ] Configuration supports multiple environments and secure credential management（已具备安全凭据管理；多环境差异化待补）
 - [ ] Service gracefully handles API failures with fallback to FSRS recommendations（已实现 DefaultProvider 返回忙碌提示；FSRS 回退逻辑待补）
-- [ ] Rate limiting prevents API quota overruns
+- [x] Rate limiting prevents API quota overruns
 - [x] 责任链顺序由 `application.yml` 决定，节点启停/顺序变更可通过配置切换
 - [x] 上游全部失败时，由 `DefaultProvider` 返回“系统繁忙”或按策略回退（已实现 busy_message 路径；fsrs_fallback 待补）
 

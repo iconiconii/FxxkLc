@@ -259,6 +259,20 @@ llm:
     model: gpt-4o-mini
     apiKeyEnv: OPENAI_API_KEY
     timeoutMs: 1800
+
+# Resilience4j configuration for LLM
+resilience4j:
+  ratelimiter:
+    instances:
+      llm-global:
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 0
+  retry:
+    instances:
+      llm-retry:
+        max-attempts: 2  # 1 retry
+        wait-duration: 150ms
     contact:
       name: CodeTop Team
       email: support@codetop.com

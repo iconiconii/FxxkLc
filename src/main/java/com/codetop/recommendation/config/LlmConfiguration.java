@@ -31,9 +31,11 @@ public class LlmConfiguration {
     }
 
     @Bean
-    public ProviderChain providerChain(List<LlmProvider> providers, LlmProperties props, LlmProvider defaultProvider) {
+    public ProviderChain providerChain(List<LlmProvider> providers, LlmProperties props, LlmProvider defaultProvider,
+                                       io.github.resilience4j.ratelimiter.RateLimiterRegistry rateLimiterRegistry,
+                                       io.github.resilience4j.retry.RetryRegistry retryRegistry) {
         // Build provider list from catalog order; ProviderChain will select based on props.chain.nodes
         List<LlmProvider> catalog = new ArrayList<>(providers);
-        return new ProviderChain(catalog, props, defaultProvider);
+        return new ProviderChain(catalog, props, defaultProvider, rateLimiterRegistry, retryRegistry);
     }
 }
