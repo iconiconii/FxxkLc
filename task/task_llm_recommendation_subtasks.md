@@ -21,7 +21,7 @@ LLM Service Integration
   - [ ] Support multi-environment configs (dev/test/prod) with different LLM providers（结构已具备，未提供按 profile 的差异化示例）
   - [x] Implement secure API key management via environment variables
   - [ ] Add feature toggles for LLM recommendation on/off per user segment（已支持全局 `llm.enabled`，用户分段开关未实现）
-  - [ ] 增加 `llm.chain` 配置块：定义节点顺序、启用条件、错误下钻策略与 `defaultProvider` 的兜底策略
+  - [x] 增加 `llm.chain` 配置块：定义节点顺序、启用条件、错误下钻策略与 `defaultProvider` 的兜底策略
 
 YAML 配置（示例）
 ```yaml
@@ -89,6 +89,14 @@ feat(ai): add LLM service integration for intelligent recommendations
 
 ---
 
+Progress Update (当前进展概览)
+- 后端服务：完成 `AIRecommendationService` 骨架并接入责任链（ProviderChain + DefaultProvider），提供固定 tier 上下文；OpenAI Provider 为占位实现（待完善 Prompt/解析）。
+- 弹性保障：引入 Resilience4j Retry（1 次受控重试）与全局/每用户 RateLimiter；基础超时/错误处理就绪。
+- 配置：`application.yml` 增加 `llm` 与 `resilience4j` 配置；支持通过 YAML 声明责任链与兜底策略。
+- 接口：新增 `GET /api/v1/problems/ai-recommendations`，返回包含链路 hops、traceId 的响应与相应头部。
+- 测试：补充 ProviderChain 与 AIRecommendationService 单元测试（重试、限流、兜底、服务正常/忙碌路径）。
+- 未完成：Prompt 模板与 JSON 解析、FSRS 回退实现、节点级限流与错误下钻、缓存与指标、反馈 API、按用户分层策略解析、多环境差异配置与前端集成。
+
 User Profiling & Algorithm
 [ ] User Profile Analysis
   - [ ] Analyze `FSRSCard` and `ReviewLog` data to extract learning patterns
@@ -134,10 +142,10 @@ feat(algorithm): implement intelligent user profiling and hybrid recommendation 
 
 API & Caching Layer
 [ ] Recommendation APIs
-  - [ ] Add `GET /api/v1/problems/ai-recommendations` endpoint in `ProblemController`
+  - [x] Add `GET /api/v1/problems/ai-recommendations` endpoint in `ProblemController`
   - [ ] Implement `POST /api/v1/problems/{id}/recommendation-feedback` for user feedback collection
-  - [ ] Support request parameters (limit, difficulty_preference, topic_filter, recommendation_type)
-  - [ ] Create response DTOs with recommendation reasons and confidence scores
+  - [ ] Support request parameters (limit, difficulty_preference, topic_filter, recommendation_type)（已支持 limit）
+  - [x] Create response DTOs with recommendation reasons and confidence scores
   - [ ] Integrate AI recommendation toggle into existing `getRecommendedProblems` method
 
 [ ] Caching Strategy
@@ -215,7 +223,7 @@ feat(frontend): add AI recommendation UI components and dashboard integration
 
 Testing & Monitoring
 [ ] Automated Testing
-  - [ ] Unit tests for `AIRecommendationService` including LLM API mocking
+  - [x] Unit tests for `AIRecommendationService` including LLM API mocking（已添加服务与责任链单测，使用测试 Provider 模拟）
   - [ ] Integration tests for recommendation algorithms with test user data
   - [ ] API contract tests for all new recommendation endpoints
   - [ ] Frontend component tests for AI recommendation UI elements
