@@ -64,9 +64,12 @@ public class AIRecommendationService {
             meta.setStrategy(res.defaultReason != null ? res.defaultReason : "busy_message");
         }
 
+        // attach chain hops if available
+        if (res.hops != null) {
+            meta.setChainHops(res.hops);
+        }
         out.setItems(items);
         out.setMeta(meta);
         return out;
     }
 }
-

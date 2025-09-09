@@ -13,6 +13,7 @@ public class AIRecommendationResponse {
         private String chainId;
         private String chainVersion;
         private String policyId;
+        private java.util.List<String> chainHops;
 
         public boolean isCached() { return cached; }
         public void setCached(boolean cached) { this.cached = cached; }
@@ -30,6 +31,8 @@ public class AIRecommendationResponse {
         public void setChainVersion(String chainVersion) { this.chainVersion = chainVersion; }
         public String getPolicyId() { return policyId; }
         public void setPolicyId(String policyId) { this.policyId = policyId; }
+        public java.util.List<String> getChainHops() { return chainHops; }
+        public void setChainHops(java.util.List<String> chainHops) { this.chainHops = chainHops; }
     }
 
     private List<RecommendationItemDTO> items;
@@ -51,4 +54,3 @@ public class AIRecommendationResponse {
         this.meta = meta;
     }
 }
-
