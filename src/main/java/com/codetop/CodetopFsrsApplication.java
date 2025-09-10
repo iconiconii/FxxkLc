@@ -27,7 +27,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
-@MapperScan("com.codetop.mapper")
+@MapperScan({"com.codetop.mapper","com.codetop.recommendation.mapper"})
 public class CodetopFsrsApplication {
 
     /**

@@ -160,8 +160,19 @@ public interface ProblemMapper extends BaseMapper<Problem> {
     /**
      * Find recently added problems.
      */
-    @Select("SELECT * FROM problems WHERE deleted = 0 ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("SELECT * FROM problems WHERE deleted = false ORDER BY created_at DESC LIMIT #{limit}")
     List<Problem> findRecentProblems(@Param("limit") int limit);
+
+    /**
+     * Minimal projection for recent problems to avoid schema differences in dev/H2.
+     */
+    @Select("SELECT id, title, difficulty FROM problems WHERE deleted = false ORDER BY id DESC LIMIT #{limit}")
+    @Results({
+            @Result(column = "id", property = "id"),
+            @Result(column = "title", property = "title"),
+            @Result(column = "difficulty", property = "difficulty")
+    })
+    List<Problem> findRecentProblemsMinimal(@Param("limit") int limit);
     
     // Company association queries
     

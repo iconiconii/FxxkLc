@@ -1,12 +1,10 @@
 package com.codetop.recommendation.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 import java.util.Map;
 
-@Configuration
 @ConfigurationProperties(prefix = "llm")
 public class LlmProperties {
     private boolean enabled = false;
@@ -102,4 +100,3 @@ public class LlmProperties {
         public void setTimeoutMs(Integer timeoutMs) { this.timeoutMs = timeoutMs; }
     }
 }
-

@@ -103,3 +103,13 @@ CREATE INDEX idx_review_logs_user_id ON review_logs(user_id);
 CREATE INDEX idx_review_logs_review_time ON review_logs(review_time);
 CREATE INDEX idx_problems_difficulty ON problems(difficulty);
 CREATE INDEX idx_problems_frequency ON problems(frequency DESC);
+
+-- Recommendation feedback table (for testing feedback API)
+CREATE TABLE IF NOT EXISTS recommendation_feedback (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    problem_id INT NOT NULL,
+    feedback VARCHAR(32) NOT NULL,
+    note VARCHAR(512),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

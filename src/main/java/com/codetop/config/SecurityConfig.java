@@ -59,6 +59,10 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/codetop/problems/global").permitAll()
                         .requestMatchers(HttpMethod.GET, "/filter/companies").permitAll()
+                        // Allow AI recommendations endpoint for testing/demo (non-sensitive read)
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/problems/*/recommendation-feedback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/problems/**/recommendation-feedback").permitAll()
                         // API docs - dev enabled or restrict to ADMIN
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                             .access((auth, ctx) -> {

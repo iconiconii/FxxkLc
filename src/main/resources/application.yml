@@ -239,25 +239,27 @@ springdoc:
     description: Intelligent algorithm problem management with FSRS spaced repetition
     version: 1.0.0
 
-# LLM minimal configuration (disabled by default)
+# LLM configuration (DeepSeek via OpenAI-compatible provider; disabled by default)
 llm:
-  enabled: false
+  enabled: true
   provider: chain
   chain:
     nodes:
-      - name: mock
+      - name: openai   # points to DeepSeek via baseUrl/model
         enabled: true
-        timeoutMs: 100
+        timeoutMs: 1800
         retry:
-          attempts: 0
+          attempts: 1
+      - name: mock
+        enabled: false
     defaultProvider:
       strategy: busy_message
       message: "系统繁忙，请稍后重试"
       httpStatus: 503
   openai:
-    baseUrl: https://api.openai.com/v1
-    model: gpt-4o-mini
-    apiKeyEnv: OPENAI_API_KEY
+    baseUrl: https://api.deepseek.com/v1
+    model: deepseek-chat
+    apiKeyEnv: DEEPSEEK_API_KEY
     timeoutMs: 1800
 
 # Resilience4j configuration for LLM
@@ -325,6 +327,9 @@ spring:
   config:
     activate:
       on-profile: dev
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
   
   # Development MongoDB Configuration
   data:
