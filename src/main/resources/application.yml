@@ -26,7 +26,7 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       # Database Connection
-      url: jdbc:mysql://localhost:3307/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+      url: jdbc:mysql://localhost:3308/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
       username: ${DB_USERNAME:root}
       password: ${DB_PASSWORD:root}
       driver-class-name: com.mysql.cj.jdbc.Driver
@@ -74,7 +74,7 @@ spring:
     
     # MongoDB Configuration
     mongodb:
-      uri: mongodb://localhost:27018/codetop_notes
+      uri: mongodb://root:root@localhost:27018/codetop_notes?authSource=admin
       auto-index-creation: true
   
   # Cache Configuration

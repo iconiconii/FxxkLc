@@ -75,8 +75,13 @@ public class CandidateBuilder {
     }
 
     private List<Problem> recentProblems(int cap) {
-        List<Problem> minimal = problemMapper.findRecentProblemsMinimal(cap);
-        return minimal != null ? minimal : List.of();
+        try {
+            List<Problem> minimal = problemMapper.findRecentProblemsMinimal(cap);
+            return minimal != null ? minimal : List.of();
+        } catch (Exception e) {
+            log.warn("Recent problems fallback failed: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private LlmProvider.ProblemCandidate toCandidate(FSRSCardMapper.ReviewQueueCard card) {
