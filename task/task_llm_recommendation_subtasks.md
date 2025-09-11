@@ -1,26 +1,26 @@
 # LLM智能推荐题目功能开发
 
 LLM Service Integration
-[ ] AI Recommendation Service
+[x] AI Recommendation Service
   - [x] Create `AIRecommendationService` class in `service/` package with LLM client integration
-  - [ ] Implement OpenAI GPT-4 or alternative LLM API client with async support（已提供 OpenAI 同步占位实现，异步与完整解析待补）
-  - [ ] Design prompt engineering templates for recommendation generation
-  - [x] Add retry mechanism, timeout control, and graceful error handling（已引入 Resilience4j Retry；OpenAI/HTTP 超时；错误处理基础版）
-  - [x] Configure rate limiting to prevent API quota exhaustion（已引入全局与每用户限流）
+  - [x] Implement OpenAI GPT-4 or alternative LLM API client with async support（已实现 OpenAI 兼容 provider，同步/异步、严格 JSON 解析）
+  - [x] Design prompt engineering templates for recommendation generation（已实现 `PromptTemplateService`，默认 v2 模板）
+  - [x] Add retry mechanism, timeout control, and graceful error handling（Resilience4j Retry；节点/Provider 超时；异常分类与兜底）
+  - [x] Configure rate limiting to prevent API quota exhaustion（全局/每用户/节点级限流，异步并发保护）
 
-[ ] Provider Chain (多模型责任链)
+[x] Provider Chain (多模型责任链)
   - [x] 引入 `ProviderChain` 责任链，按配置顺序尝试多个模型/提供商，失败则切到下一个
   - [x] 实现 `DefaultProvider` 作为末节点兜底，返回“系统繁忙”信息（策略可配）
   - [x] 支持在 `application.yml` 中以声明式方式组装责任链（按 profile 可差异化）
-  - [ ] 每个节点可配置超时、重试、限流与“哪些错误转下游”条件（如 TIMEOUT/HTTP_429/CIRCUIT_OPEN）（已支持 timeout/retry 字段；限流/错误下钻逻辑未落地）
-  - [ ] 输出链路指标与日志（命中节点、跳数、失败原因、最终策略）
-  - [ ] 根据用户消费/会员等级、AB组、路由等选择不同责任链（策略解析 + 多链注册表）（当前使用固定 tier=BRONZE，占位未实现）
+  - [x] 每个节点可配置超时、重试、限流与“哪些错误转下游”条件（如 TIMEOUT/HTTP_429/CIRCUIT_OPEN）（已支持 timeout/retry/rateLimit/onErrorsToNext，异步亦支持）
+  - [x] 输出链路指标与日志（命中节点、跳数、失败原因、最终策略）（已输出 chainHops/strategy/fallbackReason 至 meta/headers，日志基础版）
+  - [x] 根据用户消费/会员等级、AB组、路由等选择不同责任链（策略解析 + 多链注册表）（已实现 ChainSelector + 路由规则配置）
 
-[ ] Configuration Management
+[x] Configuration Management
   - [x] Add LLM configuration section to `application.yml` (API keys, endpoints, models)
-  - [ ] Support multi-environment configs (dev/test/prod) with different LLM providers（结构已具备，未提供按 profile 的差异化示例）
+  - [x] Support multi-environment configs (dev/test/prod) with different LLM providers（dev/test/prod 示例与启停策略已补齐）
   - [x] Implement secure API key management via environment variables
-  - [ ] Add feature toggles for LLM recommendation on/off per user segment（已支持全局 `llm.enabled`，用户分段开关未实现）
+  - [x] Add feature toggles for LLM recommendation on/off per user segment（已实现 LlmToggleService + 分段特性开关配置）
   - [x] 增加 `llm.chain` 配置块：定义节点顺序、启用条件、错误下钻策略与 `defaultProvider` 的兜底策略
 
 YAML 配置（示例）
@@ -74,12 +74,12 @@ Open Questions
 - How to handle LLM API outages without degrading user experience?
 
 Acceptance Criteria
-- [ ] `AIRecommendationService` successfully calls LLM API and parses responses（当前 MockProvider 可产出占位结果；OpenAI 占位未解析结构化响应）
-- [ ] Configuration supports multiple environments and secure credential management（已具备安全凭据管理；多环境差异化待补）
-- [ ] Service gracefully handles API failures with fallback to FSRS recommendations（已实现 DefaultProvider 返回忙碌提示；FSRS 回退逻辑待补）
+- [x] `AIRecommendationService` successfully calls LLM API and parses responses（已实现 OpenAI 兼容调用与严格 JSON 解析，含同步/异步）
+- [x] Configuration supports multiple environments and secure credential management（按 dev/test/prod 配置与环境变量管理凭据）
+- [x] Service gracefully handles API failures with fallback to FSRS recommendations（责任链默认化 + 服务层 FSRS 回退）
 - [x] Rate limiting prevents API quota overruns
 - [x] 责任链顺序由 `application.yml` 决定，节点启停/顺序变更可通过配置切换
-- [x] 上游全部失败时，由 `DefaultProvider` 返回“系统繁忙”或按策略回退（已实现 busy_message 路径；fsrs_fallback 待补）
+- [x] 上游全部失败时，由 `DefaultProvider` 返回“系统繁忙”或按策略回退（支持 busy_message / fsrs_fallback）
 
 Commit Message
 feat(ai): add LLM service integration for intelligent recommendations
