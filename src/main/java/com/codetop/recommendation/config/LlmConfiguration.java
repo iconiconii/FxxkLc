@@ -5,6 +5,7 @@ import com.codetop.recommendation.provider.LlmProvider;
 import com.codetop.recommendation.provider.impl.DefaultProvider;
 import com.codetop.recommendation.provider.impl.MockProvider;
 import com.codetop.recommendation.provider.impl.OpenAiProvider;
+import com.codetop.recommendation.service.PromptTemplateService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,8 +17,8 @@ import java.util.List;
 public class LlmConfiguration {
 
     @Bean
-    public LlmProvider openAiProvider(LlmProperties props) {
-        return new OpenAiProvider(props.getOpenai());
+    public LlmProvider openAiProvider(LlmProperties props, PromptTemplateService promptTemplateService) {
+        return new OpenAiProvider(props.getOpenai(), promptTemplateService);
     }
 
     @Bean

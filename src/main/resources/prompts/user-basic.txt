@@ -1,0 +1,7 @@
+Task: Rank the candidates and return top {{limit}} items.
+User: {{userId}}
+Route: {{route}}
+Constraints: Output strictly as JSON object with field 'items'.
+Candidates: {{candidatesJson}}
+
+Return only JSON. Example: {"items":[{"problemId":1,"reason":"...","confidence":0.8,"strategy":"progressive","score":0.8}]}

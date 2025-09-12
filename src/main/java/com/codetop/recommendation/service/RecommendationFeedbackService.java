@@ -5,19 +5,19 @@ import com.codetop.recommendation.entity.RecommendationFeedback;
 import com.codetop.recommendation.mapper.RecommendationFeedbackMapper;
 import com.codetop.util.CacheHelper;
 import com.codetop.service.CacheKeyBuilder;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class RecommendationFeedbackService {
     private final RecommendationFeedbackMapper mapper;
     private final CacheHelper cacheHelper;
-
-    public RecommendationFeedbackService(RecommendationFeedbackMapper mapper, CacheHelper cacheHelper) {
-        this.mapper = mapper;
-        this.cacheHelper = cacheHelper;
-    }
+    private final UserProfilingService userProfilingService;
 
     public void submit(Long problemId, RecommendationFeedbackRequest request) {
         RecommendationFeedback fb = new RecommendationFeedback();
@@ -31,6 +31,10 @@ public class RecommendationFeedbackService {
         // Evict recommendation cache for this user
         String pattern = CacheKeyBuilder.buildUserDomainPattern("rec-ai", request.getUserId());
         cacheHelper.evictByPattern(pattern);
+        
+        // Invalidate user profile cache since feedback affects recommendations
+        userProfilingService.invalidateUserProfileCache(request.getUserId());
+        log.debug("Invalidated user profile cache after recommendation feedback: userId={}", request.getUserId());
     }
 }
 

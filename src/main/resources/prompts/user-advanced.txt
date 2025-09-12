@@ -1,0 +1,84 @@
+## Task
+Select and rank the top {{limit}} algorithm problems for this user based on learning optimization principles.
+
+## User Profile
+- User ID: {{userId}}
+- Tier: {{tier}}
+- AB Group: {{abGroup}}
+{{#userProfile}}
+- Learning Pattern: {{learningPattern}}
+- Overall Mastery: {{overallMasteryPercent}}%
+- Average Accuracy: {{averageAccuracyPercent}}%
+- Weak Domains: {{weakDomains}}
+- Strong Domains: {{strongDomains}}
+- Difficulty Distribution: {{difficultyDistribution}}
+- Learning Approach: {{learningApproach}}
+- Data Quality: {{dataQualityPercent}}%
+{{/userProfile}}
+{{#userInsights}}
+- Learning Pattern: {{learningPattern}}
+- Weak Topics: {{weakTopics}}  
+- Strong Topics: {{strongTopics}}
+- Average Accuracy: {{averageAccuracyPercent}}%
+- Difficulty Preference: {{difficultyTrend}}
+{{/userInsights}}
+
+## Goals
+{{#objective}}
+- Learning Objective: {{objective}}
+{{/objective}}
+{{#targetDomains}}
+- Target Domains: {{targetDomains}}
+{{/targetDomains}}
+{{#desiredDifficulty}}
+- Desired Difficulty: {{desiredDifficulty}}
+{{/desiredDifficulty}}
+{{#timeboxMinutes}}
+- Practice Time Limit: {{timeboxMinutes}} minutes
+{{/timeboxMinutes}}
+{{#defaultGoal}}
+- Learning Objective: general improvement (no specific goals set)
+{{/defaultGoal}}
+
+## Available Problems
+{{candidatesJson}}
+
+## Recommendation Strategy
+{{#objectiveStrategy}}
+{{objectiveStrategy}}
+{{/objectiveStrategy}}
+{{#profileStrategy}}
+User Profile: {{learningApproach}}
+Learning Pattern: {{learningPattern}}
+{{#lowDataQuality}}
+Note: Limited data available ({{dataQualityPercent}}% quality) - use broader exploration strategy
+{{/lowDataQuality}}
+Prioritize problems that:
+{{#targetDomainsSpecified}}
+1. Focus on target domains: {{targetDomains}}
+{{/targetDomainsSpecified}}
+{{^targetDomainsSpecified}}
+1. Address weak domains: {{weakDomains}}
+{{/targetDomainsSpecified}}
+2. Build on strong domains: {{strongDomains}}
+{{#desiredDifficultySpecified}}
+3. Match desired difficulty: {{desiredDifficulty}}
+{{/desiredDifficultySpecified}}
+{{^desiredDifficultySpecified}}
+3. Match difficulty preference: {{difficultyTarget}}
+{{/desiredDifficultySpecified}}
+4. Provide appropriate challenge based on overall mastery ({{overallMasteryPercent}}%)
+{{#timeboxSpecified}}
+5. Consider time constraint: problems suitable for {{timeboxMinutes}}-minute practice session
+{{/timeboxSpecified}}
+{{/profileStrategy}}
+{{#insightStrategy}}
+Focus on: {{recommendationFocus}}
+Prioritize problems that:
+1. Address identified weak areas
+2. Maintain appropriate difficulty progression
+3. Provide topic diversity
+4. Build on recent learning momentum
+{{/insightStrategy}}
+
+Return exactly {{limit}} items as JSON only.

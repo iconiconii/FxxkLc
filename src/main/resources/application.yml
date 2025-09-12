@@ -222,6 +222,7 @@ cache:
       review-queue: 1800   # 30 minutes
       analytics: 3600      # 1 hour
       leaderboard: 1800    # 30 minutes
+      similarProblems: 900 # 15 minutes - from rec.similarity.cache.ttl-minutes
 
 # User Profiling Configuration
 user-profiling:
@@ -280,6 +281,147 @@ user-profiling:
     design: system_design
     simulation: simulation
 
+# Similarity-based recommendation configuration
+rec:
+  similarity:
+    weights:
+      tags-weight: 0.4          # Weight for Jaccard tag similarity
+      categories-weight: 0.3    # Weight for shared categories similarity  
+      difficulty-weight: 0.3    # Weight for difficulty matching
+      diversity-weight: 0.2     # Weight for diversity in selection
+    thresholds:
+      min-similarity-score: 0.3      # Minimum similarity to include
+      empty-feature-similarity: 0.0  # Similarity when both features are empty (OPT-2)
+      max-similar-problems: 5         # Max similar problems to find per candidate
+      min-shared-categories: 1        # Min shared categories for category-based search
+    cache:
+      enabled: true
+      ttl-minutes: 15           # Cache TTL for similar problems
+      max-entries: 1000         # Max cached entries
+    batch:
+      insert-batch-size: 200    # Batch size for category assignments
+      batch-timeout-ms: 5000    # Timeout for batch operations
+    integration:
+      pre-filter-enabled: true        # Enable similarity-based pre-filtering
+      hybrid-scoring-enabled: false   # Enable hybrid LLM+FSRS+similarity scoring
+      pre-filter-limit: 30            # Max candidates after pre-filtering
+      max-candidates-for-similarity: 50  # Performance guardrail: Skip similarity enhancement above this threshold
+      llm-weight: 0.5                 # Weight for LLM score in hybrid (deprecated - use rec.hybrid)
+      fsrs-weight: 0.3                # Weight for FSRS score in hybrid (deprecated - use rec.hybrid)
+      similarity-weight: 0.2          # Weight for similarity score in hybrid (deprecated - use rec.hybrid)
+  
+  # Hybrid ranking configuration (v3 enhancement)
+  hybrid:
+    enabled: true                     # Enable hybrid ranking that combines LLM, FSRS, similarity, and personalization signals
+    weights:
+      llm: 0.45                      # Weight for LLM score in final ranking (0.0-1.0)
+      fsrs: 0.30                     # Weight for FSRS urgency score (0.0-1.0)
+      similarity: 0.15               # Weight for similarity-based score (0.0-1.0)
+      personalization: 0.10          # Weight for personalization score (0.0-1.0)
+    # Note: Weights should sum to 1.0 for proper normalization
+    fallback:
+      on-error: llm-only             # Fallback strategy when hybrid ranking fails: llm-only, fsrs-only, disabled
+    performance:
+      max-candidates: 50             # Maximum candidates to process for hybrid ranking
+      timeout-ms: 500                # Timeout for hybrid ranking operations
+
+  # Multi-dimensional strategy mixing configuration (v3 enhancement)
+  strategy:
+    mix:
+      enabled: true                  # Enable multi-dimensional recommendation mixing
+      quotas:
+        # Default quota ratios for different learning objectives (should sum to 1.0)
+        weakness-focus:
+          weakness: 0.6              # Focus on weak domains
+          progressive: 0.2           # Some progressive difficulty
+          coverage: 0.2              # Minimal topic coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        progressive-difficulty:
+          weakness: 0.3              # Address weaknesses
+          progressive: 0.5           # Main focus on progression
+          coverage: 0.2              # Some topic coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        topic-coverage:
+          weakness: 0.2              # Some weakness focus
+          progressive: 0.3           # Some progression
+          coverage: 0.5              # Main focus on coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        exam-prep:
+          weakness: 0.25             # Address key weaknesses
+          progressive: 0.0           # No progressive learning
+          coverage: 0.0              # No general coverage
+          exam: 0.6                  # Main focus on exam prep
+          refresh: 0.15              # Some mastery refresh
+        
+        refresh-mastered:
+          weakness: 0.0              # No weakness focus
+          progressive: 0.15          # Minimal progression
+          coverage: 0.25             # Some coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.6               # Main focus on refresh
+      
+      adaptive:
+        enabled: true                # Enable adaptive quota adjustment based on user profile
+        min-mastery-level: 0.3       # Minimum mastery level to enable adaptive adjustments
+        max-adjustment-factor: 0.2   # Maximum quota adjustment factor (20% adjustment)
+        recent-sessions-window: 10   # Number of recent sessions to consider for adaptiveness
+      
+      performance:
+        max-candidates-per-strategy: 100    # Maximum candidates to process in each strategy category
+        timeout-ms: 300                     # Timeout for mixing operations in milliseconds
+        enable-category-caching: true       # Enable caching of categorized candidates
+        category-cache-ttl-seconds: 300     # Cache TTL for categorized candidates in seconds
+
+  # Confidence calibration configuration (v3 enhancement)  
+  confidence:
+    enabled: true                    # Enable confidence calibration for recommendation quality assessment
+    weights:
+      # Component weights for confidence calculation (should sum to 1.0)
+      llm-quality: 0.25             # Weight for LLM response quality indicators
+      fsrs-data: 0.20               # Weight for FSRS data completeness and reliability
+      profile-relevance: 0.20       # Weight for user profile relevance matching
+      historical-accuracy: 0.15     # Weight for historical recommendation accuracy
+      cross-signal-consensus: 0.10  # Weight for consensus between different signals
+      context-quality: 0.10         # Weight for overall system context quality
+    
+    thresholds:
+      high-confidence: 0.8          # Threshold for high confidence classification
+      medium-confidence: 0.6        # Threshold for medium confidence classification  
+      low-confidence: 0.4           # Threshold for low confidence classification
+      minimum-show: 0.2             # Minimum confidence required to show a recommendation
+      min-llm-quality: 0.3          # Minimum LLM quality score to trust LLM recommendations
+      min-fsrs-quality: 0.4         # Minimum FSRS data quality to use FSRS signals
+      min-profile-completeness: 0.3 # Minimum profile completeness to use personalization
+    
+    display:
+      include-in-reason: true       # Include confidence level in recommendation reason
+      include-factors: false        # Include specific confidence factors in reason
+      show-warnings: true           # Show confidence warnings for low-quality recommendations
+      confidence-format: "[%s Confidence]"  # Format for confidence display in reasons
+      show-numeric-score: false     # Show confidence score numerically
+      numeric-precision: 2          # Number of decimal places for numeric confidence scores
+    
+    performance:
+      enable-caching: true          # Cache confidence calculations
+      cache-ttl-seconds: 600        # TTL for confidence cache in seconds (10 minutes)
+      max-cache-size: 1000          # Maximum items to cache
+      calculation-timeout-ms: 200   # Timeout for confidence calculation in milliseconds
+      enable-async-calculation: false  # Enable async confidence calculation
+      batch-size: 50                # Batch size for bulk confidence calculations
+    
+    historical:
+      enabled: true                 # Enable historical accuracy tracking
+      window-days: 30               # Window size in days for historical accuracy calculation
+      min-samples: 5                # Minimum feedback samples needed for reliable historical accuracy
+      decay-factor: 0.95            # Weight decay for older feedback samples
+      update-frequency: daily       # Update frequency: daily, hourly, realtime
+
 # API Documentation
 springdoc:
   api-docs:
@@ -301,6 +443,40 @@ llm:
   enabled: ${LLM_ENABLED:false}  # Global LLM toggle, disabled by default
   provider: chain
   defaultChainId: main   # Default chain when no routing rules match
+  
+  # External prompt template configuration for A/B testing
+  prompt:
+    templates:
+      defaultVersion: v3                    # Default prompt version
+      cacheEnabled: true                    # Enable template caching
+      cacheTimeoutMinutes: 60              # Cache TTL in minutes
+      templateBasePath: prompts            # Base path in resources
+      
+      # Template file mappings (key format: "{version}.{type}")
+      templateFiles:
+        v1.system: prompts/system-v1.txt
+        v2.system: prompts/system-v2.txt
+        v3.system: prompts/system-v3.txt
+        v1.user: prompts/user-basic.txt
+        v2.user: prompts/user-advanced.txt
+        v3.user: prompts/user-advanced.txt
+      
+      # A/B testing configuration for template selection
+      abTests:
+        premium-users:                      # Test name
+          tiers: [GOLD, PLATINUM]          # User tiers that get this version
+          version: v3                       # Prompt version for these users
+          weight: 100                       # Selection weight (0-100)
+        
+        beta-testers:
+          abGroups: [beta, experimental]   # AB groups that get this version
+          version: v3
+          weight: 100
+        
+        ai-route-test:
+          routes: [ai-recommendations]     # Routes that get this version
+          version: v2                       # Use v2 for AI recommendation route
+          weight: 70                        # 70% of traffic gets v2, rest gets default
   
   # Multiple chains for different user segments
   chains:

@@ -127,7 +127,43 @@ public class RedisCacheServiceImpl implements CacheService {
     
     @Override
     public <T> List<T> getList(String key, Class<T> elementType) {
-        return getList(key, new TypeReference<List<T>>() {});
+        try {
+            if (key == null) {
+                log.warn("Cache getList(Class) ignored - key is null");
+                missCount.incrementAndGet();
+                return null;
+            }
+
+            Object cached = redisTemplate.opsForValue().get(key);
+            if (cached == null) {
+                log.debug("Cache MISS (list,Class): key={}", key);
+                missCount.incrementAndGet();
+                return null;
+            }
+
+            if (cached instanceof java.util.List<?> list) {
+                boolean allMatch = list.stream().allMatch(e -> e == null || elementType.isInstance(e));
+                if (allMatch) {
+                    log.debug("Cache HIT (list,Class direct): key={}, size={}", key, list.size());
+                    hitCount.incrementAndGet();
+                    @SuppressWarnings("unchecked")
+                    List<T> typed = (List<T>) list;
+                    return typed;
+                }
+            }
+
+            com.fasterxml.jackson.databind.JavaType javaType = objectMapper.getTypeFactory()
+                    .constructCollectionType(List.class, elementType);
+            List<T> result = objectMapper.convertValue(cached, javaType);
+            log.debug("Cache HIT (list,Class converted): key={}, size={}", key, result != null ? result.size() : 0);
+            hitCount.incrementAndGet();
+            return result;
+
+        } catch (Exception e) {
+            log.error("Cache getList(Class) failed: key={}, error={}", key, e.getMessage(), e);
+            missCount.incrementAndGet();
+            return null;
+        }
     }
     
     @Override

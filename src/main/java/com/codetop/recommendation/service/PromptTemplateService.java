@@ -5,6 +5,8 @@ import com.codetop.recommendation.provider.LlmProvider.ProblemCandidate;
 import com.codetop.recommendation.provider.LlmProvider.PromptOptions;
 import com.codetop.recommendation.service.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,17 +17,34 @@ import java.util.Map;
 /**
  * Service for generating structured prompt templates for LLM recommendation requests.
  * Implements versioned prompt engineering templates with user profiling and contextual guidance.
+ * 
+ * @deprecated Use {@link ExternalPromptTemplateService} for new implementations with external template files.
+ * This service is kept for backward compatibility and will delegate to the external service when available.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class PromptTemplateService {
     
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExternalPromptTemplateService externalTemplateService;
     
     /**
      * Build system message for the LLM conversation.
      * Establishes role, constraints, and output format requirements.
+     * 
+     * Delegates to ExternalPromptTemplateService for template-based generation.
      */
     public String buildSystemMessage(String promptVersion) {
+        try {
+            return externalTemplateService.buildSystemMessage(promptVersion, null);
+        } catch (Exception e) {
+            log.warn("Failed to use external template service, falling back to hardcoded templates", e);
+            return buildSystemMessageFallback(promptVersion);
+        }
+    }
+    
+    private String buildSystemMessageFallback(String promptVersion) {
         if ("v2".equals(promptVersion)) {
             return """
                 You are an intelligent algorithm problem recommendation engine. Your role is to analyze user learning patterns 
@@ -63,9 +82,24 @@ public class PromptTemplateService {
     
     /**
      * Build user message with comprehensive context including user profile and problem candidates.
+     * 
+     * Delegates to ExternalPromptTemplateService for template-based generation.
      */
     public String buildUserMessage(RequestContext ctx, List<ProblemCandidate> candidates, PromptOptions options, String promptVersion) {
-        if ("v2".equals(promptVersion)) {
+        try {
+            // Set the prompt version in context for the external service
+            if (ctx != null) {
+                ctx.setPromptVersion(promptVersion);
+            }
+            return externalTemplateService.buildUserMessage(ctx, candidates, options);
+        } catch (Exception e) {
+            log.warn("Failed to use external template service, falling back to hardcoded templates", e);
+            return buildUserMessageFallback(ctx, candidates, options, promptVersion);
+        }
+    }
+    
+    private String buildUserMessageFallback(RequestContext ctx, List<ProblemCandidate> candidates, PromptOptions options, String promptVersion) {
+        if ("v2".equals(promptVersion) || "v3".equals(promptVersion)) {
             return buildAdvancedUserMessage(ctx, candidates, options);
         }
         return buildBasicUserMessage(ctx, candidates, options);
@@ -129,6 +163,31 @@ public class PromptTemplateService {
             sb.append("- Difficulty Preference: ").append(insights.difficultyTrend).append("\n\n");
         }
         
+        // Goals and Learning Objectives (v3 enhancement)
+        sb.append("## Goals\n");
+        if (ctx != null) {
+            if (ctx.getObjective() != null) {
+                sb.append("- Learning Objective: ").append(ctx.getObjective().getValue()).append("\n");
+            }
+            if (ctx.getTargetDomains() != null && !ctx.getTargetDomains().isEmpty()) {
+                sb.append("- Target Domains: ").append(String.join(", ", ctx.getTargetDomains())).append("\n");
+            }
+            if (ctx.getDesiredDifficulty() != null) {
+                sb.append("- Desired Difficulty: ").append(ctx.getDesiredDifficulty().getValue()).append("\n");
+            }
+            if (ctx.getTimeboxMinutes() != null) {
+                sb.append("- Practice Time Limit: ").append(ctx.getTimeboxMinutes()).append(" minutes\n");
+            }
+            // If no specific goals are set, provide default guidance
+            if (ctx.getObjective() == null && (ctx.getTargetDomains() == null || ctx.getTargetDomains().isEmpty()) 
+                && ctx.getDesiredDifficulty() == null) {
+                sb.append("- Learning Objective: general improvement (no specific goals set)\n");
+            }
+        } else {
+            sb.append("- Learning Objective: general improvement\n");
+        }
+        sb.append("\n");
+        
         // Problem Candidates
         sb.append("## Available Problems\n");
         try {
@@ -139,12 +198,34 @@ public class PromptTemplateService {
         }
         sb.append("\n\n");
         
-        // Recommendation Strategy
+        // Recommendation Strategy (enhanced for v3)
         sb.append("## Recommendation Strategy\n");
+        
+        // Consider learning objectives first (v3 enhancement)
+        if (ctx != null && ctx.getObjective() != null) {
+            switch (ctx.getObjective()) {
+                case WEAKNESS_FOCUS:
+                    sb.append("Primary Focus: Address weak knowledge domains and struggling topics\n");
+                    break;
+                case PROGRESSIVE_DIFFICULTY:
+                    sb.append("Primary Focus: Gradually increase difficulty to build confidence and skills\n");
+                    break;
+                case TOPIC_COVERAGE:
+                    sb.append("Primary Focus: Explore diverse domains for comprehensive knowledge building\n");
+                    break;
+                case EXAM_PREP:
+                    sb.append("Primary Focus: High-frequency and important problems for exam preparation\n");
+                    break;
+                case REFRESH_MASTERED:
+                    sb.append("Primary Focus: Review previously learned concepts to maintain retention\n");
+                    break;
+            }
+        }
+        
         if (profile != null) {
             // Use profile-driven strategy
             double dataQuality = profile.getDataQuality();
-            sb.append("Focus on: ").append(formatLearningApproach(profile)).append("\n");
+            sb.append("User Profile: ").append(formatLearningApproach(profile)).append("\n");
             sb.append("Learning Pattern: ").append(profile.getLearningPattern()).append("\n");
             
             if (dataQuality < 0.5) {
@@ -153,13 +234,35 @@ public class PromptTemplateService {
             }
             
             sb.append("Prioritize problems that:\n");
-            sb.append("1. Address weak domains: ").append(String.join(", ", profile.getWeakDomains())).append("\n");
+            
+            // Use target domains if specified, otherwise fall back to profile analysis
+            if (ctx != null && ctx.getTargetDomains() != null && !ctx.getTargetDomains().isEmpty()) {
+                sb.append("1. Focus on target domains: ").append(String.join(", ", ctx.getTargetDomains())).append("\n");
+            } else {
+                sb.append("1. Address weak domains: ").append(String.join(", ", profile.getWeakDomains())).append("\n");
+            }
+            
             java.util.List<String> strongDomainsSorted2 = new java.util.ArrayList<>(profile.getStrongDomains());
             java.util.Collections.sort(strongDomainsSorted2);
             sb.append("2. Build on strong domains: ").append(String.join(", ", strongDomainsSorted2)).append("\n");
-            sb.append("3. Match difficulty preference: ").append(profile.getDifficultyPref() != null ? 
-                profile.getDifficultyPref().getPreferredLevel() : "BALANCED").append("\n");
-            sb.append("4. Provide appropriate challenge based on overall mastery (").append(String.format("%.1f%%", profile.getOverallMastery() * 100)).append(")\n\n");
+            
+            // Use desired difficulty if specified, otherwise profile preference
+            String difficultyTarget = "BALANCED";
+            if (ctx != null && ctx.getDesiredDifficulty() != null) {
+                difficultyTarget = ctx.getDesiredDifficulty().getValue();
+                sb.append("3. Match desired difficulty: ").append(difficultyTarget).append("\n");
+            } else {
+                difficultyTarget = profile.getDifficultyPref() != null ? profile.getDifficultyPref().getPreferredLevel().name() : "BALANCED";
+                sb.append("3. Match difficulty preference: ").append(difficultyTarget).append("\n");
+            }
+            
+            sb.append("4. Provide appropriate challenge based on overall mastery (").append(String.format("%.1f%%", profile.getOverallMastery() * 100)).append(")\n");
+            
+            // Add time constraint consideration if specified
+            if (ctx != null && ctx.getTimeboxMinutes() != null) {
+                sb.append("5. Consider time constraint: problems suitable for ").append(ctx.getTimeboxMinutes()).append("-minute practice session\n");
+            }
+            sb.append("\n");
         } else {
             // Fallback to candidate-derived strategy
             UserInsights insights = analyzeUserProfile(candidates);
@@ -222,6 +325,25 @@ public class PromptTemplateService {
                 map.put("tags", c.tags != null ? c.tags : List.of());
                 map.put("accuracy", c.recentAccuracy != null ? Math.round(c.recentAccuracy * 100) / 100.0 : 0.0);
                 map.put("attempts", c.attempts != null ? c.attempts : 0);
+                
+                // Add FSRS urgency signals (v3 enhancement)
+                if (c.retentionProbability != null) {
+                    map.put("retentionProbability", Math.round(c.retentionProbability * 100) / 100.0);
+                }
+                if (c.daysOverdue != null) {
+                    map.put("daysOverdue", c.daysOverdue);
+                }
+                if (c.urgencyScore != null) {
+                    map.put("urgencyScore", Math.round(c.urgencyScore * 100) / 100.0);
+                    // Add human-readable urgency level
+                    if (c.urgencyScore > 0.7) {
+                        map.put("urgencyLevel", "high");
+                    } else if (c.urgencyScore > 0.4) {
+                        map.put("urgencyLevel", "medium");
+                    } else {
+                        map.put("urgencyLevel", "low");
+                    }
+                }
                 
                 // Add learning indicators
                 if (c.recentAccuracy != null) {
@@ -323,9 +445,28 @@ public class PromptTemplateService {
     }
     
     /**
-     * Get current prompt version (can be made configurable via properties)
+     * Get current prompt version with A/B testing support.
+     * 
+     * Delegates to ExternalPromptTemplateService for dynamic version selection.
      */
     public String getCurrentPromptVersion() {
-        return "v2"; // Default to advanced prompting
+        try {
+            return externalTemplateService.getCurrentPromptVersion(null);
+        } catch (Exception e) {
+            log.warn("Failed to get version from external template service, using default", e);
+            return "v3"; // Enhanced with learning objectives
+        }
+    }
+    
+    /**
+     * Get current prompt version with request context for A/B testing.
+     */
+    public String getCurrentPromptVersion(RequestContext context) {
+        try {
+            return externalTemplateService.getCurrentPromptVersion(context);
+        } catch (Exception e) {
+            log.warn("Failed to get version from external template service, using default", e);
+            return "v3";
+        }
     }
 }

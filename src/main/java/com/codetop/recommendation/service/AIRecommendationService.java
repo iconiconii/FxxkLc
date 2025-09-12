@@ -8,6 +8,7 @@ import com.codetop.recommendation.dto.UserProfile;
 import com.codetop.recommendation.alg.CandidateBuilder;
 import com.codetop.recommendation.service.CandidateEnhancer;
 import com.codetop.recommendation.provider.LlmProvider;
+import com.codetop.recommendation.metrics.LlmMetricsCollector;
 import com.codetop.service.CacheKeyBuilder;
 import com.codetop.service.cache.CacheService;
 import com.codetop.util.CacheHelper;
@@ -20,10 +21,12 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 public class AIRecommendationService {
@@ -40,10 +43,15 @@ public class AIRecommendationService {
     private final LlmToggleService llmToggleService;
     private final UserProfilingService userProfilingService;
     private final CandidateEnhancer candidateEnhancer;
+    private final HybridRankingService hybridRankingService;
+    private final RecommendationMixer recommendationMixer;
+    private final ConfidenceCalibrator confidenceCalibrator;
+    private final LlmMetricsCollector metricsCollector;
     
     // Async rate limiting with semaphores (configured via properties)
     private final Semaphore globalAsyncSemaphore;
-    private final Semaphore perUserAsyncSemaphore;
+    private final Map<Long, Semaphore> perUserSemaphores; // Fixed: per-user semaphores instead of shared
+    private final int maxPerUserConcurrency;
 
     @org.springframework.beans.factory.annotation.Autowired
 public AIRecommendationService(ProviderChain providerChain, CandidateBuilder candidateBuilder,
@@ -51,7 +59,9 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                                ObjectMapper objectMapper, PromptTemplateService promptTemplateService,
                                LlmProperties llmProperties, ChainSelector chainSelector,
                                LlmToggleService llmToggleService, UserProfilingService userProfilingService,
-                               CandidateEnhancer candidateEnhancer) {
+                               CandidateEnhancer candidateEnhancer, HybridRankingService hybridRankingService,
+                               RecommendationMixer recommendationMixer, ConfidenceCalibrator confidenceCalibrator,
+                               LlmMetricsCollector metricsCollector) {
     this.providerChain = providerChain;
     this.candidateBuilder = candidateBuilder;
     this.cacheHelper = cacheHelper;
@@ -63,6 +73,10 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.llmToggleService = llmToggleService;
     this.userProfilingService = userProfilingService;
     this.candidateEnhancer = candidateEnhancer;
+    this.hybridRankingService = hybridRankingService;
+    this.recommendationMixer = recommendationMixer;
+    this.confidenceCalibrator = confidenceCalibrator;
+    this.metricsCollector = metricsCollector;
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -71,7 +85,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         ? llmProperties.getAsyncLimits().getPerUserConcurrency() : 2;
     
     this.globalAsyncSemaphore = new Semaphore(globalLimit);
-    this.perUserAsyncSemaphore = new Semaphore(perUserLimit);
+    this.perUserSemaphores = new java.util.concurrent.ConcurrentHashMap<>();
+    this.maxPerUserConcurrency = perUserLimit;
     
     log.debug("Initialized AIRecommendationService with async limits: global={}, perUser={}", 
         globalLimit, perUserLimit);
@@ -90,8 +105,13 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         this.llmToggleService = null;
         this.userProfilingService = null;
         this.candidateEnhancer = null;
+        this.hybridRankingService = null;
+        this.recommendationMixer = null;
+        this.confidenceCalibrator = null;
+        this.metricsCollector = null;
         this.globalAsyncSemaphore = new Semaphore(10);
-        this.perUserAsyncSemaphore = new Semaphore(2);
+        this.perUserSemaphores = new java.util.concurrent.ConcurrentHashMap<>();
+        this.maxPerUserConcurrency = 2;
     }
     
     // Additional backward-compatible constructor for existing tests
@@ -110,6 +130,10 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.llmToggleService = null; // No toggle service in legacy mode
     this.userProfilingService = null; // No user profiling in legacy mode
     this.candidateEnhancer = null; // No candidate enhancement in legacy mode
+    this.hybridRankingService = null; // No hybrid ranking in legacy mode
+    this.recommendationMixer = null; // No recommendation mixing in legacy mode
+    this.confidenceCalibrator = null; // No confidence calibration in legacy mode
+    this.metricsCollector = null; // No metrics collection in legacy mode
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -118,98 +142,138 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         ? llmProperties.getAsyncLimits().getPerUserConcurrency() : 2;
     
     this.globalAsyncSemaphore = new Semaphore(globalLimit);
-    this.perUserAsyncSemaphore = new Semaphore(perUserLimit);
+    this.perUserSemaphores = new java.util.concurrent.ConcurrentHashMap<>();
+    this.maxPerUserConcurrency = perUserLimit;
     
     log.debug("Initialized AIRecommendationService in legacy mode with async limits: global={}, perUser={}", 
         globalLimit, perUserLimit);
 }
 
     public AIRecommendationResponse getRecommendations(Long userId, int limit) {
-    // Build request context with proper tier and abGroup resolution
-    RequestContext ctx = buildRequestContext(userId);
-    String chainId = chainSelector != null ? chainSelector.getSelectedChainId(ctx, llmProperties) : "legacy";
-
-    // Check feature toggles first
-    if (llmToggleService != null && !llmToggleService.isEnabled(ctx, llmProperties)) {
-        String disabledReason = llmToggleService.getDisabledReason(ctx, llmProperties);
-        log.debug("LLM disabled for userId={}, reason={}", userId, disabledReason);
-        return buildFsrsFallbackResponse(ctx, userId, limit, disabledReason);
+        // Delegate to the enhanced version with null parameters to avoid duplicate logic
+        return getRecommendations(userId, limit, null, null, null, null);
     }
 
-    // Build cache key with segment information including chainId
-    String promptVersion = getCurrentPromptVersion();
-    String segmentSuffix = buildSegmentSuffix(ctx, chainId);
-    String cacheKey = CacheKeyBuilder.buildUserKey("rec-ai", userId, 
-        String.format("limit_%d_pv_%s_%s", limit, promptVersion, segmentSuffix));
-    
-    List<RecommendationItemDTO> items = null;
-    boolean cacheHit = false;
-    List<String> chainHops = new ArrayList<>();
-    String strategy = "normal";
-    String fallbackReason = null;
-    
-    if (cacheService != null) {
-        items = cacheService.getList(cacheKey, RecommendationItemDTO.class);
-        if (items != null && !items.isEmpty() && !(items.get(0) instanceof RecommendationItemDTO)) {
-            try {
-                items = objectMapper.convertValue(items, new TypeReference<List<RecommendationItemDTO>>(){});
-            } catch (Exception ignore) {
-                items = null;
+    /**
+     * Enhanced getRecommendations method with learning objectives and preferences.
+     */
+    public AIRecommendationResponse getRecommendations(
+            Long userId, 
+            int limit,
+            LearningObjective objective,
+            List<String> targetDomains,
+            DifficultyPreference desiredDifficulty,
+            Integer timeboxMinutes
+    ) {
+        // Build enhanced request context with learning objectives
+        RequestContext ctx = buildRequestContext(userId, objective, targetDomains, desiredDifficulty, timeboxMinutes);
+        String chainId = chainSelector != null ? chainSelector.getSelectedChainId(ctx, llmProperties) : "legacy";
+
+        // Check feature toggles first
+        if (llmToggleService != null && !llmToggleService.isEnabled(ctx, llmProperties)) {
+            String disabledReason = llmToggleService.getDisabledReason(ctx, llmProperties);
+            log.debug("LLM disabled for userId={}, reason={}", userId, disabledReason);
+            
+            // Record toggle decision metrics
+            if (metricsCollector != null) {
+                metricsCollector.recordToggleDecision(
+                    ctx.getTier(), ctx.getAbGroup(), ctx.getRoute(), false, disabledReason);
             }
-            // If still not typed, evict stale cache
-            if (items == null || items.isEmpty() || !(items.get(0) instanceof RecommendationItemDTO)) {
-                try { cacheService.delete(cacheKey); } catch (Exception ignored) {}
-            }
+            
+            return buildFsrsFallbackResponse(ctx, userId, limit, disabledReason);
         }
-        cacheHit = (items != null && !items.isEmpty());
-    }
-    
-    if (items == null || items.isEmpty()) {
-        ComputeResult result = computeItems(ctx, userId, limit);
-        items = result.items;
-        chainHops = result.chainHops != null ? result.chainHops : new ArrayList<>();
-        strategy = result.strategy;
-        chainId = result.chainId; // Use actual chainId from computation
         
-        if (cacheService != null && items != null && !items.isEmpty()) {
-            cacheService.put(cacheKey, items, java.time.Duration.ofHours(1));
+        // Record enabled toggle decision
+        if (metricsCollector != null) {
+            metricsCollector.recordToggleDecision(
+                ctx.getTier(), ctx.getAbGroup(), ctx.getRoute(), true, null);
         }
-        // Capture fallback reason for meta
-        fallbackReason = result.fallbackReason;
-    } else {
-        chainHops.add("cache"); // Indicate cache hit in hops
-    }
-    
-    AIRecommendationResponse out = new AIRecommendationResponse();
-    AIRecommendationResponse.Meta meta = new AIRecommendationResponse.Meta();
-    meta.setTraceId(ctx.getTraceId());
-    meta.setGeneratedAt(Instant.now());
-    meta.setCached(cacheHit);
-    meta.setChainHops(chainHops);
-    meta.setFallbackReason(fallbackReason);
-    meta.setChainId(chainId);
-    meta.setUserProfileSummary(ctx.getUserProfileSummary());
-    
-    if (items != null && !items.isEmpty()) {
-        boolean isFsrs = false;
-        Object first = items.get(0);
-        if (first instanceof RecommendationItemDTO dto) {
-            isFsrs = "FSRS".equalsIgnoreCase(dto.getSource());
-        } else if (first instanceof java.util.Map<?, ?> map) {
-            Object src = map.get("source");
-            isFsrs = src != null && "FSRS".equalsIgnoreCase(src.toString());
+        
+        // Record chain selection
+        if (metricsCollector != null) {
+            metricsCollector.recordChainSelection(chainId, ctx.getTier(), ctx.getAbGroup(), ctx.getRoute());
         }
-        meta.setBusy(false);
-        meta.setStrategy(isFsrs ? "fsrs_fallback" : strategy);
-    } else {
-        meta.setBusy(true);
-        meta.setStrategy("busy_message");
+
+        // Build cache key with segment information including chainId and objectives
+        String promptVersion = getCurrentPromptVersion();
+        String segmentSuffix = buildSegmentSuffix(ctx, chainId);
+        String objectiveHash = buildObjectiveHash(objective, targetDomains, desiredDifficulty, timeboxMinutes);
+        String cacheKey = CacheKeyBuilder.buildUserKey("rec-ai", userId, 
+            String.format("limit_%d_pv_%s_%s_%s", limit, promptVersion, segmentSuffix, objectiveHash));
+        
+        List<RecommendationItemDTO> items = null;
+        boolean cacheHit = false;
+        List<String> chainHops = new ArrayList<>();
+        String strategy = "normal";
+        String fallbackReason = null;
+        
+        if (cacheService != null) {
+            items = cacheService.getList(cacheKey, RecommendationItemDTO.class);
+            if (items != null && !items.isEmpty() && !(items.get(0) instanceof RecommendationItemDTO)) {
+                try {
+                    items = objectMapper.convertValue(items, new TypeReference<List<RecommendationItemDTO>>(){});
+                } catch (Exception ignore) {
+                    items = null;
+                }
+                // If still not typed, evict stale cache
+                if (items == null || items.isEmpty() || !(items.get(0) instanceof RecommendationItemDTO)) {
+                    try { cacheService.delete(cacheKey); } catch (Exception ignored) {}
+                }
+            }
+            cacheHit = (items != null && !items.isEmpty());
+        }
+        
+        // Record cache access metrics
+        if (metricsCollector != null) {
+            metricsCollector.recordCacheAccess(ctx.getTier(), ctx.getAbGroup(), chainId, cacheHit);
+        }
+        
+        if (items == null || items.isEmpty()) {
+            ComputeResult result = computeItems(ctx, userId, limit);
+            items = result.items;
+            chainHops = result.chainHops != null ? result.chainHops : new ArrayList<>();
+            strategy = result.strategy;
+            chainId = result.chainId; // Use actual chainId from computation
+            
+            if (cacheService != null && items != null && !items.isEmpty()) {
+                cacheService.put(cacheKey, items, java.time.Duration.ofHours(1));
+            }
+            // Capture fallback reason for meta
+            fallbackReason = result.fallbackReason;
+        } else {
+            chainHops.add("cache"); // Indicate cache hit in hops
+        }
+        
+        AIRecommendationResponse out = new AIRecommendationResponse();
+        AIRecommendationResponse.Meta meta = new AIRecommendationResponse.Meta();
+        meta.setTraceId(ctx.getTraceId());
+        meta.setGeneratedAt(Instant.now());
+        meta.setCached(cacheHit);
+        meta.setChainHops(chainHops);
+        meta.setFallbackReason(fallbackReason);
+        meta.setChainId(chainId);
+        meta.setUserProfileSummary(ctx.getUserProfileSummary());
+        
+        if (items != null && !items.isEmpty()) {
+            boolean isFsrs = false;
+            Object first = items.get(0);
+            if (first instanceof RecommendationItemDTO dto) {
+                isFsrs = "FSRS".equalsIgnoreCase(dto.getSource());
+            } else if (first instanceof java.util.Map<?, ?> map) {
+                Object src = map.get("source");
+                isFsrs = src != null && "FSRS".equalsIgnoreCase(src.toString());
+            }
+            meta.setBusy(false);
+            meta.setStrategy(isFsrs ? "fsrs_fallback" : strategy);
+        } else {
+            meta.setBusy(true);
+            meta.setStrategy("busy_message");
+        }
+        
+        out.setItems(items != null ? items : new ArrayList<>());
+        out.setMeta(meta);
+        return out;
     }
-    
-    out.setItems(items != null ? items : new ArrayList<>());
-    out.setMeta(meta);
-    return out;
-}
 
     public java.util.concurrent.CompletableFuture<AIRecommendationResponse> getRecommendationsAsync(Long userId, int limit) {
     RequestContext ctx = buildRequestContext(userId);
@@ -294,7 +358,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
             }
             try {
                 // Also apply per-user rate limiting
-                if (!perUserAsyncSemaphore.tryAcquire(acquireTimeout / 2, TimeUnit.MILLISECONDS)) {
+                Semaphore userSemaphore = getUserSemaphore(userId);
+                if (!userSemaphore.tryAcquire(acquireTimeout / 2, TimeUnit.MILLISECONDS)) {
                     log.warn("Per-user async rate limit exceeded for userId={}, traceId={}", 
                         userId, ctx.getTraceId());
                     throw new RuntimeException("Per-user rate limit exceeded");
@@ -309,7 +374,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                     // Execute the actual async call with selected chain
                     return providerChain.executeAsync(ctx, candidatesFinal, optionsFinal, selectedChain);
                 } finally {
-                    perUserAsyncSemaphore.release();
+                    userSemaphore.release();
                 }
             } finally {
                 globalAsyncSemaphore.release();
@@ -408,6 +473,66 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     }
 
     /**
+     * Enhanced buildRequestContext method with learning objectives and preferences.
+     */
+    private RequestContext buildRequestContext(
+            Long userId, 
+            LearningObjective objective,
+            List<String> targetDomains,
+            DifficultyPreference desiredDifficulty,
+            Integer timeboxMinutes
+    ) {
+        // Start with basic context
+        RequestContext ctx = buildRequestContext(userId);
+        
+        // Add learning objectives
+        ctx.setObjective(objective);
+        ctx.setTargetDomains(targetDomains);
+        ctx.setDesiredDifficulty(desiredDifficulty);
+        ctx.setTimeboxMinutes(timeboxMinutes);
+        
+        return ctx;
+    }
+    
+    /**
+     * Builds a hash for objective-related parameters for cache key isolation.
+     */
+    private String buildObjectiveHash(
+            LearningObjective objective,
+            List<String> targetDomains,
+            DifficultyPreference desiredDifficulty,
+            Integer timeboxMinutes
+    ) {
+        StringBuilder sb = new StringBuilder();
+        
+        // Add objective
+        if (objective != null) {
+            sb.append("obj_").append(objective.getValue());
+        }
+        
+        // Add target domains (sorted for consistency)
+        if (targetDomains != null && !targetDomains.isEmpty()) {
+            List<String> sortedDomains = new ArrayList<>(targetDomains);
+            sortedDomains.sort(String::compareToIgnoreCase);
+            sb.append("_domains_").append(String.join(",", sortedDomains));
+        }
+        
+        // Add difficulty preference
+        if (desiredDifficulty != null) {
+            sb.append("_diff_").append(desiredDifficulty.getValue());
+        }
+        
+        // Add timebox
+        if (timeboxMinutes != null) {
+            sb.append("_time_").append(timeboxMinutes);
+        }
+        
+        // Return hash or empty string if no objectives
+        String result = sb.toString();
+        return result.isEmpty() ? "default" : Integer.toHexString(result.hashCode());
+    }
+
+    /**
  * TODO: Replace with actual user tier lookup from user service/JWT claims.
  * Returns normalized tier name (uppercase).
  */
@@ -503,12 +628,16 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
     }
 
     private List<RecommendationItemDTO> buildFsrsFallback(List<LlmProvider.ProblemCandidate> candidates, int limit) {
-    // Sort by lowest accuracy first (needs attention), then by fewer attempts
+    // Sort by FSRS urgency signals: urgencyScore desc, daysOverdue desc, then recentAccuracy asc
     // Create a mutable copy to avoid UnsupportedOperationException
     List<LlmProvider.ProblemCandidate> sortableCandidates = new ArrayList<>(candidates);
     sortableCandidates.sort(java.util.Comparator
-            .comparing((LlmProvider.ProblemCandidate c) -> c.recentAccuracy == null ? 1.0 : c.recentAccuracy)
-            .thenComparing(c -> c.attempts == null ? 0 : c.attempts));
+            // Primary: urgency score descending (higher urgency first)
+            .comparing((LlmProvider.ProblemCandidate c) -> c.urgencyScore != null ? c.urgencyScore : 0.0, java.util.Comparator.reverseOrder())
+            // Secondary: days overdue descending (more overdue first) using type-safe int comparator
+            .thenComparing(java.util.Comparator.comparingInt((LlmProvider.ProblemCandidate c) -> c.daysOverdue != null ? c.daysOverdue : 0).reversed())
+            // Tertiary: recent accuracy ascending (lower accuracy = needs more practice)
+            .thenComparing(c -> c.recentAccuracy != null ? c.recentAccuracy : 1.0));
 
     List<RecommendationItemDTO> list = new ArrayList<>();
     int k = Math.max(1, Math.min(50, limit));
@@ -516,11 +645,25 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
         LlmProvider.ProblemCandidate c = sortableCandidates.get(i);
         RecommendationItemDTO dto = new RecommendationItemDTO();
         dto.setProblemId(c.id);
+        
+        // Use urgency score as primary ranking signal
+        double urgency = c.urgencyScore != null ? c.urgencyScore : 0.0;
         double acc = c.recentAccuracy != null ? c.recentAccuracy : 0.0;
-        String reason = String.format("FSRS fallback: prioritize lower accuracy (%.0f%%) and due status", acc * 100);
+        double daysOverdue = c.daysOverdue != null ? c.daysOverdue : 0.0;
+        
+        String reason;
+        if (urgency > 0) {
+            reason = String.format("FSRS fallback: urgency %.2f, %.0f%% accuracy%s", 
+                    urgency, acc * 100, daysOverdue > 0 ? String.format(", %.1f days overdue", daysOverdue) : "");
+        } else {
+            reason = String.format("FSRS fallback: prioritize lower accuracy (%.0f%%)", acc * 100);
+        }
+        
         dto.setReason(reason);
-        dto.setConfidence(Math.max(0.0, Math.min(1.0, 1.0 - acc))); // inverse of accuracy as need score
-        dto.setScore(1.0 - acc);
+        // Use urgency score for confidence and score, fallback to accuracy-based scoring
+        double finalScore = urgency > 0 ? urgency : (1.0 - acc);
+        dto.setConfidence(Math.max(0.0, Math.min(1.0, finalScore)));
+        dto.setScore(finalScore);
         dto.setStrategy("fsrs");
         dto.setSource("FSRS");
         dto.setModel("local");
@@ -575,6 +718,12 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
     String chainId = chainSelector != null ? chainSelector.getSelectedChainId(ctx, llmProperties) : "unknown";
     
     ProviderChain.Result res = providerChain.execute(ctx, candidates, options, selectedChain);
+    
+    // Record provider chain execution metrics
+    if (metricsCollector != null && res != null) {
+        int hopsCount = res.hops != null ? res.hops.size() : 0;
+        metricsCollector.recordProviderChainResult(chainId, hopsCount, res.success, res.defaultReason);
+    }
 
     List<RecommendationItemDTO> items = new ArrayList<>();
     String strategy = "normal";
@@ -593,6 +742,54 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
             dto.setPromptVersion(getCurrentPromptVersion());
             items.add(dto);
         }
+        
+        // Create candidate mapping for downstream processing
+        Map<Long, LlmProvider.ProblemCandidate> candidateMap = candidates.stream()
+            .collect(Collectors.toMap(c -> c.id, c -> c, (existing, replacement) -> existing));
+        
+        // Apply hybrid ranking if available (v3 enhancement)
+        if (hybridRankingService != null && !items.isEmpty() && ctx.getUserProfile() != null) {
+            try {
+                // Apply hybrid ranking
+                items = hybridRankingService.rankWithHybridScores(items, candidateMap, ctx.getUserProfile());
+                
+                log.debug("Applied hybrid ranking to {} LLM items for userId={}", items.size(), userId);
+            } catch (Exception e) {
+                log.warn("Hybrid ranking failed for userId={}: {}, using LLM-only ranking", userId, e.getMessage());
+                // Continue with LLM-only results on failure
+            }
+        }
+        
+        // Apply multi-dimensional strategy mixing if available (v3 enhancement)
+        if (recommendationMixer != null && !items.isEmpty() && ctx.getUserProfile() != null && ctx.getObjective() != null) {
+            try {
+                items = recommendationMixer.mixRecommendations(
+                    items, candidateMap, ctx.getUserProfile(), ctx.getObjective(), limit);
+                
+                log.debug("Applied multi-dimensional mixing with {} objective to {} items for userId={}", 
+                    ctx.getObjective(), items.size(), userId);
+            } catch (Exception e) {
+                log.warn("Recommendation mixing failed for userId={}: {}, using hybrid-only results", userId, e.getMessage());
+                // Continue with hybrid results on failure
+            }
+        }
+        
+        // Apply confidence calibration if available (v3 enhancement)
+        if (confidenceCalibrator != null && !items.isEmpty() && ctx.getUserProfile() != null) {
+            try {
+                // Create LLM metadata from provider chain result
+                ConfidenceCalibrator.LlmResponseMetadata llmMetadata = createLlmMetadata(res);
+                
+                items = confidenceCalibrator.calibrateConfidence(
+                    items, candidateMap, ctx.getUserProfile(), llmMetadata);
+                
+                log.debug("Applied confidence calibration to {} items for userId={}", items.size(), userId);
+            } catch (Exception e) {
+                log.warn("Confidence calibration failed for userId={}: {}, using uncalibrated results", userId, e.getMessage());
+                // Continue with mixed results on failure
+            }
+        }
+        
     } else {
         List<LlmProvider.ProblemCandidate> base = (candidates != null && !candidates.isEmpty())
                 ? candidates
@@ -600,6 +797,11 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
         items.addAll(buildFsrsFallback(base, limit));
         strategy = "fsrs_fallback";
         fallbackReason = res != null ? res.defaultReason : "provider_chain_null";
+        
+        // Record fallback event metrics
+        if (metricsCollector != null) {
+            metricsCollector.recordFallback(fallbackReason, chainId, strategy);
+        }
     }
     
     return new ComputeResult(items, res != null ? res.hops : new ArrayList<>(), strategy, fallbackReason, chainId);
@@ -609,6 +811,39 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
         return promptTemplateService != null 
             ? promptTemplateService.getCurrentPromptVersion() 
             : "v1"; // fallback for tests or when service is not available
+    }
+    
+    /**
+     * Create LLM metadata for confidence calibration from provider chain result.
+     */
+    private ConfidenceCalibrator.LlmResponseMetadata createLlmMetadata(ProviderChain.Result providerResult) {
+        if (providerResult == null || providerResult.result == null) {
+            return new ConfidenceCalibrator.LlmResponseMetadata("unknown", null, null, null);
+        }
+        
+        // Extract metadata from provider result
+        String provider = providerResult.result.provider != null ? providerResult.result.provider : "unknown";
+        Long responseTime = (long) providerResult.result.latencyMs; // Convert int to Long
+        Integer inputTokens = null; // Not available in current LlmResult structure
+        Integer outputTokens = null; // Not available in current LlmResult structure
+        
+        ConfidenceCalibrator.LlmResponseMetadata metadata = 
+            new ConfidenceCalibrator.LlmResponseMetadata(provider, responseTime, inputTokens, outputTokens);
+        
+        // Set additional metadata if available
+        metadata.model = providerResult.result.model;
+        metadata.temperature = null; // Not available in current LlmResult structure
+        metadata.isComplete = providerResult.success;
+        
+        return metadata;
+    }
+    
+    /**
+     * Get or create per-user semaphore for rate limiting.
+     */
+    private Semaphore getUserSemaphore(Long userId) {
+        return perUserSemaphores.computeIfAbsent(userId, 
+            k -> new Semaphore(maxPerUserConcurrency));
     }
 
 private static class ComputeResult {

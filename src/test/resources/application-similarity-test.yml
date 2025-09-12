@@ -1,0 +1,101 @@
+# H2 Test Configuration for Similarity Components
+spring:
+  datasource:
+    url: jdbc:h2:mem:similarity_test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  # Disable Druid for H2 testing
+  autoconfigure:
+    exclude: com.alibaba.druid.spring.boot.autoconfigure.DruidDataSourceAutoConfigure
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: true
+  
+  # Redis configuration for caching (use embedded Redis for tests)
+  redis:
+    database: 1
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    jedis:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+# Similarity configuration optimized for testing
+rec:
+  similarity:
+    weights:
+      tags-weight: 0.4
+      categories-weight: 0.3
+      difficulty-weight: 0.3
+      diversity-weight: 0.2
+    thresholds:
+      min-similarity-score: 0.3
+      empty-feature-similarity: 0.0
+      max-similar-problems: 5
+      min-shared-categories: 1
+    cache:
+      enabled: true
+      ttl-minutes: 1  # Short TTL for testing
+      max-entries: 100
+    batch:
+      insert-batch-size: 50  # Smaller batch size for tests
+      batch-timeout-ms: 1000  # Shorter timeout for tests
+    integration:
+      pre-filter-enabled: true
+      hybrid-scoring-enabled: false
+      pre-filter-limit: 10  # Smaller limit for tests
+      llm-weight: 0.5
+      fsrs-weight: 0.3
+      similarity-weight: 0.2
+
+# Cache TTL for tests
+cache:
+  redis:
+    ttl:
+      similarProblems: 60  # 1 minute for tests
+
+# User profiling configuration for tests
+user-profiling:
+  cache:
+    enabled: false  # Disable for testing
+  tag-domain-mapping:
+    array: arrays
+    linked-list: linked_lists
+    hash-table: hash_tables
+    string: strings
+    two-pointers: two_pointers
+    sliding-window: sliding_window
+    binary-search: binary_search
+    tree: trees
+    graph: graphs
+    backtracking: backtracking
+
+# MyBatis configuration
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl  # Disable SQL logging in tests
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Logging configuration for tests
+logging:
+  level:
+    com.codetop.recommendation: DEBUG
+    org.springframework.cache: DEBUG
+    root: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

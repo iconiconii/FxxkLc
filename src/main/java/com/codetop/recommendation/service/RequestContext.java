@@ -1,6 +1,7 @@
 package com.codetop.recommendation.service;
 
 import com.codetop.recommendation.dto.UserProfile;
+import java.util.List;
 
 public class RequestContext {
     private Long userId;
@@ -10,6 +11,13 @@ public class RequestContext {
     private String traceId;
     private UserProfile userProfile; // User learning profile for personalized recommendations
     private String userProfileSummary; // Diagnostic summary for headers
+    
+    // New fields for intelligent recommendation engine
+    private LearningObjective objective; // Learning objective (weakness_focus, progressive_difficulty, etc.)
+    private List<String> targetDomains; // Target knowledge domains (arrays, graphs, dynamic programming, etc.)
+    private DifficultyPreference desiredDifficulty; // Desired difficulty level (EASY, MEDIUM, HARD)
+    private Integer timeboxMinutes; // Optional time constraint for practice session
+    private String promptVersion; // Prompt template version for A/B testing
 
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
@@ -25,5 +33,17 @@ public class RequestContext {
     public void setUserProfile(UserProfile userProfile) { this.userProfile = userProfile; }
     public String getUserProfileSummary() { return userProfileSummary; }
     public void setUserProfileSummary(String userProfileSummary) { this.userProfileSummary = userProfileSummary; }
+    
+    // New getters and setters for intelligent recommendation engine
+    public LearningObjective getObjective() { return objective; }
+    public void setObjective(LearningObjective objective) { this.objective = objective; }
+    public List<String> getTargetDomains() { return targetDomains; }
+    public void setTargetDomains(List<String> targetDomains) { this.targetDomains = targetDomains; }
+    public DifficultyPreference getDesiredDifficulty() { return desiredDifficulty; }
+    public void setDesiredDifficulty(DifficultyPreference desiredDifficulty) { this.desiredDifficulty = desiredDifficulty; }
+    public Integer getTimeboxMinutes() { return timeboxMinutes; }
+    public void setTimeboxMinutes(Integer timeboxMinutes) { this.timeboxMinutes = timeboxMinutes; }
+    public String getPromptVersion() { return promptVersion; }
+    public void setPromptVersion(String promptVersion) { this.promptVersion = promptVersion; }
 }
 

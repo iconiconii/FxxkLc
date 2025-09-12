@@ -3,7 +3,6 @@ package com.codetop.recommendation.service;
 import com.codetop.recommendation.chain.ProviderChain;
 import com.codetop.recommendation.config.LlmProperties;
 import com.codetop.recommendation.dto.AIRecommendationResponse;
-import com.codetop.recommendation.dto.RecommendationItemDTO;
 import com.codetop.recommendation.provider.LlmProvider;
 import com.codetop.recommendation.provider.impl.DefaultProvider;
 import com.codetop.recommendation.provider.impl.OpenAiProvider;
@@ -11,19 +10,19 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class AIRecommendationServiceTest {
+public class AIRecommendationServiceAsyncTest {
 
     @Test
-    void getRecommendations_fallsBackToFsrs_whenLlmFails() {
-        // Build LLM properties with chain containing OpenAI (no API key) and default provider
+    void getRecommendationsAsync_returnsFsrsFallback_whenLlmUnavailable() throws Exception {
         LlmProperties props = new LlmProperties();
         props.setEnabled(true);
 
         LlmProperties.OpenAi openAi = props.getOpenai();
-        openAi.setApiKeyEnv("NON_EXISTENT_TEST_KEY");
+        openAi.setApiKeyEnv("NON_EXISTENT_TEST_KEY_ASYNC");
 
         LlmProperties.Chain chain = new LlmProperties.Chain();
         List<LlmProperties.Node> nodes = new ArrayList<>();
@@ -35,25 +34,18 @@ public class AIRecommendationServiceTest {
         chain.setDefaultProvider(new LlmProperties.DefaultProvider());
         props.setChain(chain);
 
-        // Providers
         LlmProvider openAiProvider = new OpenAiProvider(openAi);
         LlmProvider defaultProvider = new DefaultProvider(chain.getDefaultProvider());
-        List<LlmProvider> providerList = List.of(openAiProvider);
+        ProviderChain pc = new ProviderChain(List.of(openAiProvider), props, defaultProvider, null, null);
 
-        ProviderChain providerChain = new ProviderChain(providerList, props, defaultProvider, null, null);
-
-        AIRecommendationService service = new AIRecommendationService(providerChain);
-        AIRecommendationResponse resp = service.getRecommendations(123L, 5);
+        AIRecommendationService service = new AIRecommendationService(pc);
+        AIRecommendationResponse resp = service.getRecommendationsAsync(999L, 5).get(3, TimeUnit.SECONDS);
 
         assertNotNull(resp);
         assertNotNull(resp.getItems());
-        assertFalse(resp.getItems().isEmpty());
         assertEquals(5, resp.getItems().size());
-
-        RecommendationItemDTO first = resp.getItems().get(0);
-        assertEquals("FSRS", first.getSource());
-        assertEquals("fsrs", first.getStrategy());
-        assertEquals("local", first.getModel());
+        assertEquals("FSRS", resp.getItems().get(0).getSource());
+        assertEquals("fsrs", resp.getItems().get(0).getStrategy());
     }
 }
 

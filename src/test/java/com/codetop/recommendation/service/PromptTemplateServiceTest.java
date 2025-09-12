@@ -7,6 +7,9 @@ import com.codetop.recommendation.provider.LlmProvider.ProblemCandidate;
 import com.codetop.recommendation.provider.LlmProvider.PromptOptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -16,12 +19,20 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for PromptTemplateService to verify prompt engineering templates work correctly.
  */
+@ExtendWith(MockitoExtension.class)
 class PromptTemplateServiceTest {
 
+    @Mock
+    private ExternalPromptTemplateService externalTemplateService;
+    
     private PromptTemplateService promptTemplateService;
     private RequestContext testContext;
     private List<ProblemCandidate> testCandidates;
@@ -29,7 +40,15 @@ class PromptTemplateServiceTest {
 
     @BeforeEach
     void setUp() {
-        promptTemplateService = new PromptTemplateService();
+        promptTemplateService = new PromptTemplateService(externalTemplateService);
+        
+        // Setup mock behavior to trigger fallback with lenient stubbing
+        lenient().when(externalTemplateService.buildSystemMessage(anyString(), any()))
+            .thenThrow(new RuntimeException("Template not found"));
+        lenient().when(externalTemplateService.buildUserMessage(any(), any(), any()))
+            .thenThrow(new RuntimeException("Template not found"));
+        lenient().when(externalTemplateService.getCurrentPromptVersion(any()))
+            .thenThrow(new RuntimeException("Template service not available"));
         
         // Set up test context
         testContext = new RequestContext();

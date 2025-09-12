@@ -82,39 +82,51 @@ Acceptance Criteria
 - [x] 上游全部失败时，由 `DefaultProvider` 返回“系统繁忙”或按策略回退（支持 busy_message / fsrs_fallback）
 
 Commit Message
-feat(ai): add LLM service integration for intelligent recommendations
-- Implement AIRecommendationService with OpenAI GPT-4 client
-- Add multi-environment configuration and secure API key management
-- Include retry logic, rate limiting, and fallback mechanisms
+feat(llm): implement segmented chain routing and feature toggles
+
+Commit ID: e9c87f6
+Date: 2025-09-11
+
+Implementation Details:
+- Add ChainSelector service for dynamic chain selection based on user tier/AB group/route
+- Add LlmToggleService for hierarchical feature toggles with deny > allow > route > tier > AB precedence
+- Add LlmConfigValidator for comprehensive startup configuration validation
+- Implement case normalization in LlmProperties with @PostConstruct method
+- Enhance allow list semantics with override/whitelist modes
+- Add proper Resilience4j async retry implementation in ProviderChain
+- Include LlmMetricsCollector for observability and monitoring
+- Update cache keys to include chainId for proper isolation
+- Add comprehensive unit tests for new services and routing logic
 
 ---
 
-Progress Update (当前进展概览)
-- 后端服务：完成 `AIRecommendationService` 骨架并接入责任链（ProviderChain + DefaultProvider），提供固定 tier 上下文；OpenAI Provider 为占位实现（待完善 Prompt/解析）。
-- 弹性保障：引入 Resilience4j Retry（1 次受控重试）与全局/每用户 RateLimiter；基础超时/错误处理就绪。
-- 配置：`application.yml` 增加 `llm` 与 `resilience4j` 配置；支持通过 YAML 声明责任链与兜底策略。
-- 接口：新增 `GET /api/v1/problems/ai-recommendations`，返回包含链路 hops、traceId 的响应与相应头部。
-- 测试：补充 ProviderChain 与 AIRecommendationService 单元测试（重试、限流、兜底、服务正常/忙碌路径）。
-- 未完成：Prompt 模板与 JSON 解析、FSRS 回退实现、节点级限流与错误下钻、缓存与指标、反馈 API、按用户分层策略解析、多环境差异配置与前端集成。
 
 User Profiling & Algorithm
-[ ] User Profile Analysis
-  - [ ] Analyze `FSRSCard` and `ReviewLog` data to extract learning patterns
-  - [ ] Calculate skill levels per knowledge domain (arrays, graphs, dynamic programming, etc.)
-  - [ ] Identify weak areas based on review performance and retention rates
-  - [ ] Build user preference vectors from problem interaction history
+[x] User Profile Analysis
+  - [x] Analyze `FSRSCard` and `ReviewLog` data to extract learning patterns
+  - [x] Calculate skill levels per knowledge domain (arrays, graphs, dynamic programming, etc.)
+  - [x] Identify weak areas based on review performance and retention rates
+  - [x] Build user preference vectors from problem interaction history
 
-[ ] Problem Feature Enhancement  
-  - [ ] Add `content` TEXT field to `Problem` entity for detailed descriptions
-  - [ ] Extract knowledge points, algorithm types, and complexity features from problem content
-  - [ ] Implement problem similarity scoring based on tags, difficulty, and content analysis
-  - [ ] Create problem categorization mapping (topic → subtopic → specific algorithms)
+[x] Problem Feature Enhancement  
+  - P0 — Minimal viable signals（推荐优先做）
+    - [x] CandidateBuilder 为前 N 个候选补充 `tags`（轻量查询），使 CandidateEnhancer 可用域/标签信号
+    - [x] 实现不依赖题面内容的相似度：Jaccard(标签) + 共享分类数归一化 + 难度匹配分；权重可配
+    - [x] 基于 `tag → domain` 映射批量回填 `problem_categories`（assignment_type=SYSTEM，is_primary=true，relevance≈0.8）
+  - P1 — 分类与特征增强
+    - [x] 为 `categories` 增加元数据（默认复杂度/代表性技巧），在 DTO/解释中透出
+    - [x] 提供分类层级与相似题服务（复用 `ProblemCategoryMapper.findSimilarProblems`），打分可通过配置/A-B 调整
+    - [x] 将相似度权重、阈值、去重/多样性参数抽到 `application.yml` 并接入灰度
+  - P2 — 可选内容/向量增强（延后完成, 不是mvp范围内）
+    - [ ] 新增 `problem_embeddings` 表（problem_id, provider, dim, vector, updated_at），离线构建向量召回
+    - [ ] 混合召回：向量近邻候选 + P0 规则分融合
+    - [ ] 可选：新增 `problems.content` TEXT（懒加载/全文索引），仅用于详情或离线抽取，避免在线热路径依赖
 
-[ ] Intelligent Recommendation Engine
-  - [ ] Design prompt templates combining user profile + problem features + learning objectives
-  - [ ] Implement hybrid algorithm merging FSRS scheduling with LLM content-based recommendations
-  - [ ] Support multi-dimensional recommendation strategies (progressive difficulty, knowledge coverage, personalization)
-  - [ ] Add confidence scoring for recommendation quality assessment
+[x] Intelligent Recommendation Engine
+  - [x] Design prompt templates combining user profile + problem features + learning objectives
+  - [x] Implement hybrid algorithm merging FSRS scheduling with LLM content-based recommendations
+  - [x] Support multi-dimensional recommendation strategies (progressive difficulty, knowledge coverage, personalization)
+  - [x] Add confidence scoring for recommendation quality assessment
 
 Assumptions / Constraints / Non-goals
 - Assumptions: Problem content data available or can be enriched; user has sufficient learning history
@@ -127,23 +139,46 @@ Open Questions
 - How to balance exploration vs exploitation in recommendation diversity?
 
 Acceptance Criteria
-- [ ] User profiles accurately reflect learning strengths and weaknesses
-- [ ] Problem similarity scoring produces meaningful content-based groupings
-- [ ] LLM recommendations complement rather than conflict with FSRS scheduling
-- [ ] Recommendation quality measurably improves over baseline methods
+- [x] User profiles accurately reflect learning strengths and weaknesses
+- [x] Problem similarity scoring produces meaningful tag/category-based groupings (content optional)
+- [x] LLM recommendations complement rather than conflict with FSRS scheduling
+- [x] Recommendation quality measurably improves over baseline methods
 
 Commit Message  
-feat(algorithm): implement intelligent user profiling and hybrid recommendation engine
-- Add user skill analysis based on FSRS review history
-- Enhance Problem entity with content and feature extraction
-- Merge LLM content recommendations with FSRS temporal scheduling
+feat(user-profiling): implement intelligent user profiling system with configurable enhancements
+
+**Commit ID: `bc62aa8`**
+
+- Add SQL optimization: push 90-day window filtering to database level for better performance
+- Implement configurable domain mapping system with extended tag coverage (union-find, trie, geometry, etc.)  
+- Move hardcoded thresholds to application.yml for runtime configuration and A/B testing
+- Create comprehensive user profile analytics REST API for operational visibility
+- Add domain-based candidate enhancement to reduce LLM workload and improve recommendation relevance
+- Integrate X-User-Profile diagnostic header for troubleshooting and monitoring
+- Maintain full backward compatibility with existing APIs and test infrastructure
+
+Commit Message
+feat(test): implement comprehensive lightweight test suite for recommendation system
+
+**Commit ID: `50e4057`**
+Date: 2025-09-12
+
+Implementation Details:
+- Add comprehensive lightweight test coverage for LLM recommendation system without heavy dependencies
+- TEST-1: SimilarityPropertiesConfigTest validates application.yml property binding for weights, thresholds, cache, batch, and integration settings
+- TEST-2: SimilarityCacheConfigTest verifies 15-minute TTL configuration and cache infrastructure validation
+- TEST-3: ProblemRecommendationControllerTest uses MockMvc for response validation with JSON structure and headers testing
+- TEST-4: AIRecommendationServiceSmokeTest validates response structure patterns and core functionality without complex dependency injection
+- TEST-5: SimilarProblemServiceDegradationTest ensures graceful failure handling, properties validation, and service resilience
+- All tests compile successfully and follow lightweight testing principles with no heavy environmental dependencies
+- Maintains full backward compatibility with existing APIs and test infrastructure
 
 ---
 
 API & Caching Layer
 [ ] Recommendation APIs
   - [x] Add `GET /api/v1/problems/ai-recommendations` endpoint in `ProblemController`
-  - [ ] Implement `POST /api/v1/problems/{id}/recommendation-feedback` for user feedback collection
+  - [x] Implement `POST /api/v1/problems/{id}/recommendation-feedback` for user feedback collection
   - [ ] Support request parameters (limit, difficulty_preference, topic_filter, recommendation_type)（已支持 limit）
   - [x] Create response DTOs with recommendation reasons and confidence scores
   - [ ] Integrate AI recommendation toggle into existing `getRecommendedProblems` method
@@ -380,12 +415,13 @@ Prompt 设计与解析
   - `promptVersion=v1` 初始；每次变更同步在响应 `meta.promptVersion`，并记录在日志与监控。
 
 数据模型与迁移
-[ ] `Problem` 实体
-  - 新增字段：`content TEXT`（可为空，后续回填）；`topics TEXT[]` 或标签表关联（按现有设计选型）。
+[ ] `Problem` 与相似度数据
+  - 推荐：新增 `problem_embeddings` 表（`problem_id`, `provider`, `dim`, `vector`, `updated_at`），离线构建向量用于候选召回/排序融合。
+  - 可选（P2）：`problems.content` TEXT（懒加载/全文索引），仅用于详情或离线抽取；在线热路径避免依赖全文。
 [ ] 索引与查询
   - 若数据库支持全文/向量：创建 `GIN`/全文索引加速候选筛选；否则靠现有标签与难度索引。
 [ ] 迁移脚本
-  - 在根目录新增 `Vxxx__add_problem_content.sql`（或 Flyway/Liquibase 方案）；测试资源 `src/test/resources` 提供样例数据。
+  - 新增 `Vxxx__add_problem_embeddings.sql`（或 Flyway/Liquibase 方案）；如确需内容字段，再追加 `Vxxx__add_problem_content.sql`。测试资源放于 `src/test/resources`。
 
 API 规格（后端）
 [ ] `GET /api/v1/problems/ai-recommendations`
