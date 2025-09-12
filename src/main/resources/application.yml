@@ -26,7 +26,7 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       # Database Connection
-      url: jdbc:mysql://localhost:3308/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+      url: jdbc:mysql://localhost:3307/codetop_fsrs?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
       username: ${DB_USERNAME:root}
       password: ${DB_PASSWORD:root}
       driver-class-name: com.mysql.cj.jdbc.Driver
@@ -155,7 +155,7 @@ mybatis-plus:
 
 # JWT Configuration - REQUIRES ENVIRONMENT VARIABLES IN PRODUCTION
 jwt:
-  secret: ${JWT_SECRET:}
+  secret: ${JWT_SECRET:test_secret}
   expiration: ${JWT_EXPIRATION:86400000}  # 24 hours in milliseconds
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 days in milliseconds
   
@@ -223,6 +223,63 @@ cache:
       analytics: 3600      # 1 hour
       leaderboard: 1800    # 30 minutes
 
+# User Profiling Configuration
+user-profiling:
+  windows:
+    recent-days: 90              # Analysis window in days
+    half-life-days: 30.0         # Time decay half-life for recency weighting
+    default-review-limit: 2000   # Maximum reviews to fetch from database
+    trend-comparison-days: 30    # Window size for difficulty trend computation
+  thresholds:
+    min-samples-for-reliability: 10    # Minimum samples needed for reliable skill assessment
+    weak-skill-threshold: 0.45         # Below this score = weak skill
+    strong-skill-threshold: 0.75       # Above this score = strong skill
+    beta-smoothing-alpha: 1.0          # Beta distribution smoothing parameter alpha
+    beta-smoothing-beta: 1.0           # Beta distribution smoothing parameter beta
+    difficulty-trend-threshold: 0.15   # 15% change threshold for trend detection
+  cache:
+    ttl: PT1H                    # Cache TTL (ISO 8601 duration: PT1H = 1 hour)
+    enabled: true                # Enable/disable caching
+  tag-domain-mapping:
+    # Core data structures
+    array: arrays
+    linked-list: linked_lists
+    hash-table: hash_tables
+    string: strings
+    matrix: matrices
+    # Two pointers and sliding window
+    two-pointers: two_pointers
+    sliding-window: sliding_window
+    # Search and sort
+    binary-search: binary_search
+    sorting: sorting
+    # Advanced algorithms
+    backtracking: backtracking
+    divide-and-conquer: divide_conquer
+    greedy: greedy
+    dynamic-programming: dynamic_programming
+    # Graph and tree algorithms  
+    graph: graph
+    tree: trees
+    binary-tree: binary_trees
+    trie: tries
+    union-find: union_find
+    # Heap and priority queue
+    heap: heaps
+    priority-queue: heaps
+    # Stack and queue
+    stack: stacks_queues
+    queue: stacks_queues
+    monotonic-stack: monotonic_stack
+    # Mathematical and bit manipulation
+    bit-manipulation: bit_manipulation
+    math: math
+    geometry: geometry
+    prefix-sum: prefix_sum
+    # System design and simulation
+    design: system_design
+    simulation: simulation
+
 # API Documentation
 springdoc:
   api-docs:
@@ -239,28 +296,115 @@ springdoc:
     description: Intelligent algorithm problem management with FSRS spaced repetition
     version: 1.0.0
 
-# LLM configuration (DeepSeek via OpenAI-compatible provider; disabled by default)
+# LLM configuration with segmented routing and feature toggles
 llm:
-  enabled: true
+  enabled: ${LLM_ENABLED:false}  # Global LLM toggle, disabled by default
   provider: chain
+  defaultChainId: main   # Default chain when no routing rules match
+  
+  # Multiple chains for different user segments
+  chains:
+    main:                               # Standard chain for most users
+      nodes:
+        - name: openai   # DeepSeek via OpenAI-compatible API
+          enabled: true
+          timeoutMs: 1800
+          retry:
+            attempts: 1
+          onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
+          rateLimit:
+            rps: 5
+            perUserRps: 1
+        - name: mock
+          enabled: false
+      defaultProvider:
+        strategy: fsrs_fallback   # Fallback to FSRS on failure
+        message: "系统繁忙，请稍后重试"
+        httpStatus: 503
+        
+    premium:                            # Enhanced chain for premium users
+      nodes:
+        - name: openai
+          enabled: true
+          timeoutMs: 1200           # Faster timeout for premium
+          retry:
+            attempts: 2             # More retries for premium
+          rateLimit:
+            rps: 10                 # Higher rate limits
+            perUserRps: 3
+      defaultProvider:
+        strategy: fsrs_fallback
+        
+    experimental:                       # Experimental chain for A/B testing
+      nodes:
+        - name: openai
+          enabled: true
+          timeoutMs: 1500
+          retry:
+            attempts: 1
+      defaultProvider:
+        strategy: busy_message
+        message: "实验功能暂不可用"
+  
+  # Legacy single chain (for backward compatibility)
   chain:
     nodes:
-      - name: openai   # points to DeepSeek via baseUrl/model
+      - name: openai
         enabled: true
         timeoutMs: 1800
         retry:
           attempts: 1
-      - name: mock
-        enabled: false
+        onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
+        rateLimit:
+          rps: 5
+          perUserRps: 1
     defaultProvider:
-      strategy: busy_message
-      message: "系统繁忙，请稍后重试"
-      httpStatus: 503
+      strategy: fsrs_fallback
+      
+  # Routing rules for chain selection (evaluated in order, first match wins)
+  routing:
+    rules:
+      - when:
+          tier: [GOLD, PLATINUM]    # Premium users get enhanced chain
+        useChain: premium
+      - when:
+          abGroup: [experimental]   # Experimental AB group
+        useChain: experimental
+      - when:
+          route: [ai-recommendations]  # Default route uses main chain
+        useChain: main
+        
+  # Feature toggles per user segment
+  toggles:
+    byTier:                       # Enable/disable by user tier
+      FREE: false                 # FREE users cannot use LLM
+      BRONZE: true                # BRONZE and above can use LLM
+      SILVER: true
+      GOLD: true
+      PLATINUM: true
+    byAbGroup:                    # Enable/disable by A/B testing group
+      A: true
+      B: true
+      experimental: true
+      default: true
+    byRoute:                      # Enable/disable by API route
+      ai-recommendations: true
+      legacy-recommendations: false
+    allowUserIds: []              # Always allow these user IDs (overrides other toggles)
+    denyUserIds: []               # Always deny these user IDs (highest priority)
+    
+  # Provider configurations
   openai:
     baseUrl: https://api.deepseek.com/v1
     model: deepseek-chat
     apiKeyEnv: DEEPSEEK_API_KEY
     timeoutMs: 1800
+    
+  # Async concurrency limits
+  asyncLimits:
+    globalConcurrency: 10         # Maximum concurrent async requests globally
+    perUserConcurrency: 2         # Maximum concurrent async requests per user  
+    acquireTimeoutMs: 100         # Timeout to acquire rate limit permit
 
 # Resilience4j configuration for LLM
 resilience4j:
@@ -352,6 +496,7 @@ app:
       refresh-name: REFRESH_TOKEN
       same-site: Lax
       secure: false
+    ai-recs-public: true
   cache:
     double-delete-delay-millis: 500
 
@@ -373,6 +518,10 @@ logging:
     com.codetop.fsrs: DEBUG
     org.springframework.web: DEBUG
 
+# Development LLM settings - enable for testing
+llm:
+  enabled: true  # Enable in dev for testing
+
 ---
 # Test Profile
 spring:
@@ -382,7 +531,7 @@ spring:
   
   datasource:
     druid:
-      url: jdbc:mysql://localhost:3306/codetop_fsrs_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      url: jdbc:mysql://localhost:3307/codetop_fsrs_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
   
   data:
     redis:
@@ -396,6 +545,10 @@ logging:
   level:
     root: WARN
     com.codetop.fsrs: INFO
+
+# Test LLM settings - disabled for testing stability  
+llm:
+  enabled: false  # Disable in test to focus on core functionality
 
 ---
 # Production Profile
@@ -475,6 +628,33 @@ jwt:
 logging:
   level:
     root: INFO
-    com.codetop.fsrs: INFO
+    com.codetop: INFO
+    org.springframework.web: WARN
+    com.baomidou.mybatisplus: INFO
+    org.apache.ibatis: WARN
+    org.redisson: INFO
+    com.alibaba.druid: WARN
   file:
     name: /var/log/codetop-fsrs-backend.log
+
+# Production LLM settings - must be explicitly enabled via environment
+# Production LLM settings - must be explicitly enabled via environment
+llm:
+  enabled: ${LLM_ENABLED:false}  # Must set LLM_ENABLED=true to enable
+  openai:
+    baseUrl: ${LLM_BASE_URL:https://api.deepseek.com/v1}
+    model: ${LLM_MODEL:deepseek-chat}
+    apiKeyEnv: DEEPSEEK_API_KEY  # Environment variable name
+    timeoutMs: ${LLM_TIMEOUT:2000}
+
+# Harden actuator exposure in production
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    env:
+      enabled: false
+    loggers:
+      enabled: false

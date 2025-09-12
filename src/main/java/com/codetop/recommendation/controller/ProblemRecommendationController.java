@@ -60,9 +60,13 @@ public class ProblemRecommendationController {
             if (hops != null && !hops.isEmpty()) {
                 headers.add("X-Provider-Chain", String.join(">", hops));
             }
+            if (body.getMeta().getFallbackReason() != null) {
+                headers.add("X-Fallback-Reason", body.getMeta().getFallbackReason());
+            }
             if (body.getMeta().getChainId() != null) headers.add("X-Chain-Id", body.getMeta().getChainId());
             if (body.getMeta().getChainVersion() != null) headers.add("X-Chain-Version", body.getMeta().getChainVersion());
             if (body.getMeta().getPolicyId() != null) headers.add("X-Policy-Id", body.getMeta().getPolicyId());
+            if (body.getMeta().getUserProfileSummary() != null) headers.add("X-User-Profile", body.getMeta().getUserProfileSummary());
         }
 
         return ResponseEntity.ok().headers(headers).body(body);

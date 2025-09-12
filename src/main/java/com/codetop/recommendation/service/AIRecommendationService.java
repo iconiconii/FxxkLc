@@ -4,7 +4,9 @@ import com.codetop.recommendation.chain.ProviderChain;
 import com.codetop.recommendation.config.LlmProperties;
 import com.codetop.recommendation.dto.AIRecommendationResponse;
 import com.codetop.recommendation.dto.RecommendationItemDTO;
+import com.codetop.recommendation.dto.UserProfile;
 import com.codetop.recommendation.alg.CandidateBuilder;
+import com.codetop.recommendation.service.CandidateEnhancer;
 import com.codetop.recommendation.provider.LlmProvider;
 import com.codetop.service.CacheKeyBuilder;
 import com.codetop.service.cache.CacheService;
@@ -36,6 +38,8 @@ public class AIRecommendationService {
     private final LlmProperties llmProperties;
     private final ChainSelector chainSelector;
     private final LlmToggleService llmToggleService;
+    private final UserProfilingService userProfilingService;
+    private final CandidateEnhancer candidateEnhancer;
     
     // Async rate limiting with semaphores (configured via properties)
     private final Semaphore globalAsyncSemaphore;
@@ -46,7 +50,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                                CacheHelper cacheHelper, CacheService cacheService,
                                ObjectMapper objectMapper, PromptTemplateService promptTemplateService,
                                LlmProperties llmProperties, ChainSelector chainSelector,
-                               LlmToggleService llmToggleService) {
+                               LlmToggleService llmToggleService, UserProfilingService userProfilingService,
+                               CandidateEnhancer candidateEnhancer) {
     this.providerChain = providerChain;
     this.candidateBuilder = candidateBuilder;
     this.cacheHelper = cacheHelper;
@@ -56,6 +61,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.llmProperties = llmProperties;
     this.chainSelector = chainSelector;
     this.llmToggleService = llmToggleService;
+    this.userProfilingService = userProfilingService;
+    this.candidateEnhancer = candidateEnhancer;
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -81,6 +88,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         this.llmProperties = null;
         this.chainSelector = null;
         this.llmToggleService = null;
+        this.userProfilingService = null;
+        this.candidateEnhancer = null;
         this.globalAsyncSemaphore = new Semaphore(10);
         this.perUserAsyncSemaphore = new Semaphore(2);
     }
@@ -99,6 +108,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.llmProperties = llmProperties;
     this.chainSelector = null; // No chain selection in legacy mode
     this.llmToggleService = null; // No toggle service in legacy mode
+    this.userProfilingService = null; // No user profiling in legacy mode
+    this.candidateEnhancer = null; // No candidate enhancement in legacy mode
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -177,6 +188,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     meta.setChainHops(chainHops);
     meta.setFallbackReason(fallbackReason);
     meta.setChainId(chainId);
+    meta.setUserProfileSummary(ctx.getUserProfileSummary());
     
     if (items != null && !items.isEmpty()) {
         boolean isFsrs = false;
@@ -244,6 +256,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         meta.setStrategy("normal");
         meta.setChainHops(List.of("cache")); // Indicate cache hit
         meta.setChainId(chainId);
+        meta.setUserProfileSummary(ctx.getUserProfileSummary());
         out.setMeta(meta);
         out.setItems(cached);
         return java.util.concurrent.CompletableFuture.completedFuture(out);
@@ -253,6 +266,12 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     List<LlmProvider.ProblemCandidate> candidates = candidateBuilder != null
             ? candidateBuilder.buildForUser(userId, candidateCap)
             : buildMockCandidates();
+            
+    // Enhance candidates with domain-based intelligence if available
+    if (candidateEnhancer != null && ctx.getUserProfile() != null) {
+        candidates = candidateEnhancer.enhanceCandidates(candidates, ctx.getUserProfile(), limit);
+        log.debug("Applied domain-based candidate enhancement for userId={}", userId);
+    }
 
     LlmProvider.PromptOptions options = new LlmProvider.PromptOptions();
     options.limit = Math.max(1, Math.min(50, limit));
@@ -261,6 +280,10 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     int acquireTimeout = llmProperties != null && llmProperties.getAsyncLimits() != null 
         ? llmProperties.getAsyncLimits().getAcquireTimeoutMs() : 100;
     
+    final List<LlmProvider.ProblemCandidate> candidatesFinal = candidates;
+    final LlmProvider.PromptOptions optionsFinal = options;
+    final int limitFinal = limit;
+    final String chainIdFinal = chainId;
     return CompletableFuture.supplyAsync(() -> {
         try {
             // Try to acquire global rate limit (with timeout to avoid blocking)
@@ -284,7 +307,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                         ? chainSelector.selectChain(ctx, llmProperties) 
                         : null;
                     // Execute the actual async call with selected chain
-                    return providerChain.executeAsync(ctx, candidates, options, selectedChain);
+                    return providerChain.executeAsync(ctx, candidatesFinal, optionsFinal, selectedChain);
                 } finally {
                     perUserAsyncSemaphore.release();
                 }
@@ -318,8 +341,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                     }
                     chainHops = res.hops != null ? res.hops : new ArrayList<>();
                 } else {
-                    List<LlmProvider.ProblemCandidate> base = (candidates != null && !candidates.isEmpty()) ? candidates : buildMockCandidates();
-                    items.addAll(buildFsrsFallback(base, limit));
+                    List<LlmProvider.ProblemCandidate> base = (candidatesFinal != null && !candidatesFinal.isEmpty()) ? candidatesFinal : buildMockCandidates();
+                    items.addAll(buildFsrsFallback(base, limitFinal));
                     strategy = "fsrs_fallback";
                     chainHops = res != null && res.hops != null ? res.hops : new ArrayList<>();
                     fallbackReason = res != null ? res.defaultReason : "unknown_error";
@@ -332,7 +355,8 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                 meta.setCached(false);
                 meta.setChainHops(chainHops);
                 meta.setFallbackReason(fallbackReason);
-                meta.setChainId(chainId);
+                meta.setChainId(chainIdFinal);
+                meta.setUserProfileSummary(ctx.getUserProfileSummary());
                 
                 if (!items.isEmpty() && "FSRS".equalsIgnoreCase(items.get(0).getSource())) {
                     meta.setBusy(false);
@@ -354,7 +378,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
 
     /**
      * Builds a request context with proper tier and AB group resolution.
-     * TODO: Integrate with actual user service to get real tier information.
+     * Includes user profile data for personalized recommendations.
      */
     private RequestContext buildRequestContext(Long userId) {
         RequestContext ctx = new RequestContext();
@@ -363,6 +387,23 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         ctx.setAbGroup(getUserAbGroup(userId)); // TODO: Get from A/B testing service
         ctx.setRoute("ai-recommendations");
         ctx.setTraceId(UUID.randomUUID().toString());
+        
+        // Add user profile data for personalized recommendations
+        if (userProfilingService != null) {
+            try {
+                UserProfile userProfile = userProfilingService.getUserProfile(userId, true);
+                // Store user profile in context for prompt template service to use
+                ctx.setUserProfile(userProfile);
+                // Generate diagnostic summary for header
+                ctx.setUserProfileSummary(generateUserProfileSummary(userProfile));
+                log.debug("Added user profile to request context: userId={}, learningPattern={}, overallMastery={}", 
+                         userId, userProfile.getLearningPattern(), userProfile.getOverallMastery());
+            } catch (Exception e) {
+                log.warn("Failed to load user profile for userId={}: {}", userId, e.getMessage());
+                // Continue without profile data - system should gracefully degrade
+            }
+        }
+        
         return ctx;
     }
 
@@ -407,6 +448,33 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
 }
 
     /**
+     * Generates a condensed user profile summary for diagnostic headers
+     */
+    private String generateUserProfileSummary(UserProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        
+        try {
+            StringBuilder summary = new StringBuilder();
+            summary.append(profile.getLearningPattern()).append("|");
+            summary.append("M:").append(String.format("%.0f%%", profile.getOverallMastery() * 100)).append("|");
+            summary.append("A:").append(String.format("%.0f%%", profile.getAverageAccuracy() * 100)).append("|");
+            summary.append("Q:").append(String.format("%.0f%%", profile.getDataQuality() * 100));
+            
+            if (!profile.getWeakDomains().isEmpty()) {
+                summary.append("|W:").append(String.join(",", profile.getWeakDomains().subList(0, 
+                    Math.min(2, profile.getWeakDomains().size())))); // Top 2 weak domains
+            }
+            
+            return summary.toString();
+        } catch (Exception e) {
+            log.debug("Failed to generate profile summary for userId={}: {}", profile.getUserId(), e.getMessage());
+            return "ERROR";
+        }
+    }
+
+    /**
      * Builds FSRS fallback response when LLM is disabled by feature toggles.
      */
     private AIRecommendationResponse buildFsrsFallbackResponse(RequestContext ctx, Long userId, int limit, String disabledReason) {
@@ -427,6 +495,7 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
         meta.setBusy(false);
         meta.setStrategy("fsrs_fallback");
         meta.setChainId("disabled");
+        meta.setUserProfileSummary(ctx.getUserProfileSummary());
         
         out.setItems(items);
         out.setMeta(meta);
@@ -488,6 +557,12 @@ private String buildSegmentSuffix(RequestContext ctx, String chainId) {
     List<LlmProvider.ProblemCandidate> candidates = candidateBuilder != null
             ? candidateBuilder.buildForUser(userId, candidateCap)
             : buildMockCandidates();
+            
+    // Enhance candidates with domain-based intelligence if available
+    if (candidateEnhancer != null && ctx.getUserProfile() != null) {
+        candidates = candidateEnhancer.enhanceCandidates(candidates, ctx.getUserProfile(), limit);
+        log.debug("Applied domain-based candidate enhancement for userId={}", userId);
+    }
 
     LlmProvider.PromptOptions options = new LlmProvider.PromptOptions();
     options.limit = Math.max(1, Math.min(50, limit));

@@ -47,6 +47,15 @@ public interface ReviewLogMapper extends BaseMapper<ReviewLog> {
     List<ReviewLog> findRecentByUserId(@Param("userId") Long userId, @Param("limit") int limit);
 
     /**
+     * Find recent review logs by user ID within a specific time window.
+     * Optimized version that pushes date filtering to database level.
+     */
+    @Select("SELECT * FROM review_logs WHERE user_id = #{userId} AND reviewed_at >= #{windowStart} ORDER BY reviewed_at DESC LIMIT #{limit}")
+    List<ReviewLog> findRecentByUserIdInWindow(@Param("userId") Long userId, 
+                                              @Param("windowStart") LocalDateTime windowStart,
+                                              @Param("limit") int limit);
+
+    /**
      * Find review logs by problem ID.
      */
     @Select("SELECT * FROM review_logs WHERE problem_id = #{problemId} ORDER BY reviewed_at DESC")

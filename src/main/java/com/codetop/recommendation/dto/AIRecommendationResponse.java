@@ -14,6 +14,8 @@ public class AIRecommendationResponse {
         private String chainVersion;
         private String policyId;
         private java.util.List<String> chainHops;
+        private String fallbackReason;
+        private String userProfileSummary; // Optional diagnostic info
 
         public boolean isCached() { return cached; }
         public void setCached(boolean cached) { this.cached = cached; }
@@ -33,6 +35,10 @@ public class AIRecommendationResponse {
         public void setPolicyId(String policyId) { this.policyId = policyId; }
         public java.util.List<String> getChainHops() { return chainHops; }
         public void setChainHops(java.util.List<String> chainHops) { this.chainHops = chainHops; }
+        public String getFallbackReason() { return fallbackReason; }
+        public void setFallbackReason(String fallbackReason) { this.fallbackReason = fallbackReason; }
+        public String getUserProfileSummary() { return userProfileSummary; }
+        public void setUserProfileSummary(String userProfileSummary) { this.userProfileSummary = userProfileSummary; }
     }
 
     private List<RecommendationItemDTO> items;
