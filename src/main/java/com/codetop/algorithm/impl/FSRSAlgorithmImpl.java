@@ -158,7 +158,7 @@ public class FSRSAlgorithmImpl implements FSRSAlgorithm {
         }
 
         try {
-            log.info("Starting parameter optimization with {} review logs", reviewLogs.size());
+            log.debug("Starting parameter optimization with {} review logs", reviewLogs.size());
 
             // Use gradient descent to optimize parameters
             double[] currentParams = currentParameters.getParameterArray();

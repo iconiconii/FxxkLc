@@ -72,10 +72,6 @@ public class SecurityConfig {
                             .access((auth, ctx) -> aiRecsPublic
                                     ? new AuthorizationDecision(true)
                                     : new AuthorizationDecision(auth.get() != null && auth.get().isAuthenticated()))
-                        .requestMatchers(HttpMethod.POST, "/problems/**/recommendation-feedback")
-                            .access((auth, ctx) -> aiRecsPublic
-                                    ? new AuthorizationDecision(true)
-                                    : new AuthorizationDecision(auth.get() != null && auth.get().isAuthenticated()))
                         // API docs - dev enabled or restrict to ADMIN
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                             .access((auth, ctx) -> {
