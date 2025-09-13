@@ -79,7 +79,7 @@ public class UserProfilingService {
             long startTime = System.currentTimeMillis();
             UserProfile profile = computeUserProfile(userId);
             long computeTime = System.currentTimeMillis() - startTime;
-            log.info("User profile computed in {}ms for userId={}", computeTime, userId);
+            log.debug("User profile computed in {}ms for userId={}", computeTime, userId);
             
             // Cache the result with configured TTL
             if (config.getCache().isEnabled()) {
@@ -99,7 +99,7 @@ public class UserProfilingService {
      * Compute user profile from FSRS data
      */
     protected UserProfile computeUserProfile(Long userId) {
-        log.info("Computing user profile for user {}", userId);
+        log.debug("Computing user profile for user {}", userId);
         
         // Load recent review data with optimized SQL filtering
         LocalDateTime recentWindowStart = LocalDateTime.now().minusDays(config.getWindows().getRecentDays());

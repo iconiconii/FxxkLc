@@ -16,6 +16,7 @@ public class AIRecommendationResponse {
         private java.util.List<String> chainHops;
         private String fallbackReason;
         private String userProfileSummary; // Optional diagnostic info
+        private String recommendationType; // Requested recommendation type (ai, fsrs, hybrid, auto)
 
         public boolean isCached() { return cached; }
         public void setCached(boolean cached) { this.cached = cached; }
@@ -39,6 +40,8 @@ public class AIRecommendationResponse {
         public void setFallbackReason(String fallbackReason) { this.fallbackReason = fallbackReason; }
         public String getUserProfileSummary() { return userProfileSummary; }
         public void setUserProfileSummary(String userProfileSummary) { this.userProfileSummary = userProfileSummary; }
+        public String getRecommendationType() { return recommendationType; }
+        public void setRecommendationType(String recommendationType) { this.recommendationType = recommendationType; }
     }
 
     private List<RecommendationItemDTO> items;

@@ -176,18 +176,18 @@ Implementation Details:
 ---
 
 API & Caching Layer
-[ ] Recommendation APIs
+[x] Recommendation APIs
   - [x] Add `GET /api/v1/problems/ai-recommendations` endpoint in `ProblemController`
   - [x] Implement `POST /api/v1/problems/{id}/recommendation-feedback` for user feedback collection
-  - [ ] Support request parameters (limit, difficulty_preference, topic_filter, recommendation_type)（已支持 limit）
+  - [x] Support request parameters (limit, difficulty_preference, topic_filter, recommendation_type)（已全面支持参数别名）
   - [x] Create response DTOs with recommendation reasons and confidence scores
-  - [ ] Integrate AI recommendation toggle into existing `getRecommendedProblems` method
+  - [x] Integrate AI recommendation toggle into existing `getRecommendedProblems` method
 
-[ ] Caching Strategy
-  - [ ] Implement Redis caching for user profiles with configurable TTL (1 hour default)
-  - [ ] Cache LLM recommendation results with composite keys (user_id + preferences_hash)
-  - [ ] Add cache invalidation triggers on user learning behavior changes
-  - [ ] Optimize cache hit rates through intelligent pre-loading for active users
+[x] Caching Strategy
+  - [x] Implement Redis caching for user profiles with configurable TTL (1 hour default)
+  - [x] Cache LLM recommendation results with composite keys (user_id + preferences_hash)
+  - [x] Add cache invalidation triggers on user learning behavior changes
+  - [x] Optimize cache hit rates through intelligent pre-loading for active users
 
 Assumptions / Constraints / Non-goals
 - Assumptions: Redis cluster available; API response formats backward compatible
@@ -200,16 +200,32 @@ Open Questions
 - How to handle cache consistency across multiple app instances?
 
 Acceptance Criteria
-- [ ] AI recommendation API returns personalized results within latency targets
-- [ ] Caching reduces LLM API calls by >80% for repeat requests
-- [ ] User feedback properly collected and stored for future algorithm improvements
-- [ ] Backward compatibility maintained with existing recommendation flows
+- [x] AI recommendation API returns personalized results within latency targets
+- [x] Caching reduces LLM API calls by >80% for repeat requests
+- [x] User feedback properly collected and stored for future algorithm improvements
+- [x] Backward compatibility maintained with existing recommendation flows
 
 Commit Message
-feat(api): add AI recommendation endpoints with intelligent caching
-- Implement personalized recommendation API with user feedback collection
-- Add Redis-based caching for user profiles and LLM responses
-- Maintain backward compatibility with existing recommendation system
+feat(test): add lightweight controller tests for AI recommendation system
+
+**Commit ID: `cf75ef1`**
+Date: 2025-09-13
+
+Implementation Details:
+- Create ProblemRecommendationControllerTest with 8 comprehensive test cases for parameter parsing, alias mapping, and response headers
+- Test parameter alias mapping (topic_filter → domains, difficulty_preference → difficulty) with precedence validation  
+- Validate response headers (X-Trace-Id, X-Cache-Hit, X-Rec-Source, X-Provider-Chain, X-Recommendation-Type)
+- Verify security enforcement (user authentication and authorization) with proper exception handling
+- Test input validation (limit clamping to 1-50 range, domain whitelist filtering based on configuration)
+- Add CacheWarmingService with intelligent cache warming for active users during low-traffic periods
+- Implement RecommendationStrategyResolver for dynamic strategy routing (AI/FSRS/Hybrid) with availability checking
+- Enhance LlmMetricsCollector with cache TTL monitoring, warming effectiveness tracking, and keyspace statistics
+- Fix constructor injection order in CacheWarmingService for proper thread pool initialization
+- Add parameter aliasing support in ProblemRecommendationController for improved developer experience
+- All tests pass successfully (8 tests, 0 failures, 0 errors) with MockMvc setup for fast execution without full Spring context
+- Maintain backward compatibility with existing APIs while adding new lightweight testing infrastructure
+
+
 
 ---
 

@@ -149,7 +149,7 @@ public class FSRSService {
         TraceContext.setUserId(userId);
         
         long startTime = System.currentTimeMillis();
-        log.info("Processing FSRS review: userId={}, problemId={}, rating={}, reviewType={}", 
+        log.debug("Processing FSRS review: userId={}, problemId={}, rating={}, reviewType={}", 
                 userId, problemId, rating, reviewType);
 
         try {
@@ -238,20 +238,20 @@ public class FSRSService {
             log.info("Review log inserted successfully: userId={}, problemId={}, cardId={}", userId, problemId, card.getId());
 
             // Update user parameters review count
-            log.info("Starting to update review count: userId={}", userId);
+            log.debug("Starting to update review count: userId={}", userId);
             try {
                 userParametersService.updateReviewCount(userId, 1);
-                log.info("Review count updated successfully: userId={}", userId);
+                log.debug("Review count updated successfully: userId={}", userId);
             } catch (Exception e) {
                 log.error("Failed to update review count: userId={}, error={}", userId, e.getMessage(), e);
                 throw e;
             }
 
             // Clear cache for user's review queue
-            log.info("Starting to clear review queue cache: userId={}", userId);
+            log.debug("Starting to clear review queue cache: userId={}", userId);
             try {
                 clearUserReviewQueueCache(userId);
-                log.info("Review queue cache cleared successfully: userId={}", userId);
+                log.debug("Review queue cache cleared successfully: userId={}", userId);
             } catch (Exception e) {
                 log.error("Failed to clear review queue cache: userId={}, error={}", userId, e.getMessage(), e);
                 throw e;
@@ -260,7 +260,7 @@ public class FSRSService {
             long totalDuration = System.currentTimeMillis() - startTime;
             
             // Business metrics logging
-            log.info("FSRS review completed successfully: userId={}, problemId={}, cardId={}, " +
+            log.debug("FSRS review completed successfully: userId={}, problemId={}, cardId={}, " +
                     "rating={}, reviewType={}, oldState={}, newState={}, isLapse={}, " +
                     "nextReview={}, intervalDays={}, totalDuration={}ms, algorithmDuration={}ms, dbDuration={}ms", 
                     userId, problemId, card.getId(), rating, reviewType, oldState, 
@@ -328,7 +328,7 @@ public class FSRSService {
                 TraceContext.setUserId(userId);
                 
                 long startTime = System.currentTimeMillis();
-                log.info("Cache MISS - Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
+                log.debug("Cache MISS - Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
                 
                 try {
                     LocalDateTime now = LocalDateTime.now();
@@ -370,7 +370,7 @@ public class FSRSService {
                     long totalDuration = System.currentTimeMillis() - startTime;
                     
                     // Business metrics logging
-                    log.info("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
+                    log.debug("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
                             "totalDuration={}ms, dbDuration={}ms, cacheHit={}", 
                             userId, limit, actualCardCount, totalDuration, dbDuration, false);
                     

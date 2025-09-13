@@ -79,8 +79,8 @@ public class AIRecommendationServiceCacheKeyTest {
         verify(cacheService).getList(cacheKeyCaptor.capture(), eq(RecommendationItemDTO.class));
         
         String actualCacheKey = cacheKeyCaptor.getValue();
-        // Cache key now includes segment information with chainId: "limit_5_pv_v2_t_BRONZE_ab_B_chain_legacy"
-        String expectedCacheKey = CacheKeyBuilder.buildUserKey("rec-ai", 123L, "limit_5_pv_v2_t_BRONZE_ab_B_chain_legacy");
+        // Cache key now includes segment information with chainId and objective hash: "limit_5_pv_v2_t_BRONZE_ab_B_chain_legacy_default"
+        String expectedCacheKey = CacheKeyBuilder.buildUserKey("rec-ai", 123L, "limit_5_pv_v2_t_BRONZE_ab_B_chain_legacy_default");
         assertEquals(expectedCacheKey, actualCacheKey);
         
         // Verify cache is written with the same key

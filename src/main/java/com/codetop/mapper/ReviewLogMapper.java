@@ -229,6 +229,16 @@ public interface ReviewLogMapper extends BaseMapper<ReviewLog> {
     @Select("SELECT COUNT(*) FROM review_logs WHERE user_id = #{userId} AND reviewed_at >= #{startDate} AND reviewed_at <= #{endDate}")
     Long countByUserIdInDateRange(@Param("userId") Long userId, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
+    /**
+     * Find active user IDs based on recent review activity.
+     */
+    @Select("SELECT user_id FROM review_logs WHERE reviewed_at >= #{cutoffTime} " +
+            "GROUP BY user_id HAVING COUNT(*) >= #{minReviews} " +
+            "ORDER BY COUNT(*) DESC LIMIT #{limit}")
+    List<Long> findActiveUserIds(@Param("cutoffTime") LocalDateTime cutoffTime, 
+                                 @Param("minReviews") int minReviews, 
+                                 @Param("limit") int limit);
+
     // Helper classes for complex query results
 
     class UserReviewStats {

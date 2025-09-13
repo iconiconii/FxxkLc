@@ -92,7 +92,7 @@ public class ConfidenceCalibrator {
         }
         
         if (filteredCount > 0) {
-            log.info("Filtered {} low-confidence recommendations below threshold {:.3f}", 
+            log.debug("Filtered {} low-confidence recommendations below threshold {:.3f}", 
                     filteredCount, confidenceConfig.getThresholds().getMinimumShow());
         }
         
