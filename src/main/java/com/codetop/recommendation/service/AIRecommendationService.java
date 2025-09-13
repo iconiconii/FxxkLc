@@ -47,6 +47,7 @@ public class AIRecommendationService {
     private final RecommendationMixer recommendationMixer;
     private final ConfidenceCalibrator confidenceCalibrator;
     private final LlmMetricsCollector metricsCollector;
+    private final RecommendationStrategyResolver strategyResolver;
     
     // Async rate limiting with semaphores (configured via properties)
     private final Semaphore globalAsyncSemaphore;
@@ -61,7 +62,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
                                LlmToggleService llmToggleService, UserProfilingService userProfilingService,
                                CandidateEnhancer candidateEnhancer, HybridRankingService hybridRankingService,
                                RecommendationMixer recommendationMixer, ConfidenceCalibrator confidenceCalibrator,
-                               LlmMetricsCollector metricsCollector) {
+                               LlmMetricsCollector metricsCollector, RecommendationStrategyResolver strategyResolver) {
     this.providerChain = providerChain;
     this.candidateBuilder = candidateBuilder;
     this.cacheHelper = cacheHelper;
@@ -77,6 +78,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.recommendationMixer = recommendationMixer;
     this.confidenceCalibrator = confidenceCalibrator;
     this.metricsCollector = metricsCollector;
+    this.strategyResolver = strategyResolver;
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -109,6 +111,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
         this.recommendationMixer = null;
         this.confidenceCalibrator = null;
         this.metricsCollector = null;
+        this.strategyResolver = null;
         this.globalAsyncSemaphore = new Semaphore(10);
         this.perUserSemaphores = new java.util.concurrent.ConcurrentHashMap<>();
         this.maxPerUserConcurrency = 2;
@@ -134,6 +137,7 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     this.recommendationMixer = null; // No recommendation mixing in legacy mode
     this.confidenceCalibrator = null; // No confidence calibration in legacy mode
     this.metricsCollector = null; // No metrics collection in legacy mode
+    this.strategyResolver = null; // No strategy resolver in legacy mode
     
     // Initialize semaphores with configured limits
     int globalLimit = llmProperties != null && llmProperties.getAsyncLimits() != null 
@@ -152,6 +156,35 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
     public AIRecommendationResponse getRecommendations(Long userId, int limit) {
         // Delegate to the enhanced version with null parameters to avoid duplicate logic
         return getRecommendations(userId, limit, null, null, null, null);
+    }
+
+    /**
+     * Enhanced getRecommendations method with learning objectives, preferences, and recommendation type.
+     */
+    public AIRecommendationResponse getRecommendations(
+            Long userId, 
+            int limit,
+            LearningObjective objective,
+            List<String> targetDomains,
+            DifficultyPreference desiredDifficulty,
+            Integer timeboxMinutes,
+            RecommendationType recommendationType
+    ) {
+        // Strategy-based routing using RecommendationStrategyResolver
+        if (strategyResolver != null && recommendationType != null) {
+            try {
+                RecommendationStrategy strategy = strategyResolver.resolveStrategy(recommendationType, userId, objective);
+                if (strategy != null && strategy.isAvailable()) {
+                    return strategy.getRecommendations(userId, limit, objective, targetDomains, desiredDifficulty, timeboxMinutes);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to use strategy-based routing for type {}, falling back to default: {}", 
+                         recommendationType, e.getMessage());
+            }
+        }
+        
+        // Fallback to existing implementation for compatibility
+        return getRecommendations(userId, limit, objective, targetDomains, desiredDifficulty, timeboxMinutes);
     }
 
     /**
@@ -527,9 +560,34 @@ public AIRecommendationService(ProviderChain providerChain, CandidateBuilder can
             sb.append("_time_").append(timeboxMinutes);
         }
         
-        // Return hash or empty string if no objectives
+        // Return stable SHA-256 hash or default if no objectives
         String result = sb.toString();
-        return result.isEmpty() ? "default" : Integer.toHexString(result.hashCode());
+        return result.isEmpty() ? "default" : calculateStableHash(result);
+    }
+
+    /**
+     * Calculate stable SHA-256 hash for cache key, truncated to 12 characters for low collision risk
+     */
+    private String calculateStableHash(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            
+            // Convert to hex and truncate to 12 characters for manageable key length
+            StringBuilder hexString = new StringBuilder();
+            for (int i = 0; i < Math.min(6, hash.length); i++) { // 6 bytes = 12 hex chars
+                String hex = Integer.toHexString(0xff & hash[i]);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // Fallback to hashCode if SHA-256 is not available (should never happen)
+            log.warn("SHA-256 not available, falling back to hashCode for cache key: {}", e.getMessage());
+            return Integer.toHexString(input.hashCode());
+        }
     }
 
     /**

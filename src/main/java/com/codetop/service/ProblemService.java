@@ -12,6 +12,16 @@ import com.codetop.enums.ReviewType;
 import com.codetop.enums.FSRSState;
 import com.codetop.service.cache.CacheService;
 import com.codetop.util.CacheHelper;
+import com.codetop.recommendation.config.LlmProperties;
+import com.codetop.recommendation.service.LlmToggleService;
+import com.codetop.recommendation.service.RecommendationStrategyResolver;
+import com.codetop.recommendation.service.RecommendationType;
+import com.codetop.recommendation.service.RecommendationStrategy;
+import com.codetop.recommendation.service.RequestContext;
+import com.codetop.recommendation.dto.AIRecommendationResponse;
+import com.codetop.recommendation.dto.RecommendationItemDTO;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -54,6 +64,17 @@ public class ProblemService {
     // 新增缓存相关依赖
     private final CacheService cacheService;
     private final CacheHelper cacheHelper;
+    
+    // AI 推荐相关依赖 (可选依赖)
+    @Autowired(required = false)
+    private RecommendationStrategyResolver recommendationStrategyResolver;
+    
+    // LLM Toggle Service for centralized feature control
+    @Autowired(required = false)
+    private LlmToggleService llmToggleService;
+    
+    @Autowired(required = false)
+    private LlmProperties llmProperties;
     
     // 缓存相关常量
     private static final String CACHE_PREFIX_PROBLEM_SINGLE = "problem-single";
@@ -936,7 +957,7 @@ public class ProblemService {
             // Calculate accuracy based on FSRS stability and difficulty
             Double accuracy = calculateAccuracyFromFSRS(card);
             
-            log.info("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
+            log.debug("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
                     problemId, request.getStatus(), userId, fsrsRating, reviewResult.getNextReviewTime());
             
             UserProblemStatusLegacyDTO result = UserProblemStatusLegacyDTO.builder()
@@ -1179,9 +1200,91 @@ public class ProblemService {
     }
 
     /**
-     * Get recommended problems for user based on FSRS scheduling.
+     * Get recommended problems for user based on FSRS scheduling with optional AI enhancement.
      */
     public List<Problem> getRecommendedProblems(Long userId, int limit) {
+        return getRecommendedProblems(userId, limit, RecommendationType.AUTO);
+    }
+    
+    /**
+     * Check if AI recommendations are enabled using centralized toggle service
+     */
+    private boolean isAIRecommendationEnabled(Long userId) {
+        if (llmToggleService == null || llmProperties == null) {
+            return false; // Fallback to disabled if services not available
+        }
+        
+        try {
+            // Build request context for toggle evaluation
+            RequestContext ctx = new RequestContext();
+            ctx.setUserId(userId);
+            ctx.setTraceId(TraceContext.getTraceId());
+            
+            return llmToggleService.isEnabled(ctx, llmProperties);
+        } catch (Exception e) {
+            log.warn("Failed to check LLM toggle status for userId={}: {}", userId, e.getMessage());
+            return false; // Fail safe to disabled
+        }
+    }
+
+    /**
+     * Get recommended problems for user with specific recommendation type.
+     */
+    public List<Problem> getRecommendedProblems(Long userId, int limit, RecommendationType recommendationType) {
+        log.debug("Getting recommended problems for userId={}, limit={}, type={}", 
+                  userId, limit, recommendationType);
+        
+        // Check if AI recommendations are enabled and available using centralized toggle service
+        boolean useAI = isAIRecommendationEnabled(userId) && 
+                        recommendationStrategyResolver != null && 
+                        (recommendationType.requiresAI() || recommendationType == RecommendationType.AUTO);
+        
+        if (useAI) {
+            try {
+                // Use AI recommendation strategy
+                RecommendationStrategy strategy = recommendationStrategyResolver.resolveStrategy(
+                        recommendationType, userId, null);
+                
+                if (strategy != null && strategy.isAvailable()) {
+                    AIRecommendationResponse aiResponse = strategy.getRecommendations(
+                            userId, limit, null, null, null, null);
+                    
+                    if (aiResponse != null && 
+                        aiResponse.getItems() != null && 
+                        !aiResponse.getItems().isEmpty() && 
+                        (aiResponse.getMeta() == null || !aiResponse.getMeta().isBusy())) {
+                        
+                        // Convert AI recommendations to Problem objects
+                        List<Long> problemIds = aiResponse.getItems().stream()
+                                .map(RecommendationItemDTO::getProblemId)
+                                .toList();
+                        
+                        List<Problem> problems = problemIds.stream()
+                                .map(problemMapper::selectById)
+                                .filter(Objects::nonNull)
+                                .toList();
+                        
+                        if (!problems.isEmpty()) {
+                            log.debug("Successfully got {} AI-powered recommendations for userId={}", 
+                                      problems.size(), userId);
+                            return problems;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get AI recommendations for userId={}, falling back to FSRS: {}", 
+                         userId, e.getMessage());
+            }
+        }
+        
+        // Fallback to traditional FSRS recommendations
+        return getFsrsRecommendedProblems(userId, limit);
+    }
+    
+    /**
+     * Traditional FSRS-based recommendation logic (extracted for reuse).
+     */
+    private List<Problem> getFsrsRecommendedProblems(Long userId, int limit) {
         try {
             // Get FSRS review queue
             var reviewQueue = fsrsService.generateReviewQueue(userId, limit);
@@ -1206,7 +1309,7 @@ public class ProblemService {
                     .toList();
                     
         } catch (Exception e) {
-            log.error("Failed to get recommended problems for user {}: {}", userId, e.getMessage());
+            log.error("Failed to get FSRS recommended problems for user {}: {}", userId, e.getMessage());
             // Fallback to random problems
             return findProblemsForUser(userId, null, null)
                     .stream()

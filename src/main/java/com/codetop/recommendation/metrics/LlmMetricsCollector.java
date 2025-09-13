@@ -1,9 +1,13 @@
 package com.codetop.recommendation.metrics;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Metrics collector for LLM recommendation system.
@@ -106,5 +110,107 @@ public class LlmMetricsCollector {
             ))
             .register(meterRegistry)
             .increment();
+    }
+    
+    /**
+     * Record cache TTL information for AI recommendation keys.
+     */
+    public void recordCacheTtl(String keyspace, String keyType, Duration remainingTtl, Duration originalTtl) {
+        // Record remaining TTL as a gauge
+        Gauge.builder("llm.cache.ttl.remaining_seconds", remainingTtl, Duration::getSeconds)
+            .description("Remaining TTL for AI recommendation cache keys")
+            .tags(Tags.of(
+                "keyspace", keyspace != null ? keyspace : "unknown",
+                "key_type", keyType != null ? keyType : "unknown"
+            ))
+            .register(meterRegistry);
+        
+        // Record TTL utilization ratio (remaining/original)
+        if (originalTtl != null && originalTtl.getSeconds() > 0) {
+            double utilizationRatio = (double) remainingTtl.getSeconds() / originalTtl.getSeconds();
+            Gauge.builder("llm.cache.ttl.utilization_ratio", () -> utilizationRatio)
+                .description("TTL utilization ratio for AI cache keys (remaining/original)")
+                .tags(Tags.of(
+                    "keyspace", keyspace != null ? keyspace : "unknown",
+                    "key_type", keyType != null ? keyType : "unknown"
+                ))
+                .register(meterRegistry);
+        }
+    }
+    
+    /**
+     * Record cache warming effectiveness metrics.
+     */
+    public void recordCacheWarmingEffect(String keyspace, boolean warmed, boolean accessed, Duration timeToAccess) {
+        // Record warming success
+        Counter.builder("llm.cache.warming.effect")
+            .description("Cache warming effectiveness for AI keys")
+            .tags(Tags.of(
+                "keyspace", keyspace != null ? keyspace : "unknown",
+                "warmed", String.valueOf(warmed),
+                "accessed", String.valueOf(accessed)
+            ))
+            .register(meterRegistry)
+            .increment();
+        
+        // Record time between warming and access (if both occurred)
+        if (warmed && accessed && timeToAccess != null) {
+            Timer.builder("llm.cache.warming.time_to_access")
+                .description("Time between cache warming and first access")
+                .tags(Tags.of("keyspace", keyspace != null ? keyspace : "unknown"))
+                .register(meterRegistry)
+                .record(timeToAccess.toMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+    
+    /**
+     * Record cache keyspace statistics.
+     */
+    public void recordCacheKeyspaceStats(String keyspace, int totalKeys, int expiredKeys, double hitRate) {
+        // Total keys in keyspace
+        Gauge.builder("llm.cache.keyspace.total_keys", () -> (double) totalKeys)
+            .description("Total number of keys in AI recommendation keyspace")
+            .tags(Tags.of("keyspace", keyspace != null ? keyspace : "unknown"))
+            .register(meterRegistry);
+        
+        // Expired keys
+        Gauge.builder("llm.cache.keyspace.expired_keys", () -> (double) expiredKeys)
+            .description("Number of expired keys in AI recommendation keyspace")
+            .tags(Tags.of("keyspace", keyspace != null ? keyspace : "unknown"))
+            .register(meterRegistry);
+        
+        // Hit rate for this keyspace
+        Gauge.builder("llm.cache.keyspace.hit_rate", () -> hitRate)
+            .description("Cache hit rate for AI recommendation keyspace")
+            .tags(Tags.of("keyspace", keyspace != null ? keyspace : "unknown"))
+            .register(meterRegistry);
+    }
+    
+    /**
+     * Record detailed cache access with key pattern analysis.
+     */
+    public void recordDetailedCacheAccess(String keyspace, String keyPattern, boolean hit, Duration responseTime) {
+        // Enhanced cache access metrics with key pattern
+        Counter.builder("llm.cache.detailed_access")
+            .description("Detailed LLM cache access with key pattern analysis")
+            .tags(Tags.of(
+                "keyspace", keyspace != null ? keyspace : "unknown",
+                "key_pattern", keyPattern != null ? keyPattern : "unknown",
+                "result", hit ? "hit" : "miss"
+            ))
+            .register(meterRegistry)
+            .increment();
+        
+        // Response time for cache operations
+        if (responseTime != null) {
+            Timer.builder("llm.cache.response_time")
+                .description("Response time for cache operations")
+                .tags(Tags.of(
+                    "keyspace", keyspace != null ? keyspace : "unknown",
+                    "result", hit ? "hit" : "miss"
+                ))
+                .register(meterRegistry)
+                .record(responseTime.toNanos(), TimeUnit.NANOSECONDS);
+        }
     }
 }
