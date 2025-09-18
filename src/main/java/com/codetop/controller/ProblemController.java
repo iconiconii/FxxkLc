@@ -355,7 +355,7 @@ public class ProblemController {
                 .lastAttemptDate(dto.getLastAttemptDate())
                 .lastConsideredDate(dto.getLastConsideredDate())
                 .attemptCount(dto.getAttemptCount())
-                .accuracy(dto.getAccuracy())
+                .masteryScore(dto.getMasteryScore() != null ? dto.getMasteryScore() : 0.0)
                 .notes(dto.getNotes())
                 .build();
     }
@@ -381,7 +381,7 @@ public class ProblemController {
                 .problemId(dto.getProblemId())
                 .masteryLevel(dto.getMasteryLevel())
                 .attemptCount(dto.getAttemptCount())
-                .accuracy(dto.getAccuracy())
+                .masteryScore(dto.getMasteryScore() != null ? dto.getMasteryScore() : 0.0)
                 .lastAttemptDate(dto.getLastAttemptDate())
                 .nextReviewDate(dto.getNextReviewDate())
                 .difficulty(dto.getDifficulty())

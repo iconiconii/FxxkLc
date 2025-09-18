@@ -16,10 +16,8 @@ import jakarta.validation.constraints.Min;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.codetop.dto.LeaderboardEntryDTO;
-import com.codetop.dto.AccuracyLeaderboardEntryDTO;
 import com.codetop.dto.StreakLeaderboardEntryDTO;
 import com.codetop.dto.LeaderboardEntryVO;
-import com.codetop.dto.AccuracyLeaderboardEntryVO;
 import com.codetop.dto.StreakLeaderboardEntryVO;
 
 /**
@@ -101,27 +99,6 @@ public class LeaderboardController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Get accuracy leaderboard.
-     */
-    @GetMapping("/accuracy")
-    @Operation(summary = "Get accuracy leaderboard", description = "Get top users by accuracy rate (minimum 10 reviews)")
-    public ResponseEntity<List<AccuracyLeaderboardEntryVO>> getAccuracyLeaderboard(
-            @Parameter(description = "Maximum number of entries to return (1-100)")
-            @RequestParam(defaultValue = "50") 
-            @Min(1) @Max(100) int limit,
-            @Parameter(description = "Number of days to consider for accuracy calculation (1-365)")
-            @RequestParam(defaultValue = "30") 
-            @Min(1) @Max(365) int days) {
-        
-        log.info("Fetching accuracy leaderboard with limit: {} and days: {}", limit, days);
-        List<AccuracyLeaderboardEntryDTO> leaderboard = leaderboardService.getAccuracyLeaderboard(limit, days);
-        List<AccuracyLeaderboardEntryVO> response = leaderboard.stream()
-                .map(this::convertAccuracyLeaderboardEntryToVO)
-                .collect(Collectors.toList());
-        response.forEach(AccuracyLeaderboardEntryVO::assignAccuracyBadge);
-        return ResponseEntity.ok(response);
-    }
 
     /**
      * Get streak leaderboard.
@@ -179,26 +156,10 @@ public class LeaderboardController {
                 .username(dto.getUsername())
                 .avatarUrl(dto.getAvatarUrl())
                 .totalReviews(dto.getTotalReviews())
-                .correctReviews(dto.getCorrectReviews())
-                .accuracy(dto.getAccuracy())
                 .streak(dto.getStreak())
                 .build();
     }
 
-    /**
-     * Convert AccuracyLeaderboardEntryDTO to VO.
-     */
-    private AccuracyLeaderboardEntryVO convertAccuracyLeaderboardEntryToVO(AccuracyLeaderboardEntryDTO dto) {
-        return AccuracyLeaderboardEntryVO.builder()
-                .rank(dto.getRank())
-                .userId(dto.getUserId())
-                .username(dto.getUsername())
-                .avatarUrl(dto.getAvatarUrl())
-                .totalReviews(dto.getTotalReviews())
-                .correctReviews(dto.getCorrectReviews())
-                .accuracy(dto.getAccuracy())
-                .build();
-    }
     
     /**
      * Convert StreakLeaderboardEntryDTO to VO.
@@ -226,25 +187,10 @@ public class LeaderboardController {
         private String username;
         private String avatarUrl;
         private Long totalReviews;
-        private Long correctReviews;
-        private Double accuracy;
         private Integer streak;
         private String badge;
     }
 
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    @lombok.NoArgsConstructor
-    public static class AccuracyLeaderboardEntry {
-        private Long rank;
-        private Long userId;
-        private String username;
-        private String avatarUrl;
-        private Long totalReviews;
-        private Long correctReviews;
-        private Double accuracy;
-        private String badge;
-    }
 
     @lombok.Data
     @lombok.AllArgsConstructor

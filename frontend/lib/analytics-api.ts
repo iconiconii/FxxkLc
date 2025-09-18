@@ -20,18 +20,18 @@ export interface AnalyticsOverview {
 export interface DailyReviewActivity {
   date: string
   reviewCount: number
-  correctCount: number
+  masteryReviews: number
   newCards: number
   totalTimeMinutes: number
 }
 
 export interface UserReviewStats {
   totalReviews: number
-  correctReviews: number
+  masteryReviews: number
   averageRating: number
   totalTimeMinutes: number
   streakDays: number
-  accuracy: number
+  masteryScore: number
 }
 
 export interface MonthlyProgress {
@@ -39,15 +39,15 @@ export interface MonthlyProgress {
   year: number
   reviewCount: number
   newCardsLearned: number
-  accuracy: number
+  masteryScore: number
   totalTimeMinutes: number
 }
 
 export interface DifficultyPerformance {
   difficulty: string
   totalReviews: number
-  correctReviews: number
-  accuracy: number
+  masteryReviews: number
+  masteryScore: number
   averageRating: number
 }
 

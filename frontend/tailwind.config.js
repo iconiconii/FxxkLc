@@ -45,5 +45,19 @@ module.exports = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    function({ addUtilities }) {
+      const lineClampUtilities = {};
+      for (let i = 1; i <= 6; i++) {
+        lineClampUtilities[`.line-clamp-${i}`] = {
+          overflow: 'hidden',
+          display: '-webkit-box',
+          '-webkit-box-orient': 'vertical',
+          '-webkit-line-clamp': i.toString(),
+        };
+      }
+      addUtilities(lineClampUtilities);
+    }
+  ],
 }

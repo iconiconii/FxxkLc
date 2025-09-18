@@ -86,7 +86,13 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/codetop/health").permitAll()
 
-                        // Admin endpoints
+                        // Async AI recommendations endpoints - MUST be EXACT matches and come FIRST
+                        .requestMatchers(HttpMethod.POST, "/problems/ai-recommendations/async").authenticated()
+                        // Allow nested segments just in case (safer for PathPattern semantics)
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations/async/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations/daily-limit").authenticated()
+
+                        // Admin endpoints - general patterns AFTER specific ones
                         .requestMatchers("/druid/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/problems/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/problems/**").hasRole("ADMIN")

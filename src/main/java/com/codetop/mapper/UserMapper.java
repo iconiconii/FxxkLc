@@ -343,10 +343,6 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("""
             SELECT u.id as userId, u.username, u.avatar_url as avatarUrl,
                    COALESCE(COUNT(rl.id), 0) as totalReviews,
-                   COALESCE(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END), 0) as correctReviews,
-                   CASE WHEN COUNT(rl.id) > 0 THEN 
-                       ROUND(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id), 1) 
-                   ELSE 0 END as accuracy,
                    0 as streak,
                    ROW_NUMBER() OVER (ORDER BY COUNT(rl.id) DESC) as `rank`
             FROM users u
@@ -362,8 +358,6 @@ public interface UserMapper extends BaseMapper<User> {
         @Result(column = "username", property = "username"),
         @Result(column = "avatarUrl", property = "avatarUrl"),
         @Result(column = "totalReviews", property = "totalReviews"),
-        @Result(column = "correctReviews", property = "correctReviews"),
-        @Result(column = "accuracy", property = "accuracy"),
         @Result(column = "streak", property = "streak"),
         @Result(column = "rank", property = "rank")
     })
@@ -375,10 +369,6 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("""
             SELECT u.id as userId, u.username, u.avatar_url as avatarUrl,
                    COALESCE(COUNT(rl.id), 0) as totalReviews,
-                   COALESCE(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END), 0) as correctReviews,
-                   CASE WHEN COUNT(rl.id) > 0 THEN 
-                       ROUND(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id), 1) 
-                   ELSE 0 END as accuracy,
                    0 as streak,
                    ROW_NUMBER() OVER (ORDER BY COUNT(rl.id) DESC) as `rank`
             FROM users u
@@ -395,8 +385,6 @@ public interface UserMapper extends BaseMapper<User> {
         @Result(column = "username", property = "username"),
         @Result(column = "avatarUrl", property = "avatarUrl"),
         @Result(column = "totalReviews", property = "totalReviews"),
-        @Result(column = "correctReviews", property = "correctReviews"),
-        @Result(column = "accuracy", property = "accuracy"),
         @Result(column = "streak", property = "streak"),
         @Result(column = "rank", property = "rank")
     })
@@ -409,10 +397,6 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("""
             SELECT u.id as userId, u.username, u.avatar_url as avatarUrl,
                    COALESCE(COUNT(rl.id), 0) as totalReviews,
-                   COALESCE(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END), 0) as correctReviews,
-                   CASE WHEN COUNT(rl.id) > 0 THEN 
-                       ROUND(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id), 1) 
-                   ELSE 0 END as accuracy,
                    0 as streak,
                    ROW_NUMBER() OVER (ORDER BY COUNT(rl.id) DESC) as `rank`
             FROM users u
@@ -429,48 +413,12 @@ public interface UserMapper extends BaseMapper<User> {
         @Result(column = "username", property = "username"),
         @Result(column = "avatarUrl", property = "avatarUrl"),
         @Result(column = "totalReviews", property = "totalReviews"),
-        @Result(column = "correctReviews", property = "correctReviews"),
-        @Result(column = "accuracy", property = "accuracy"),
         @Result(column = "streak", property = "streak"),
         @Result(column = "rank", property = "rank")
     })
     List<com.codetop.controller.LeaderboardController.LeaderboardEntry> getMonthlyLeaderboard(
             @Param("startDate") LocalDateTime startDate, @Param("limit") int limit);
 
-    /**
-     * Get accuracy leaderboard.
-     */
-    @Select("""
-            SELECT u.id as userId, u.username, u.avatar_url as avatarUrl,
-                   COALESCE(COUNT(rl.id), 0) as totalReviews,
-                   COALESCE(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END), 0) as correctReviews,
-                   CASE WHEN COUNT(rl.id) > 0 THEN 
-                       ROUND(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id), 1) 
-                   ELSE 0 END as accuracy,
-                   ROW_NUMBER() OVER (ORDER BY 
-                       CASE WHEN COUNT(rl.id) > 0 THEN 
-                           SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id)
-                       ELSE 0 END DESC) as `rank`
-            FROM users u
-            LEFT JOIN fsrs_cards fc ON u.id = fc.user_id
-            LEFT JOIN review_logs rl ON fc.id = rl.card_id AND rl.reviewed_at >= #{startDate}
-            WHERE u.is_active = true
-            GROUP BY u.id, u.username, u.avatar_url
-            HAVING COUNT(rl.id) >= 10
-            ORDER BY accuracy DESC
-            LIMIT #{limit}
-            """)
-    @Results({
-        @Result(column = "userId", property = "userId"),
-        @Result(column = "username", property = "username"),
-        @Result(column = "avatarUrl", property = "avatarUrl"),
-        @Result(column = "totalReviews", property = "totalReviews"),
-        @Result(column = "correctReviews", property = "correctReviews"),
-        @Result(column = "accuracy", property = "accuracy"),
-        @Result(column = "rank", property = "rank")
-    })
-    List<com.codetop.controller.LeaderboardController.AccuracyLeaderboardEntry> getAccuracyLeaderboard(
-            @Param("startDate") LocalDateTime startDate, @Param("limit") int limit);
 
     /**
      * Get streak leaderboard.
@@ -551,27 +499,6 @@ public interface UserMapper extends BaseMapper<User> {
             """)
     Long getUserMonthlyRank(@Param("userId") Long userId);
 
-    /**
-     * Get user's accuracy rank.
-     */
-    @Select("""
-            SELECT COALESCE(rank_info.user_rank, 0) as `rank`
-            FROM (
-                SELECT u.id,
-                       ROW_NUMBER() OVER (ORDER BY 
-                           CASE WHEN COUNT(rl.id) > 0 THEN 
-                               SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id)
-                           ELSE 0 END DESC) as user_rank
-                FROM users u
-                LEFT JOIN fsrs_cards fc ON u.id = fc.user_id
-                LEFT JOIN review_logs rl ON fc.id = rl.card_id
-                WHERE u.is_active = true
-                GROUP BY u.id
-                HAVING COUNT(rl.id) >= 10
-            ) rank_info
-            WHERE rank_info.id = #{userId}
-            """)
-    Long getUserAccuracyRank(@Param("userId") Long userId);
 
     /**
      * Get user's streak rank.
@@ -594,13 +521,6 @@ public interface UserMapper extends BaseMapper<User> {
     @Select("""
             SELECT 
                 COALESCE(COUNT(DISTINCT p.id), 0) as totalProblemsAttempted,
-                COALESCE(COUNT(DISTINCT CASE WHEN rl.rating >= 3 THEN p.id END), 0) as totalProblemsSolved,
-                COALESCE(COUNT(DISTINCT CASE WHEN p.difficulty = 'EASY' AND rl.rating >= 3 THEN p.id END), 0) as easyProblemsSolved,
-                COALESCE(COUNT(DISTINCT CASE WHEN p.difficulty = 'MEDIUM' AND rl.rating >= 3 THEN p.id END), 0) as mediumProblemsSolved,
-                COALESCE(COUNT(DISTINCT CASE WHEN p.difficulty = 'HARD' AND rl.rating >= 3 THEN p.id END), 0) as hardProblemsSolved,
-                CASE WHEN COUNT(rl.id) > 0 THEN 
-                    ROUND(SUM(CASE WHEN rl.rating >= 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(rl.id), 1) 
-                ELSE 0 END as overallAccuracy,
                 1 as currentStreak,
                 1 as longestStreak,
                 COALESCE(SUM(rl.response_time_ms), 0) as totalReviewTime,

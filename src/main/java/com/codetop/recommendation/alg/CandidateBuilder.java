@@ -37,9 +37,10 @@ public class CandidateBuilder {
             for (FSRSCardMapper.ReviewQueueCard c : cards) {
                 out.add(toCandidate(c));
             }
-            // Ensure stable order: more urgent first (earlier nextReview), then lower accuracy
+            // Sort by urgency: higher urgency first (more urgent problems prioritized)
+            // Secondary sort by lower accuracy (problems needing more practice)
             out.sort(Comparator
-                    .comparing((LlmProvider.ProblemCandidate pc) -> pc.attempts == null ? 0 : pc.attempts)
+                    .comparing((LlmProvider.ProblemCandidate pc) -> pc.urgencyScore == null ? 0.0 : pc.urgencyScore, Comparator.reverseOrder())
                     .thenComparing(pc -> pc.recentAccuracy == null ? 0.0 : pc.recentAccuracy));
             if (out.size() > cap) {
                 out = out.subList(0, cap);

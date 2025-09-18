@@ -1,6 +1,7 @@
 package com.codetop.recommendation.service;
 
 import com.codetop.recommendation.dto.AIRecommendationResponse;
+import com.codetop.recommendation.dto.RecommendationRequest;
 
 import java.util.List;
 
@@ -31,6 +32,24 @@ public interface RecommendationStrategy {
             DifficultyPreference desiredDifficulty,
             Integer timeboxMinutes
     );
+    
+    /**
+     * Generate recommendations using a RecommendationRequest DTO.
+     * This is a convenience method that delegates to the parameterized version.
+     * 
+     * @param request The recommendation request DTO
+     * @return AIRecommendationResponse with recommendations and metadata
+     */
+    default AIRecommendationResponse getRecommendations(RecommendationRequest request) {
+        return getRecommendations(
+            request.getUserId(),
+            request.getLimit() != null ? request.getLimit() : 10,
+            request.getObjective(),
+            request.getDomains(),
+            request.getDifficultyPreference(),
+            request.getTimebox()
+        );
+    }
     
     /**
      * Get the recommendation type supported by this strategy.

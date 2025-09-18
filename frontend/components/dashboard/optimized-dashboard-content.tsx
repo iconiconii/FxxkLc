@@ -7,6 +7,7 @@ import FSRSStatusCard from "./fsrs-status-card"
 import QuickStats from "./quick-stats"
 import ReviewQueuePreview from "./review-queue-preview"
 import LearningInsights from "./learning-insights"
+import AIRecommendationsSection from "./ai-recommendations"
 
 export default function OptimizedDashboardContent() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsOverview | null>(null)
@@ -211,6 +212,7 @@ export default function OptimizedDashboardContent() {
           <ReviewQueuePreview
             analyticsData={analyticsData}
           />
+          <AIRecommendationsSection />
         </div>
       </div>
 

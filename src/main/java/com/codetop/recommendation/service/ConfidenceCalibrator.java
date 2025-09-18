@@ -75,8 +75,8 @@ public class ConfidenceCalibrator {
             // Apply confidence threshold filtering
             if (!confidenceConfig.shouldShowRecommendation(finalConfidence)) {
                 filteredCount++;
-                log.debug("Filtered low confidence recommendation: problem={}, confidence={:.3f}, threshold={:.3f}",
-                        recommendation.getProblemId(), finalConfidence, confidenceConfig.getThresholds().getMinimumShow());
+                log.debug("Filtered low confidence recommendation: problem={}, confidence={}, threshold={}",
+                        recommendation.getProblemId(), String.format("%.3f", finalConfidence), String.format("%.3f", confidenceConfig.getThresholds().getMinimumShow()));
                 continue;
             }
             
@@ -86,14 +86,18 @@ public class ConfidenceCalibrator {
             
             calibratedRecommendations.add(calibrated);
             
-            log.debug("Confidence calibration for problem {}: LLM={:.3f}, FSRS={:.3f}, Profile={:.3f}, Historical={:.3f}, Final={:.3f}",
-                    recommendation.getProblemId(), components.llmQuality, components.fsrsDataQuality,
-                    components.profileRelevance, components.historicalAccuracy, finalConfidence);
+            log.debug("Confidence calibration for problem {}: LLM={}, FSRS={}, Profile={}, Historical={}, Final={}",
+                    recommendation.getProblemId(), 
+                    String.format("%.3f", components.llmQuality),
+                    String.format("%.3f", components.fsrsDataQuality),
+                    String.format("%.3f", components.profileRelevance),
+                    String.format("%.3f", components.historicalAccuracy),
+                    String.format("%.3f", finalConfidence));
         }
         
         if (filteredCount > 0) {
-            log.debug("Filtered {} low-confidence recommendations below threshold {:.3f}", 
-                    filteredCount, confidenceConfig.getThresholds().getMinimumShow());
+            log.debug("Filtered {} low-confidence recommendations below threshold {}", 
+                    filteredCount, String.format("%.3f", confidenceConfig.getThresholds().getMinimumShow()));
         }
         
         log.debug("Confidence calibration completed for {} recommendations", calibratedRecommendations.size());

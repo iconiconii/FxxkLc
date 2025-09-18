@@ -98,8 +98,10 @@ export const authApi = {
    */
   async logout(): Promise<void> {
     try {
+      const requestWithId = withIdempotency({})
       await apiRequest('/auth/logout', {
         method: 'POST',
+        body: JSON.stringify(requestWithId),
       })
     } finally {
       // Always clear tokens, even if logout request fails

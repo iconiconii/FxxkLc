@@ -126,7 +126,6 @@ public class CacheConfiguration {
         caches.put("leaderboard-global", leaderboardConfig);
         caches.put("leaderboard-weekly", leaderboardConfig);
         caches.put("leaderboard-monthly", leaderboardConfig);
-        caches.put("leaderboard-accuracy", leaderboardConfig);
         caches.put("leaderboard-streak", leaderboardConfig);
     }
     

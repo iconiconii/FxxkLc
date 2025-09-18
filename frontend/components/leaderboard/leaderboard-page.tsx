@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Trophy, Target, Zap, Calendar, Crown, Medal, Award } from "lucide-react"
-import { leaderboardApi, type LeaderboardEntry, type AccuracyLeaderboardEntry, type StreakLeaderboardEntry, type TopPerformersSummary } from "@/lib/leaderboard-api"
+import { leaderboardApi, type LeaderboardEntry, type StreakLeaderboardEntry, type TopPerformersSummary } from "@/lib/leaderboard-api"
 import Image from "next/image"
 
 const rankIcons = {
@@ -32,7 +32,7 @@ function LeaderboardList({
   title: string
   icon: React.ReactNode
   loading: boolean
-  type?: 'general' | 'accuracy' | 'streak'
+  type?: 'general' | 'streak'
 }) {
   if (loading) {
     return (
@@ -121,23 +121,13 @@ function LeaderboardList({
                       {entry.totalReviews.toLocaleString()}
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      准确率: {entry.accuracy.toFixed(1)}%
+                      掌握度: {entry.masteryScore ? entry.masteryScore.toFixed(1) + '%' : 'N/A'}
                     </div>
                     {entry.streak > 0 && (
                       <div className="text-sm text-orange-500">
                         🔥 {entry.streak} 天
                       </div>
                     )}
-                  </>
-                )}
-                {type === 'accuracy' && (
-                  <>
-                    <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {entry.accuracy.toFixed(1)}%
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {entry.totalReviews} 次练习
-                    </div>
                   </>
                 )}
                 {type === 'streak' && (
@@ -166,14 +156,12 @@ export default function LeaderboardPage() {
   const [globalLeaderboard, setGlobalLeaderboard] = useState<LeaderboardEntry[]>([])
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<LeaderboardEntry[]>([])
   const [monthlyLeaderboard, setMonthlyLeaderboard] = useState<LeaderboardEntry[]>([])
-  const [accuracyLeaderboard, setAccuracyLeaderboard] = useState<AccuracyLeaderboardEntry[]>([])
   const [streakLeaderboard, setStreakLeaderboard] = useState<StreakLeaderboardEntry[]>([])
   const [topPerformers, setTopPerformers] = useState<TopPerformersSummary | null>(null)
   const [loading, setLoading] = useState({
     global: true,
     weekly: true,
     monthly: true,
-    accuracy: true,
     streak: true,
     stats: true,
   })
@@ -183,11 +171,10 @@ export default function LeaderboardPage() {
     const fetchLeaderboards = async () => {
       try {
         // Fetch all leaderboards in parallel
-        const [global, weekly, monthly, accuracy, streak, stats] = await Promise.allSettled([
+        const [global, weekly, monthly, streak, stats] = await Promise.allSettled([
           leaderboardApi.getGlobalLeaderboard(50),
           leaderboardApi.getWeeklyLeaderboard(50),
           leaderboardApi.getMonthlyLeaderboard(50),
-          leaderboardApi.getAccuracyLeaderboard(50, 30),
           leaderboardApi.getStreakLeaderboard(50),
           leaderboardApi.getLeaderboardStats(),
         ])
@@ -215,12 +202,6 @@ export default function LeaderboardPage() {
           console.warn('Monthly leaderboard failed:', monthly.reason)
         }
 
-        if (accuracy.status === 'fulfilled') {
-          setAccuracyLeaderboard(accuracy.value)
-          hasAnySuccess = true
-        } else {
-          console.warn('Accuracy leaderboard failed:', accuracy.reason)
-        }
 
         if (streak.status === 'fulfilled') {
           setStreakLeaderboard(streak.value)
@@ -241,7 +222,6 @@ export default function LeaderboardPage() {
           global: global.status !== 'fulfilled',
           weekly: weekly.status !== 'fulfilled',
           monthly: monthly.status !== 'fulfilled',
-          accuracy: accuracy.status !== 'fulfilled',
           streak: streak.status !== 'fulfilled',
           stats: stats.status !== 'fulfilled',
         })
@@ -258,7 +238,6 @@ export default function LeaderboardPage() {
           global: false,
           weekly: false,
           monthly: false,
-          accuracy: false,
           streak: false,
           stats: false,
         })
@@ -289,7 +268,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">总排行</CardTitle>
@@ -312,16 +291,6 @@ export default function LeaderboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">高准确率</CardTitle>
-            <Target className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{accuracyLeaderboard.length}</div>
-            <p className="text-xs text-muted-foreground">精准选手</p>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -337,7 +306,7 @@ export default function LeaderboardPage() {
 
       {/* Top Performers Summary */}
       {topPerformers && !loading.stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -356,23 +325,6 @@ export default function LeaderboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Target className="h-4 w-4 text-green-500" />
-                精准射手
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {topPerformers.topByAccuracy.slice(0, 3).map((entry, index) => (
-                <div key={entry.userId} className="flex items-center gap-2 mb-2">
-                  <div className="text-lg">{['🎯', '🏹', '🎪'][index]}</div>
-                  <div className="text-sm font-medium">{entry.username}</div>
-                  <div className="text-xs text-gray-500 ml-auto">{entry.accuracy.toFixed(1)}%</div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader>
@@ -395,7 +347,7 @@ export default function LeaderboardPage() {
       )}
 
       <Tabs defaultValue="global" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="global" className="flex items-center gap-2">
             <Trophy className="h-4 w-4" />
             总榜
@@ -407,10 +359,6 @@ export default function LeaderboardPage() {
           <TabsTrigger value="monthly" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             月榜
-          </TabsTrigger>
-          <TabsTrigger value="accuracy" className="flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            准确率
           </TabsTrigger>
           <TabsTrigger value="streak" className="flex items-center gap-2">
             <Zap className="h-4 w-4" />
@@ -448,15 +396,6 @@ export default function LeaderboardPage() {
           />
         </TabsContent>
 
-        <TabsContent value="accuracy">
-          <LeaderboardList
-            entries={accuracyLeaderboard}
-            title="准确率排行榜"
-            icon={<Target className="h-5 w-5 text-green-500" />}
-            loading={loading.accuracy}
-            type="accuracy"
-          />
-        </TabsContent>
 
         <TabsContent value="streak">
           <LeaderboardList

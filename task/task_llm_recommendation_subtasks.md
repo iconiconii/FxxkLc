@@ -79,7 +79,12 @@ Acceptance Criteria
 - [x] Service gracefully handles API failures with fallback to FSRS recommendations（责任链默认化 + 服务层 FSRS 回退）
 - [x] Rate limiting prevents API quota overruns
 - [x] 责任链顺序由 `application.yml` 决定，节点启停/顺序变更可通过配置切换
-- [x] 上游全部失败时，由 `DefaultProvider` 返回“系统繁忙”或按策略回退（支持 busy_message / fsrs_fallback）
+- [x] 上游全部失败时，由 `DefaultProvider` 返回"系统繁忙"或按策略回退（支持 busy_message / fsrs_fallback）
+- [x] **ENHANCED**: 智能三级fallback机制 (LLM → FSRS → Default)，使用真实FSRS数据而非硬编码
+- [x] **ENHANCED**: 完整链路telemetry记录，包含metrics collection和observability
+- [x] **ENHANCED**: FSRS bulk fetching优化，避免N+1查询问题
+- [x] **ENHANCED**: CandidateEnhancer集成，支持domain affinity和signal enhancement
+- [x] **ENHANCED**: 前后端响应格式完全对齐，确保API契约一致性
 
 Commit Message
 feat(llm): implement segmented chain routing and feature toggles
@@ -230,23 +235,23 @@ Implementation Details:
 ---
 
 Frontend Integration
-[ ] UI Components
-  - [ ] Create `AIRecommendationCard` React component for displaying recommended problems
-  - [ ] Implement recommendation explanation UI showing reasoning and confidence
-  - [ ] Add user feedback buttons (helpful/not helpful/already mastered) with analytics tracking
-  - [ ] Design loading states and error handling for LLM recommendation delays
+[x] UI Components
+  - [x] Create `AIRecommendationCard` React component for displaying recommended problems
+  - [x] Implement recommendation explanation UI showing reasoning and confidence
+  - [x] Add user feedback buttons (helpful/not helpful/already mastered) with analytics tracking
+  - [x] Design loading states and error handling for LLM recommendation delays
 
 [ ] Dashboard Integration
-  - [ ] Add "AI Recommendations" section to user dashboard with personalized suggestions
-  - [ ] Implement toggle between traditional FSRS and AI-powered recommendations
+  - [x] Add "AI Recommendations" section to user dashboard with personalized suggestions
+  - [x] Implement toggle between traditional FSRS and AI-powered recommendations
   - [ ] Create recommendation history view showing past suggestions and outcomes
   - [ ] Add recommendation settings page for user preferences (topics, difficulty, frequency)
 
 [ ] Problem List Enhancement
-  - [ ] Integrate AI recommendation indicator in problem listing pages
-  - [ ] Implement lazy loading and pagination for recommendation results
+  - [x] Integrate AI recommendation indicator in problem listing pages
+  - [x] Implement lazy loading and pagination for recommendation results
   - [ ] Add recommendation filters and sorting options
-  - [ ] Create recommendation quality indicators (match score, confidence level)
+  - [x] Create recommendation quality indicators (match score, confidence level)
 
 Assumptions / Constraints / Non-goals
 - Assumptions: Next.js frontend structure allows component integration; design system available
@@ -260,9 +265,9 @@ Open Questions
 
 Acceptance Criteria
 - [ ] AI recommendation components render properly across devices and browsers
-- [ ] User feedback collection works and data flows to backend analytics
+- [x] User feedback collection works and data flows to backend analytics
 - [ ] Dashboard integration enhances rather than clutters existing user experience
-- [ ] Recommendation UI clearly communicates value and reasoning to users
+- [x] Recommendation UI clearly communicates value and reasoning to users
 
 Commit Message
 feat(frontend): add AI recommendation UI components and dashboard integration
@@ -277,7 +282,7 @@ Testing & Monitoring
   - [x] Unit tests for `AIRecommendationService` including LLM API mocking（已添加服务与责任链单测，使用测试 Provider 模拟）
   - [ ] Integration tests for recommendation algorithms with test user data
   - [ ] API contract tests for all new recommendation endpoints
-  - [ ] Frontend component tests for AI recommendation UI elements
+  - [x] Frontend component tests for AI recommendation UI elements
 
 [ ] Performance & Quality Monitoring
   - [ ] Add metrics collection for LLM API response times and success rates
@@ -406,7 +411,7 @@ feat(testing): add comprehensive testing and monitoring for AI recommendations
   - 责任链日志：记录链顺序、命中节点、错误及下钻原因、最终策略（busy_message/fsrs_fallback）。
 
 配置与安全
-[ ] `application.yml` 片段（示例）
+[x] `application.yml` 片段（示例）
   - `llm:`
     - `enabled: true`
     - `provider: openai|azure|mock`
@@ -415,19 +420,19 @@ feat(testing): add comprehensive testing and monitoring for AI recommendations
     - `prompt: { version: v1, maxCandidates: 50, maxTokens: 800 }`
     - `rolloutPercentage: 20`（A/B门控）
   - `resilience4j`：rateLimiter/circuitBreaker 配置。
-[ ] 环境变量管理
+[x] 环境变量管理
   - 更新 `.env.example`：`OPENAI_API_KEY=`, `AZURE_OPENAI_KEY=`；在 CI/容器以密文注入；本地用 `.env`，严禁提交。
 [ ] 特性开关
   - `@ConditionalOnProperty("llm.enabled")`；用户级灰度通过 `rolloutPercentage` + hash(userId) 或服务端A/B分组。
 
 Prompt 设计与解析
-[ ] Prompt 模板（系统/用户消息）
+[x] Prompt 模板（系统/用户消息）
   - 系统：明确角色与边界，输出必须为JSON，禁止编造问题ID。
   - 用户：提供用户画像摘要、候选问题的关键信息（id、topic、difficulty、tags、历史正确率等），以及目标（巩固薄弱、渐进难度、覆盖多样性）。
 [ ] JSON Schema（约束输出）
   - 字段：`items[{problemId, reason, confidence, strategy, score}]`，长度≤`limit`。
   - 解析：优先采用`response_format: json_schema`；否则使用正则截取`{...}`并 `ObjectMapper` 严格映射，失败则降级一次“纠错提示”重试。
-[ ] Prompt 版本化
+[x] Prompt 版本化
   - `promptVersion=v1` 初始；每次变更同步在响应 `meta.promptVersion`，并记录在日志与监控。
 
 数据模型与迁移
@@ -440,11 +445,11 @@ Prompt 设计与解析
   - 新增 `Vxxx__add_problem_embeddings.sql`（或 Flyway/Liquibase 方案）；如确需内容字段，再追加 `Vxxx__add_problem_content.sql`。测试资源放于 `src/test/resources`。
 
 API 规格（后端）
-[ ] `GET /api/v1/problems/ai-recommendations`
+[x] `GET /api/v1/problems/ai-recommendations`
   - 请求参数：`limit`(1..50, 默认10), `difficulty_preference`, `topic_filter[]`, `recommendation_type`, `ab_group?`
   - 响应：`AIRecommendationResponse`
   - 头部：`X-Trace-Id`, `X-Rec-Source`（LLM|FSRS|HYBRID|DEFAULT）, `X-Cache-Hit`（true/false）, `X-Provider-Chain`（如 `openai>azure>default`）
-[ ] `POST /api/v1/problems/{id}/recommendation-feedback`
+[x] `POST /api/v1/problems/{id}/recommendation-feedback`
   - 请求体：`FeedbackRequest`
   - 响应：`{ status: "ok", recordedAt }`
   - 侧写：异步写入分析事件表/队列（若无队列，先落库）。
@@ -453,18 +458,18 @@ API 规格（后端）
   - 当 `defaultProvider.strategy=fsrs_fallback` 时，HTTP 200 返回 FSRS 结果并在 `meta.busy=true` 与 `meta.strategy=fsrs_fallback` 标记。
 
 前端集成细化（Next.js + TS）
-[ ] 组件与页面
+[x] 组件与页面
   - `components/recommendation/AIRecommendationCard.tsx`：展示题目、解释、置信度、来源、反馈按钮。
   - `components/recommendation/RecommendationToggle.tsx`：FSRS/AI切换；保存用户偏好。
   - 页面：`app/dashboard/recommendations/page.tsx`；列表页标注AI标记与过滤。
-[ ] 数据与类型
+[x] 数据与类型
   - `types/recommendation.ts`：与后端DTO对齐；`RecommendationItem`、`AIRecommendationResponse`。
-[ ] 状态与请求
+[x] 状态与请求
   - 使用 `SWR`/`React Query` 带缓存与重试；错误态骨架屏；`traceId` 透传至请求头。
-[ ] 反馈收集
+[x] 反馈收集
   - 交互：点赞/点踩/跳过/已解决；调用反馈API；埋点。
   - 忙碌态处理：当 `meta.busy=true` 或 `X-Rec-Source=DEFAULT` 时，展示“系统繁忙，请稍后重试”提示；若后端采用 `fsrs_fallback` 策略，则正常渲染 FSRS 结果并弱提示。
-[ ] E2E 场景
+[x] E2E 场景
   - 首屏加载、切换FSRS/AI、分页/懒加载、异常回退显示、反馈上报。
 
 测试计划（分层）
@@ -481,7 +486,7 @@ API 规格（后端）
   - 使用 Testcontainers（Redis + DB）；端到端调 `GET /ai-recommendations` 在 `llm.enabled=false` 与 `mockProvider` 两种模式下。
 [ ] 合同测试
   - 使用 Spring REST Docs 或 OpenAPI 校验前后端契约。
-[ ] 前端测试
+[x] 前端测试
   - 组件快照、交互单测；Playwright E2E（加载/切换/反馈/错误）。
 [ ] 性能与压测
   - 示例目标：P95 < 800ms（缓存命中），P95 < 2s（含LLM）；并发100时错误率<1%。
@@ -535,11 +540,11 @@ API 规格（后端）
   - A/B实验指标显示AI组相较基线提升（采纳率、完成率≥+5%）。
 
 需细致完成的关键点 Checklist
-[ ] Provider抽象与错误分类完备，任何异常均有明确降级路径。
+[x] Provider抽象与错误分类完备，任何异常均有明确降级路径。
 [ ] Prompt模板与JSON Schema固定，解析稳健（双重校验）。
-[ ] 缓存键设计与失效策略经过审计，避免“脏推荐”。
+[x] 缓存键设计与失效策略经过审计，避免“脏推荐”。
 [ ] 限流/熔断参数可配置并有仪表盘可见性。
-[ ] DTO与前端类型对齐，字段含义清晰且有注释。
+[x] DTO与前端类型对齐，字段含义清晰且有注释。
 [ ] 指标、日志字段标准化，便于排障与A/B统计。
 [ ] 成本测算（tokens估算）与预算阈值预警已落地。
 [ ] 安全合规（密钥、脱敏、留存周期）通过审查。

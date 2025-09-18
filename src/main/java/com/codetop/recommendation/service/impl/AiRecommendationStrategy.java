@@ -54,7 +54,29 @@ public class AiRecommendationStrategy implements RecommendationStrategy {
                 objective, 
                 targetDomains, 
                 desiredDifficulty, 
-                timeboxMinutes
+                timeboxMinutes, 
+                false, // forceRefresh - handled by strategy pattern for now
+                null   // abGroup - use default in legacy method
+        );
+    }
+    
+    @Override
+    public AIRecommendationResponse getRecommendations(
+            com.codetop.recommendation.dto.RecommendationRequest request
+    ) {
+        log.debug("Generating AI recommendations with request DTO - userId={}, limit={}, forceRefresh={}", 
+                  request.getUserId(), request.getLimit(), request.getForceRefresh());
+        
+        // Extract parameters from request and pass forceRefresh and abGroup parameters
+        return aiRecommendationService.getRecommendations(
+                request.getUserId(),
+                request.getLimit() != null ? request.getLimit() : 10,
+                request.getObjective(),
+                request.getDomains(),
+                request.getDifficultyPreference(),
+                request.getTimebox(),
+                request.getForceRefresh() != null ? request.getForceRefresh() : false,
+                request.getAbGroup()
         );
     }
     
@@ -65,19 +87,13 @@ public class AiRecommendationStrategy implements RecommendationStrategy {
     
     @Override
     public boolean isAvailable() {
-        if (llmToggleService == null || llmProperties == null) {
+        if (llmProperties == null) {
             return false;
         }
         
         try {
-            // Create minimal request context to check availability
-            RequestContext ctx = new RequestContext();
-            ctx.setUserId(1L); // Use dummy user ID for availability check
-            ctx.setTier("BRONZE"); // Use default tier
-            ctx.setAbGroup("default");
-            ctx.setRoute("ai-recommendations");
-            
-            return llmToggleService.isEnabled(ctx, llmProperties);
+            // Check global LLM availability (avoid user-specific context for availability checks)
+            return llmProperties.isEnabled();
         } catch (Exception e) {
             log.warn("Failed to check AI recommendation availability: {}", e.getMessage());
             return false;

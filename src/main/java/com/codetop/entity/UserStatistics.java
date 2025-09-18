@@ -88,12 +88,6 @@ public class UserStatistics {
     @Builder.Default
     private Integer totalReviews = 0;
 
-    /**
-     * Number of correct reviews (rating >= 3).
-     */
-    @TableField("correct_reviews")
-    @Builder.Default
-    private Integer correctReviews = 0;
 
     /**
      * Total study time in milliseconds.
@@ -126,12 +120,6 @@ public class UserStatistics {
 
     // Performance Metrics
 
-    /**
-     * Overall accuracy rate percentage.
-     */
-    @TableField("overall_accuracy_rate")
-    @Builder.Default
-    private BigDecimal overallAccuracyRate = BigDecimal.ZERO;
 
     /**
      * Average response time across all reviews.
@@ -178,15 +166,6 @@ public class UserStatistics {
 
     // Calculated Properties
 
-    /**
-     * Calculate accuracy rate as percentage.
-     */
-    public double getAccuracyPercentage() {
-        if (totalReviews == null || totalReviews == 0) {
-            return 0.0;
-        }
-        return (correctReviews != null ? correctReviews : 0) * 100.0 / totalReviews;
-    }
 
     /**
      * Calculate total study time in hours.
@@ -255,20 +234,19 @@ public class UserStatistics {
     }
 
     /**
-     * Get performance level based on multiple metrics.
+     * Get performance level based on review volume and consistency.
      */
     public String getPerformanceLevel() {
-        double accuracy = getAccuracyPercentage();
         int reviews = totalReviews != null ? totalReviews : 0;
         int streak = currentStreakDays != null ? currentStreakDays : 0;
         
-        if (accuracy >= 95 && reviews >= 1000 && streak >= 30) {
+        if (reviews >= 1000 && streak >= 30) {
             return "大师级";
-        } else if (accuracy >= 90 && reviews >= 500 && streak >= 15) {
+        } else if (reviews >= 500 && streak >= 15) {
             return "专家级";
-        } else if (accuracy >= 85 && reviews >= 200 && streak >= 7) {
+        } else if (reviews >= 200 && streak >= 7) {
             return "熟练级";
-        } else if (accuracy >= 75 && reviews >= 50) {
+        } else if (reviews >= 50) {
             return "进步级";
         } else {
             return "新手级";

@@ -128,33 +128,6 @@ public class LeaderboardService {
         return entries;
     }
 
-    /**
-     * Get accuracy leaderboard with manual Redis caching.
-     */
-    public List<AccuracyLeaderboardEntryDTO> getAccuracyLeaderboard(int limit, int days) {
-        String cacheKey = CacheKeyBuilder.leaderboardAccuracy(limit, days);
-        
-        // Try to get from cache first
-        List<AccuracyLeaderboardEntryDTO> cachedResult = getCachedList(cacheKey, new TypeReference<List<AccuracyLeaderboardEntryDTO>>() {});
-        if (cachedResult != null) {
-            log.debug("Retrieved accuracy leaderboard from cache for limit: {} and days: {}", limit, days);
-            return cachedResult;
-        }
-        
-        log.debug("Fetching accuracy leaderboard from database with limit: {} and days: {}", limit, days);
-        LocalDateTime startDate = LocalDateTime.now().minusDays(days);
-        List<LeaderboardController.AccuracyLeaderboardEntry> rawEntries = userMapper.getAccuracyLeaderboard(startDate, limit);
-        List<AccuracyLeaderboardEntryDTO> entries = rawEntries.stream()
-                .map(this::convertToAccuracyLeaderboardEntryDTO)
-                .toList();
-        
-        // Cache the result if not empty
-        if (!entries.isEmpty()) {
-            cacheList(cacheKey, entries, DEFAULT_CACHE_TTL_MINUTES);
-        }
-
-        return entries;
-    }
 
     /**
      * Get streak leaderboard with enhanced data and manual Redis caching.
@@ -205,7 +178,6 @@ public class LeaderboardService {
                 .globalRank(userMapper.getUserGlobalRank(userId))
                 .weeklyRank(userMapper.getUserWeeklyRank(userId))
                 .monthlyRank(userMapper.getUserMonthlyRank(userId))
-                .accuracyRank(userMapper.getUserAccuracyRank(userId))
                 .streakRank(userStatisticsMapper.getUserStreakRank(userId))
                 .build();
         
@@ -221,15 +193,13 @@ public class LeaderboardService {
     public Long calculateOverallRank(Long userId) {
         // Weighted calculation considering multiple factors
         Long globalRank = userMapper.getUserGlobalRank(userId);
-        Long accuracyRank = userMapper.getUserAccuracyRank(userId);
         Long streakRank = userStatisticsMapper.getUserStreakRank(userId);
         
         if (globalRank == null) globalRank = 999999L;
-        if (accuracyRank == null) accuracyRank = 999999L;
         if (streakRank == null) streakRank = 999999L;
         
-        // Weighted average: 50% volume + 30% accuracy + 20% consistency
-        double weightedRank = (globalRank * 0.5) + (accuracyRank * 0.3) + (streakRank * 0.2);
+        // Weighted average: 70% volume + 30% consistency
+        double weightedRank = (globalRank * 0.7) + (streakRank * 0.3);
         
         return Math.round(weightedRank);
     }
@@ -239,12 +209,11 @@ public class LeaderboardService {
      */
     public TopPerformersSummary getTopPerformersSummary() {
         List<LeaderboardEntryDTO> globalTop3 = getGlobalLeaderboard(3);
-        List<AccuracyLeaderboardEntryDTO> accuracyTop3 = getAccuracyLeaderboard(3, 30);
+        // Accuracy leaderboard removed - no longer based on rating >= 3
         List<StreakLeaderboardEntryDTO> streakTop3 = getStreakLeaderboard(3);
         
         return TopPerformersSummary.builder()
                 .topByVolume(globalTop3)
-                .topByAccuracy(accuracyTop3)
                 .topByStreak(streakTop3)
                 .build();
     }
@@ -258,23 +227,10 @@ public class LeaderboardService {
                 entry.getUsername(),
                 entry.getAvatarUrl(),
                 entry.getTotalReviews(),
-                entry.getCorrectReviews(),
-                entry.getAccuracy(),
                 entry.getStreak()
         );
     }
 
-    private AccuracyLeaderboardEntryDTO convertToAccuracyLeaderboardEntryDTO(LeaderboardController.AccuracyLeaderboardEntry entry) {
-        return new AccuracyLeaderboardEntryDTO(
-                entry.getRank(),
-                entry.getUserId(),
-                entry.getUsername(),
-                entry.getAvatarUrl(),
-                entry.getTotalReviews(),
-                entry.getCorrectReviews(),
-                entry.getAccuracy()
-        );
-    }
 
     private StreakLeaderboardEntryDTO convertToStreakLeaderboardEntryDTO(LeaderboardController.StreakLeaderboardEntry entry) {
         return new StreakLeaderboardEntryDTO(
@@ -295,7 +251,6 @@ public class LeaderboardService {
     @lombok.Builder
     public static class TopPerformersSummary {
         private List<LeaderboardEntryDTO> topByVolume;
-        private List<AccuracyLeaderboardEntryDTO> topByAccuracy;
         private List<StreakLeaderboardEntryDTO> topByStreak;
     }
 

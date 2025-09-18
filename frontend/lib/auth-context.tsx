@@ -43,6 +43,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Check for existing authentication on mount via cookie session
   useEffect(() => {
     const checkAuth = async () => {
+      // First check if we have cached user info (for better UX and reduced API calls)
+      const cachedUser = authApi.getCurrentUser()
+      if (cachedUser) {
+        setUser(cachedUser)
+        setIsAuthenticated(true)
+        setLoading(false)
+        setInitialCheckDone(true)
+        console.log('AuthContext: Using cached user info for:', cachedUser.username)
+        
+        // Optionally validate with server in the background
+        try {
+          const currentUser = await authApi.getCurrentUserFromServer()
+          setUser(currentUser)
+          console.log('AuthContext: Session validated for:', currentUser.username)
+        } catch (error) {
+          console.log('AuthContext: Cached session invalid, clearing auth state')
+          setUser(null)
+          setIsAuthenticated(false)
+          // Clear invalid cached data
+          if (typeof window !== 'undefined') {
+            try { localStorage.removeItem('userInfo') } catch {}
+          }
+        }
+        return
+      }
+
+      // Check if there are any auth cookies before making server call
+      const hasAuthCookies = typeof window !== 'undefined' && 
+        (document.cookie.includes('ACCESS_TOKEN') || document.cookie.includes('REFRESH_TOKEN'))
+      
+      if (!hasAuthCookies) {
+        console.log('AuthContext: No auth cookies found, skipping server check')
+        setUser(null)
+        setIsAuthenticated(false)
+        setLoading(false)
+        setInitialCheckDone(true)
+        return
+      }
+
+      // No cached user but has cookies, try server validation
       try {
         console.log('AuthContext: Checking session with /auth/me')
         const currentUser = await authApi.getCurrentUserFromServer()
@@ -107,11 +147,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const logout = async () => {
-    await authApi.logout()
-    setUser(null)
-    setIsAuthenticated(false)
-    // Redirect to home page after logout
-    router.push('/')
+    try {
+      await authApi.logout()
+    } catch (error) {
+      console.log('AuthContext: Logout API call failed, but clearing state anyway:', error)
+    } finally {
+      setUser(null)
+      setIsAuthenticated(false)
+      // Clear cached user info
+      if (typeof window !== 'undefined') {
+        try { localStorage.removeItem('userInfo') } catch {}
+      }
+      // Redirect to home page after logout
+      router.push('/')
+    }
   }
 
   const value: AuthContextType = {

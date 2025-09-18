@@ -21,7 +21,8 @@ public class ProblemMasteryVO {
     private Long problemId;
     private Integer masteryLevel;
     private Integer attemptCount;
-    private Double accuracy;
+    // FSRS 估算的掌握度（0-100）。为避免误解，推荐前端展示该字段为“掌握度”。
+    private Double masteryScore;
     private String lastAttemptDate;
     private String nextReviewDate;
     private String difficulty;

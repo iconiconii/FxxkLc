@@ -63,7 +63,11 @@ public class HybridRecommendationStrategy implements RecommendationStrategy {
                     aiResponse.getMeta().setStrategy("hybrid_ai");
                     aiResponse.getMeta().setRecommendationType(getType().getValue());
                     List<String> hops = aiResponse.getMeta().getChainHops();
-                    if (hops == null) hops = new ArrayList<>();
+                    if (hops == null) {
+                        hops = new ArrayList<>();
+                    } else {
+                        hops = new ArrayList<>(hops); // Create mutable copy
+                    }
                     hops.add(0, "hybrid"); // Prepend hybrid indicator
                     aiResponse.getMeta().setChainHops(hops);
                     
@@ -88,7 +92,11 @@ public class HybridRecommendationStrategy implements RecommendationStrategy {
             fsrsResponse.getMeta().setFallbackReason("ai_unavailable_or_failed");
             fsrsResponse.getMeta().setRecommendationType(getType().getValue());
             List<String> hops = fsrsResponse.getMeta().getChainHops();
-            if (hops == null) hops = new ArrayList<>();
+            if (hops == null) {
+                hops = new ArrayList<>();
+            } else {
+                hops = new ArrayList<>(hops); // Create mutable copy
+            }
             hops.add(0, "hybrid"); // Prepend hybrid indicator
             fsrsResponse.getMeta().setChainHops(hops);
         }

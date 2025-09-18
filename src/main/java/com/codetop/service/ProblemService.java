@@ -805,7 +805,7 @@ public class ProblemService {
             // Determine status based on FSRS card state and metrics
             String status = determineStatusFromCard(card);
             Integer mastery = calculateMasteryLevel(card);
-            Double accuracy = calculateAccuracyFromFSRS(card);
+            Double accuracy = calculateMasteryFromFSRS(card);
             
             // Format dates for response
             String lastAttemptDate = card.getLastReview() != null ? 
@@ -822,7 +822,7 @@ public class ProblemService {
                     .lastAttemptDate(lastAttemptDate)
                     .lastConsideredDate(lastConsideredDate)
                     .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
-                    .accuracy(accuracy)
+                    .masteryScore(accuracy)
                     .notes(String.format("FSRS State: %s, Stability: %.1f days", 
                             card.getState().name(), card.getStabilityAsDouble()))
                     .build();
@@ -840,7 +840,7 @@ public class ProblemService {
                     .lastAttemptDate(null)
                     .lastConsideredDate(null)
                     .attemptCount(0)
-                    .accuracy(0.0)
+                    .masteryScore(0.0)
                     .notes("New problem - no attempts yet")
                     .build();
         }
@@ -894,14 +894,14 @@ public class ProblemService {
                                             .lastAttemptDate(null)
                                             .lastConsideredDate(null)
                                             .attemptCount(0)
-                                            .accuracy(0.0)
+                                            .masteryScore(0.0)
                                             .notes("")
                                             .build();
                                 } else {
                                     // User has a card for this problem - calculate status based on FSRS data
                                     String status = determineStatusFromFSRSCard(card);
                                     Integer mastery = calculateMasteryFromFSRSCard(card);
-                                    Double accuracy = calculateAccuracyFromFSRS(card);
+                                    Double accuracy = calculateMasteryFromFSRS(card);
                                     
                                     return UserProblemStatusDTO.builder()
                                             .problemId(problem.getId())
@@ -912,7 +912,7 @@ public class ProblemService {
                                             .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
                                             .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
                                             .attemptCount(card.getReviewCount())
-                                            .accuracy(accuracy)
+                                            .masteryScore(accuracy)
                                             .notes("")
                                             .build();
                                 }
@@ -955,7 +955,7 @@ public class ProblemService {
             FSRSCard card = reviewResult.getCard();
             
             // Calculate accuracy based on FSRS stability and difficulty
-            Double accuracy = calculateAccuracyFromFSRS(card);
+            Double accuracy = calculateMasteryFromFSRS(card);
             
             log.debug("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
                     problemId, request.getStatus(), userId, fsrsRating, reviewResult.getNextReviewTime());
@@ -970,7 +970,7 @@ public class ProblemService {
                     .lastConsideredDate(reviewResult.getNextReviewTime() != null ? 
                             reviewResult.getNextReviewTime().toString() : LocalDateTime.now().toString())
                     .attemptCount(card.getReviewCount())
-                    .accuracy(accuracy)
+                    .masteryScore(accuracy)
                     .notes(request.getNotes())
                     .build();
             
@@ -1004,7 +1004,6 @@ public class ProblemService {
                     .lastAttemptDate(LocalDateTime.now().toString())
                     .lastConsideredDate(LocalDateTime.now().toString())
                     .attemptCount(1)
-                    .accuracy(0.0)
                     .notes(request.getNotes())
                     .build();
             
@@ -1061,7 +1060,7 @@ public class ProblemService {
                     Integer masteryLevel = calculateMasteryLevel(card);
                     
                     // Calculate accuracy from FSRS metrics
-                    Double accuracy = calculateAccuracyFromFSRS(card);
+                    Double accuracy = calculateMasteryFromFSRS(card);
                     
                     // Format dates for response
                     String lastAttemptDate = card.getLastReview() != null ? 
@@ -1073,7 +1072,7 @@ public class ProblemService {
                             .problemId(problemId)
                             .masteryLevel(masteryLevel)
                             .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
-                            .accuracy(accuracy)
+                            .masteryScore(accuracy)
                             .lastAttemptDate(lastAttemptDate)
                             .nextReviewDate(nextReviewDate)
                             .difficulty(problem.getDifficulty().name())
@@ -1097,7 +1096,7 @@ public class ProblemService {
                             .problemId(problemId)
                             .masteryLevel(0)
                             .attemptCount(0)
-                            .accuracy(0.0)
+                            .masteryScore(0.0)
                             .lastAttemptDate(null)
                             .nextReviewDate(null)
                             .difficulty(problem.getDifficulty().name())
@@ -1363,11 +1362,11 @@ public class ProblemService {
         // For "done" status, we need to be more careful about rating assignment
         if (isDone) {
             return switch (mastery) {
-                case 0 -> 2;  // No mastery but done = Hard (attempted but struggled)
-                case 1 -> 2;  // Low mastery + done = Hard (attempted but struggled) 
+                case 0 -> 3;  // Adjusted: ensure NEW -> LEARNING on first completion
+                case 1 -> 3;  // Adjusted: treat low mastery completion as Good
                 case 2 -> 3;  // Medium mastery + done = Good
                 case 3 -> 4;  // High mastery + done = Easy
-                default -> 2; // Default to Hard for done status
+                default -> 3; // Default to Good for done status
             };
         }
         
@@ -1394,10 +1393,10 @@ public class ProblemService {
     }
 
     /**
-     * Calculate accuracy percentage based on FSRS stability and difficulty.
-     * Higher stability and lower difficulty indicate better accuracy.
+     * Calculate mastery percentage based on FSRS stability and difficulty.
+     * Higher stability and lower difficulty indicate better mastery.
      */
-    private Double calculateAccuracyFromFSRS(FSRSCard card) {
+    private Double calculateMasteryFromFSRS(FSRSCard card) {
         if (card == null) {
             return 0.0;
         }
@@ -1407,23 +1406,23 @@ public class ProblemService {
         int reviewCount = card.getReviewCount() != null ? card.getReviewCount() : 0;
         int lapses = card.getLapses() != null ? card.getLapses() : 0;
 
-        // Base accuracy from stability (higher stability = higher accuracy)
+        // Base mastery from stability (higher stability = higher mastery)
         double stabilityScore = Math.min(stability / 30.0, 1.0); // Normalize to 0-1, 30 days = 100%
         
-        // Difficulty penalty (higher difficulty = lower accuracy)
+        // Difficulty penalty (higher difficulty = lower mastery)
         double difficultyPenalty = Math.min(difficulty / 10.0, 0.5); // Max 50% penalty
         
-        // Review experience bonus (more reviews = slight accuracy boost)
+        // Review experience bonus (more reviews = slight mastery boost)
         double experienceBonus = Math.min(reviewCount * 0.02, 0.2); // Max 20% bonus
         
-        // Lapse penalty (more lapses = lower accuracy)  
+        // Lapse penalty (more lapses = lower mastery)  
         double lapsePenalty = Math.min(lapses * 0.1, 0.4); // Max 40% penalty
 
-        // Calculate final accuracy (0.3-1.0 range)
-        double accuracy = 0.3 + (stabilityScore * 0.7) - difficultyPenalty + experienceBonus - lapsePenalty;
+        // Calculate final mastery (0.3-1.0 range)
+        double mastery = 0.3 + (stabilityScore * 0.7) - difficultyPenalty + experienceBonus - lapsePenalty;
         
         // Ensure bounds [0.0, 1.0] and convert to percentage
-        return Math.max(0.0, Math.min(1.0, accuracy)) * 100.0;
+        return Math.max(0.0, Math.min(1.0, mastery)) * 100.0;
     }
 
     /**
@@ -1668,7 +1667,7 @@ public class ProblemService {
                         
                         String status = determineStatusFromFSRSCard(card);
                         Integer mastery = calculateMasteryFromFSRSCard(card);
-                        Double accuracy = calculateAccuracyFromFSRS(card);
+                        Double accuracy = calculateMasteryFromFSRS(card);
                         
                         return UserProblemStatusDTO.builder()
                                 .problemId(problem.getId())
@@ -1679,7 +1678,7 @@ public class ProblemService {
                                 .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
                                 .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
                                 .attemptCount(card.getReviewCount())
-                                .accuracy(accuracy)
+                                .masteryScore(accuracy)
                                 .notes("")
                                 .build();
                     })

@@ -30,6 +30,12 @@ export default function UserPanel() {
 
   useEffect(() => {
     const loadUserStats = async () => {
+      // Only load stats if user is available (authenticated)
+      if (!user?.id) {
+        setLoading(false)
+        return
+      }
+
       try {
         const userStatuses = await userApi.getUserProblemProgress()
         
@@ -47,13 +53,21 @@ export default function UserPanel() {
         })
       } catch (error) {
         console.error('Failed to load user stats:', error)
+        // Set default stats on error
+        setStats({
+          totalSolved: 0,
+          easyCount: 0,
+          mediumCount: 0,
+          hardCount: 0,
+          streak: 0,
+        })
       } finally {
         setLoading(false)
       }
     }
 
     loadUserStats()
-  }, [])
+  }, [user?.id])
 
   const handleLogout = () => {
     logout()

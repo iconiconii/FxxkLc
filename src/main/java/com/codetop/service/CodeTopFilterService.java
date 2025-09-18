@@ -260,8 +260,10 @@ public class CodeTopFilterService {
      */
     private List<ProblemRankingDTO> convertToProblemRankingDTOsWithUserStatus(
             List<ProblemFrequencyStats> stats, Map<Long, FSRSCard> userCardsMap) {
+        log.debug("Converting {} stats to DTOs with user status", stats.size());
         return stats.stream().map(stat -> {
             try {
+                log.debug("Processing stat for problem ID: {}", stat.getProblemId());
                 // Get problem details
                 Problem problem = problemMapper.selectById(stat.getProblemId());
                 if (problem == null) {
@@ -271,6 +273,27 @@ public class CodeTopFilterService {
                 
                 // Get user's FSRS card for this problem
                 FSRSCard userCard = userCardsMap.get(stat.getProblemId());
+                
+                // Get company name if company ID is available
+                String companyName = null;
+                if (stat.getCompanyId() != null) {
+                    Company company = companyMapper.selectById(stat.getCompanyId());
+                    companyName = company != null ? company.getDisplayName() : null;
+                }
+                
+                // Get department name if department ID is available
+                String departmentName = null;
+                if (stat.getDepartmentId() != null) {
+                    Department department = departmentMapper.selectById(stat.getDepartmentId());
+                    departmentName = department != null ? department.getDisplayName() : null;
+                }
+                
+                // Get position name if position ID is available
+                String positionName = null;
+                if (stat.getPositionId() != null) {
+                    Position position = positionMapper.selectById(stat.getPositionId());
+                    positionName = position != null ? position.getDisplayName() : null;
+                }
                 
                 // Extract user status from FSRS card
                 Integer mastery = 0;
@@ -319,7 +342,7 @@ public class CodeTopFilterService {
                     .lastAttemptDate(lastAttemptDate)
                     .lastConsideredDate(lastConsideredDate)
                     .attemptCount(attemptCount)
-                    .accuracy(accuracy)
+                    .masteryScore(accuracy)
                     
                     // Frequency statistics
                     .frequencyScore(stat.getTotalFrequencyScore())
@@ -333,6 +356,11 @@ public class CodeTopFilterService {
                     .isTrending(isTrending)
                     .isTopPercentile(isTopPercentile)
                     
+                    // Company/Department/Position information
+                    .companyName(companyName)
+                    .departmentName(departmentName)
+                    .positionName(positionName)
+                    
                     // Additional metadata
                     .statsScope(String.valueOf(stat.getStatsScope()))
                     .addedDate(problem.getCreatedAt() != null ? problem.getCreatedAt().toLocalDate() : null)
@@ -341,8 +369,28 @@ public class CodeTopFilterService {
                     .build();
                     
             } catch (Exception e) {
-                log.error("Error converting stat to DTO with user status for problem ID: {}", stat.getProblemId(), e);
-                return null;
+                log.error("Error converting stat to DTO with user status for problem ID: {}, error: {}", stat.getProblemId(), e.getMessage(), e);
+                // Return a fallback DTO to prevent the entire operation from failing
+                return ProblemRankingDTO.builder()
+                    .problemId(stat.getProblemId())
+                    .title("Error loading problem")
+                    .difficulty("UNKNOWN")
+                    .status("error")
+                    .mastery(0)
+                    .attemptCount(0)
+                    .masteryScore(0.0)
+                    .frequencyScore(stat.getTotalFrequencyScore())
+                    .interviewCount(stat.getInterviewCount())
+                    .frequencyRank(stat.getFrequencyRank())
+                    .percentile(stat.getPercentile())
+                    .trend("UNKNOWN")
+                    .recencyScore(0.0)
+                    .isHotProblem(false)
+                    .isTrending(false)
+                    .isTopPercentile(false)
+                    .statsScope(String.valueOf(stat.getStatsScope()))
+                    .isPremium(false)
+                    .build();
             }
         }).filter(Objects::nonNull).collect(Collectors.toList());
     }
@@ -837,72 +885,70 @@ public class CodeTopFilterService {
         log.info("Getting global problems with user status: userId={}, page={}, size={}, sortBy={}, sortOrder={}", 
                  userId, page, size, sortBy, sortOrder);
         
+        // Re-enable caching now that the issue is fixed
         String cacheKey = CacheKeyBuilder.codetopGlobalProblemsWithUserStatus(userId, page, size, sortBy, sortOrder);
         return cacheHelper.cacheOrCompute(cacheKey, CodeTopFilterResponse.class, Duration.ofMinutes(15), () -> {
-            try {
-            // Get base global problems data
-            Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
-            
-            // Build query for GLOBAL scope only
-            QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("stats_scope", "GLOBAL");
-            
-            // Sorting
-            boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
-            switch (sortBy) {
-                case "frequency_score":
-                    if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
-                    else queryWrapper.orderByAsc("total_frequency_score");
-                    break;
-                case "interview_count":
-                    if (isDesc) queryWrapper.orderByDesc("interview_count");
-                    else queryWrapper.orderByAsc("interview_count");
-                    break;
-                case "last_asked_date":
-                    if (isDesc) queryWrapper.orderByDesc("last_asked_date");
-                    else queryWrapper.orderByAsc("last_asked_date");
-                    break;
-                default:
-                    queryWrapper.orderByDesc("total_frequency_score");
-            }
-            
-            // Secondary sort by frequency rank
-            queryWrapper.orderByAsc("frequency_rank");
-            
-            Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
-            
-            // Get all problem IDs from the current page
-            List<Long> problemIds = globalStats.getRecords().stream()
-                    .map(ProblemFrequencyStats::getProblemId)
-                    .collect(Collectors.toList());
-            
-            // Get user's FSRS cards for these problems in one query
-            Map<Long, FSRSCard> userCardsMap = Collections.emptyMap();
-            if (!problemIds.isEmpty()) {
-                QueryWrapper<FSRSCard> cardQuery = new QueryWrapper<>();
-                cardQuery.eq("user_id", userId)
-                        .in("problem_id", problemIds);
-                List<FSRSCard> userCards = fsrsCardMapper.selectList(cardQuery);
-                userCardsMap = userCards.stream()
-                        .collect(Collectors.toMap(FSRSCard::getProblemId, card -> card));
-            }
-            
-            // Convert to ProblemRankingDTO list with user status integrated
-            List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOsWithUserStatus(
-                    globalStats.getRecords(), userCardsMap);
-            
-            // Build summary statistics
-            CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
-            
-            CodeTopFilterResponse response = CodeTopFilterResponse.builder()
-                .problems(problemRankings)
-                .totalElements(globalStats.getTotal())
-                .currentPage((long) page)
-                .pageSize((long) size)
-                .totalPages(globalStats.getPages())
-                .summary(summary)
-                .build();
-            
+                try {
+                // Get base global problems data
+                Page<ProblemFrequencyStats> statsPage = new Page<>(page, size);
+                
+                // Build query for GLOBAL scope only
+                QueryWrapper<ProblemFrequencyStats> queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("stats_scope", "GLOBAL");
+                
+                // Sorting
+                boolean isDesc = "desc".equalsIgnoreCase(sortOrder);
+                switch (sortBy) {
+                    case "frequency_score":
+                        if (isDesc) queryWrapper.orderByDesc("total_frequency_score");
+                        else queryWrapper.orderByAsc("total_frequency_score");
+                        break;
+                    case "interview_count":
+                        if (isDesc) queryWrapper.orderByDesc("interview_count");
+                        else queryWrapper.orderByAsc("interview_count");
+                        break;
+                    case "last_asked_date":
+                        if (isDesc) queryWrapper.orderByDesc("last_asked_date");
+                        else queryWrapper.orderByAsc("last_asked_date");
+                        break;
+                    default:
+                        queryWrapper.orderByDesc("total_frequency_score");
+                }
+                
+                // Secondary sort by frequency rank
+                queryWrapper.orderByAsc("frequency_rank");
+                
+                Page<ProblemFrequencyStats> globalStats = problemFrequencyStatsMapper.selectPage(statsPage, queryWrapper);
+                
+                // Get all problem IDs from the current page
+                List<Long> problemIds = globalStats.getRecords().stream()
+                        .map(ProblemFrequencyStats::getProblemId)
+                        .collect(Collectors.toList());
+                
+                // Get user's FSRS cards for these problems in one query
+                Map<Long, FSRSCard> userCardsMap = Collections.emptyMap();
+                if (!problemIds.isEmpty()) {
+                    List<FSRSCard> userCards = fsrsCardMapper.findByUserIdAndProblemIds(userId, problemIds);
+                    userCardsMap = userCards.stream()
+                            .collect(Collectors.toMap(FSRSCard::getProblemId, card -> card));
+                }
+                
+                // Convert to ProblemRankingDTO list with user status integrated
+                List<ProblemRankingDTO> problemRankings = convertToProblemRankingDTOsWithUserStatus(
+                        globalStats.getRecords(), userCardsMap);
+                
+                // Build summary statistics
+                CodeTopFilterResponse.FilterSummary summary = buildFilterSummary(globalStats.getRecords());
+                
+                CodeTopFilterResponse response = CodeTopFilterResponse.builder()
+                    .problems(problemRankings)
+                    .totalElements(globalStats.getTotal())
+                    .currentPage((long) page)
+                    .pageSize((long) size)
+                    .totalPages(globalStats.getPages())
+                    .summary(summary)
+                    .build();
+                
                 log.info("Global problems with user status query completed: found {} problems for user {}", 
                          problemRankings.size(), userId);
                 return response;

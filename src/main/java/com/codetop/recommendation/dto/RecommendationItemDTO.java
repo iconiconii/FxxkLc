@@ -4,6 +4,9 @@ import java.util.List;
 
 public class RecommendationItemDTO {
     private Long problemId;
+    private String title;              // Problem title (required by contract)
+    private String difficulty;         // Problem difficulty level (required by contract)
+    private Integer estimatedTime;     // Estimated time in minutes (required by contract)
     private String reason;
     private Double confidence; // 0..1
     private String strategy;   // progressive | coverage | personalized
@@ -20,6 +23,30 @@ public class RecommendationItemDTO {
 
     public void setProblemId(Long problemId) {
         this.problemId = problemId;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getDifficulty() {
+        return difficulty;
+    }
+
+    public void setDifficulty(String difficulty) {
+        this.difficulty = difficulty;
+    }
+
+    public Integer getEstimatedTime() {
+        return estimatedTime;
+    }
+
+    public void setEstimatedTime(Integer estimatedTime) {
+        this.estimatedTime = estimatedTime;
     }
 
     public String getReason() {

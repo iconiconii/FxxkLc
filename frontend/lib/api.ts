@@ -71,6 +71,15 @@ async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const response = await apiRequestWithHeaders<T>(endpoint, options)
+  return response.body
+}
+
+// Enhanced fetch that returns both data and headers
+async function apiRequestWithHeaders<T = unknown>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<{ body: T; headers: Headers }> {
   const url = `${API_BASE_URL}${endpoint}`
 
   const config: RequestInit = {
@@ -83,7 +92,10 @@ async function apiRequest<T = unknown>(
     ...options,
   }
 
-  const shouldAttemptSilentRefresh = !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/logout') && !endpoint.startsWith('/auth/refresh')
+  const shouldAttemptSilentRefresh = !endpoint.startsWith('/auth/login') && 
+    !endpoint.startsWith('/auth/logout') && 
+    !endpoint.startsWith('/auth/refresh') &&
+    !endpoint.startsWith('/codetop/problems/global') // Don't refresh for public APIs
 
   try {
     let response = await fetch(url, config)
@@ -102,9 +114,10 @@ async function apiRequest<T = unknown>(
             if (response.ok) {
               const contentType2 = response.headers.get('Content-Type')
               if (!contentType2 || !contentType2.includes('application/json')) {
-                return null as T
+                return { body: null as T, headers: response.headers }
               }
-              return await response.json()
+              const body = await response.json()
+              return { body, headers: response.headers }
             }
           } catch {}
         }
@@ -112,12 +125,21 @@ async function apiRequest<T = unknown>(
         clearAuthToken()
       } else if (response.status === 403) {
         errorMessage = "权限不足，无法执行此操作"
+      } else if (response.status === 429) {
+        errorMessage = "请求过于频繁，请稍后重试"
+      } else if (response.status === 503) {
+        errorMessage = "服务暂时不可用，请稍后重试"
       } else {
         try {
           const errorData = await response.json()
           errorMessage = errorData.message || errorData.error || errorMessage
         } catch {
           // Response is not JSON, use status text
+          if (response.status >= 500) {
+            errorMessage = "服务器内部错误，请稍后重试"
+          } else if (response.status >= 400) {
+            errorMessage = "请求参数错误，请检查后重试"
+          }
         }
       }
       
@@ -127,11 +149,12 @@ async function apiRequest<T = unknown>(
     // Handle empty responses
     const contentType = response.headers.get('Content-Type')
     if (!contentType || !contentType.includes('application/json')) {
-      return null as T
+      return { body: null as T, headers: response.headers }
     }
 
     try {
-      return await response.json()
+      const body = await response.json()
+      return { body, headers: response.headers }
     } catch (parseError) {
       console.error('Failed to parse JSON response:', parseError)
       throw new ApiError('服务器返回了无效的响应格式', response.status, response)
@@ -149,4 +172,4 @@ async function apiRequest<T = unknown>(
   }
 }
 
-export { apiRequest, ApiError, type ApiResponse }
+export { apiRequest, apiRequestWithHeaders, ApiError, type ApiResponse }

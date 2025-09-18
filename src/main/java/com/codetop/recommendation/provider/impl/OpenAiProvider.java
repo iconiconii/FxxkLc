@@ -41,11 +41,6 @@ public class OpenAiProvider implements LlmProvider {
         this.promptTemplateService = promptTemplateService;
     }
 
-    // Backward compatible constructor for tests
-    public OpenAiProvider(LlmProperties.OpenAi cfg) {
-        this(cfg, null);
-    }
-
     @Override
     public String name() {
         return "openai";
@@ -83,9 +78,9 @@ public class OpenAiProvider implements LlmProvider {
         messages.add(Map.of("role", "user", "content", userMsg));
         payload.put("messages", messages);
         payload.put("temperature", 0);
-        // Prefer JSON object format if supported by provider (DeepSeek compatible with OpenAI style)
-        Map<String, String> responseFormat = new HashMap<>();
-        responseFormat.put("type", "json_object");
+        
+        // Enhanced response format with JSON schema support and fallback
+        Map<String, Object> responseFormat = buildResponseFormat();
         payload.put("response_format", responseFormat);
 
         try {
@@ -99,16 +94,35 @@ public class OpenAiProvider implements LlmProvider {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            if (response.statusCode() != 200) {
                 res.success = false;
-                res.error = "HTTP_" + response.statusCode();
+                // Enhanced error logging with diagnostic details
+                try {
+                    String snippet = response.body() != null && response.body().length() > 500
+                            ? response.body().substring(0, 500) + "..."
+                            : String.valueOf(response.body());
+                    log.warn("OpenAI provider HTTP {} for model {} at {}. Body: {}", 
+                            response.statusCode(), cfg.getModel(), cfg.getBaseUrl(), snippet);
+                    
+                    // Enhanced error details for common issues
+                    if (response.statusCode() == 400) {
+                        if (snippet.contains("response_format") || snippet.contains("json_schema")) {
+                            log.warn("Possible JSON schema incompatibility - provider may not support structured output");
+                        } else if (snippet.contains("api_key") || snippet.contains("authentication")) {
+                            log.warn("API key validation failed - check DEEPSEEK_API_KEY environment variable");
+                        } else if (snippet.contains("model") || snippet.contains("not found")) {
+                            log.warn("Model '{}' not found or unavailable", cfg.getModel());
+                        }
+                    }
+                } catch (Exception ignore) {}
+                res.error = classifyHttpError(response.statusCode(), response.body());
                 res.items = List.of();
                 res.latencyMs = (int) (System.currentTimeMillis() - start);
                 return res;
             }
 
-            // Parse OpenAI-compatible response
-            ParseOutcome outcome = parseChatResponse(response.body());
+            // Parse OpenAI-compatible response with enhanced fallback
+            ParseOutcome outcome = parseChatResponseWithFallback(response.body());
             if (outcome.error != null) {
                 res.success = false;
                 res.error = outcome.error;
@@ -121,7 +135,7 @@ public class OpenAiProvider implements LlmProvider {
             return res;
         } catch (Exception e) {
             res.success = false;
-            res.error = e.getClass().getSimpleName();
+            res.error = classifyError(e);
             res.items = List.of();
             res.latencyMs = (int) (System.currentTimeMillis() - start);
             return res;
@@ -163,8 +177,9 @@ public class OpenAiProvider implements LlmProvider {
         messages.add(Map.of("role", "user", "content", userMsg));
         payload.put("messages", messages);
         payload.put("temperature", 0);
-        Map<String, String> responseFormat = new HashMap<>();
-        responseFormat.put("type", "json_object");
+        
+        // Enhanced response format with JSON schema support and fallback
+        Map<String, Object> responseFormat = buildResponseFormat();
         payload.put("response_format", responseFormat);
 
         String body;
@@ -196,19 +211,40 @@ public class OpenAiProvider implements LlmProvider {
                     out.provider = name();
                     out.model = cfg.getModel();
                     out.latencyMs = (int) (System.currentTimeMillis() - start);
+                    
                     if (throwable != null) {
                         out.success = false;
-                        out.error = throwable.getClass().getSimpleName();
+                        out.error = classifyError(throwable);
                         out.items = List.of();
                         return out;
                     }
-                    if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                    
+                    if (resp.statusCode() != 200) {
                         out.success = false;
-                        out.error = "HTTP_" + resp.statusCode();
+                        try {
+                            String snippet = resp.body() != null && resp.body().length() > 500
+                                    ? resp.body().substring(0, 500) + "..."
+                                    : String.valueOf(resp.body());
+                            log.warn("OpenAI provider HTTP {} for model {} at {}. Body: {}", 
+                                    resp.statusCode(), cfg.getModel(), cfg.getBaseUrl(), snippet);
+                            
+                            // Enhanced error details for common issues
+                            if (resp.statusCode() == 400) {
+                                if (snippet.contains("response_format") || snippet.contains("json_schema")) {
+                                    log.warn("Possible JSON schema incompatibility - provider may not support structured output");
+                                } else if (snippet.contains("api_key") || snippet.contains("authentication")) {
+                                    log.warn("API key validation failed - check DEEPSEEK_API_KEY environment variable");
+                                } else if (snippet.contains("model") || snippet.contains("not found")) {
+                                    log.warn("Model '{}' not found or unavailable", cfg.getModel());
+                                }
+                            }
+                        } catch (Exception ignore) {}
+                        out.error = classifyHttpError(resp.statusCode(), resp.body());
                         out.items = List.of();
                         return out;
                     }
-                    ParseOutcome outcome = parseChatResponse(resp.body());
+                    
+                    ParseOutcome outcome = parseChatResponseWithFallback(resp.body());
                     if (outcome.error != null) {
                         out.success = false;
                         out.error = outcome.error;
@@ -342,6 +378,241 @@ public class OpenAiProvider implements LlmProvider {
         if (first >= 0 && last > first) {
             return content.substring(first, last + 1).trim();
         }
+        return null;
+    }
+
+    /**
+     * Builds response format with JSON schema support and fallback
+     */
+    private Map<String, Object> buildResponseFormat() {
+        Map<String, Object> responseFormat = new HashMap<>();
+        
+        // Some OpenAI-compatible providers (e.g., DeepSeek) don't support json_schema yet.
+        // For those, fall back to simple json_object to avoid 400 BAD_REQUEST.
+        boolean likelyJsonSchemaUnsupported = false;
+        try {
+            String base = cfg.getBaseUrl() != null ? cfg.getBaseUrl().toLowerCase() : "";
+            String model = cfg.getModel() != null ? cfg.getModel().toLowerCase() : "";
+            if (base.contains("deepseek")) {
+                likelyJsonSchemaUnsupported = true;
+            }
+            // Add other known providers here if needed
+            if (model.contains("deepseek")) {
+                likelyJsonSchemaUnsupported = true;
+            }
+        } catch (Exception ignore) {}
+        
+        if (likelyJsonSchemaUnsupported) {
+            responseFormat.put("type", "json_object");
+            return responseFormat;
+        }
+
+        // Try to use JSON schema format first (for better structured output)
+        try {
+            responseFormat.put("type", "json_schema");
+            Map<String, Object> jsonSchema = new HashMap<>();
+            jsonSchema.put("name", "recommendation_response");
+            jsonSchema.put("strict", true);
+            
+            Map<String, Object> schema = new HashMap<>();
+            schema.put("type", "object");
+            schema.put("additionalProperties", false);
+            
+            Map<String, Object> properties = new HashMap<>();
+            
+            // Items array schema
+            Map<String, Object> itemsSchema = new HashMap<>();
+            itemsSchema.put("type", "array");
+            Map<String, Object> itemSchema = new HashMap<>();
+            itemSchema.put("type", "object");
+            itemSchema.put("additionalProperties", false);
+            Map<String, Object> itemProperties = new HashMap<>();
+            itemProperties.put("problemId", Map.of("type", "integer"));
+            itemProperties.put("score", Map.of("type", "number", "minimum", 0, "maximum", 1));
+            itemProperties.put("reason", Map.of("type", "string", "minLength", 10, "maxLength", 500));
+            itemProperties.put("confidence", Map.of("type", "number", "minimum", 0, "maximum", 1));
+            itemSchema.put("properties", itemProperties);
+            itemSchema.put("required", List.of("problemId", "score", "reason", "confidence"));
+            itemsSchema.put("items", itemSchema);
+            properties.put("items", itemsSchema);
+            
+            schema.put("properties", properties);
+            schema.put("required", List.of("items"));
+            
+            jsonSchema.put("schema", schema);
+            responseFormat.put("json_schema", jsonSchema);
+            
+            log.debug("Using JSON schema response format");
+            return responseFormat;
+            
+        } catch (Exception e) {
+            // Fallback to json_object format
+            log.warn("Failed to build JSON schema format, falling back to json_object: {}", e.getMessage());
+            responseFormat.clear();
+            responseFormat.put("type", "json_object");
+            return responseFormat;
+        }
+    }
+
+    /**
+     * Classifies error types for better debugging
+     */
+    private String classifyError(Throwable throwable) {
+        if (throwable instanceof java.net.http.HttpTimeoutException) {
+            return "TIMEOUT";
+        } else if (throwable instanceof java.net.ConnectException) {
+            return "CONNECTION_ERROR";
+        } else if (throwable instanceof java.net.UnknownHostException) {
+            return "DNS_ERROR";
+        } else if (throwable instanceof java.io.IOException) {
+            return "IO_ERROR";
+        } else {
+            return "UNKNOWN_ERROR";
+        }
+    }
+
+    /**
+     * Classifies HTTP errors with specific handling for rate limits
+     */
+    private String classifyHttpError(int statusCode, String responseBody) {
+        switch (statusCode) {
+            case 400:
+                return "BAD_REQUEST";
+            case 401:
+                return "UNAUTHORIZED";
+            case 403:
+                return "FORBIDDEN";
+            case 429:
+                return "RATE_LIMITED";
+            case 500:
+                return "INTERNAL_SERVER_ERROR";
+            case 502:
+                return "BAD_GATEWAY";
+            case 503:
+                return "SERVICE_UNAVAILABLE";
+            case 504:
+                return "GATEWAY_TIMEOUT";
+            default:
+                return "HTTP_" + statusCode;
+        }
+    }
+
+    /**
+     * Enhanced parsing with JSON schema validation fallback
+     */
+    private ParseOutcome parseChatResponseWithFallback(String responseBody) {
+        try {
+            // First attempt: standard parsing
+            ParseOutcome outcome = parseChatResponse(responseBody);
+            if (outcome.error == null) {
+                return outcome;
+            }
+            
+            // Second attempt: try alternative JSON extraction methods
+            log.warn("Standard parsing failed with error: {}, attempting fallback parsing", outcome.error);
+            return parseChatResponseFallback(responseBody);
+            
+        } catch (Exception e) {
+            log.error("All parsing methods failed", e);
+            ParseOutcome outcome = new ParseOutcome();
+            outcome.error = "PARSING_ERROR";
+            outcome.items = List.of();
+            return outcome;
+        }
+    }
+
+    /**
+     * Fallback parsing method with more lenient JSON extraction
+     */
+    private ParseOutcome parseChatResponseFallback(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode choices = root.get("choices");
+            if (choices == null || !choices.isArray() || choices.size() == 0) {
+                ParseOutcome outcome = new ParseOutcome();
+                outcome.error = "NO_CHOICES";
+                outcome.items = List.of();
+                return outcome;
+            }
+
+            JsonNode message = choices.get(0).get("message");
+            if (message == null) {
+                ParseOutcome outcome = new ParseOutcome();
+                outcome.error = "NO_MESSAGE";
+                outcome.items = List.of();
+                return outcome;
+            }
+
+            String content = message.get("content").asText();
+            
+            // Try multiple JSON extraction approaches
+            String[] jsonCandidates = {
+                content,
+                extractJson(content),
+                extractJsonWithFallback(content)
+            };
+            
+            for (String jsonCandidate : jsonCandidates) {
+                if (jsonCandidate != null && !jsonCandidate.trim().isEmpty()) {
+                    try {
+                        List<RankedItem> items = tryParseItems(jsonCandidate);
+                        if (items != null && !items.isEmpty()) {
+                            ParseOutcome outcome = new ParseOutcome();
+                            outcome.items = items;
+                            outcome.error = null;
+                            return outcome;
+                        }
+                    } catch (Exception e) {
+                        log.debug("JSON parsing attempt failed: {}", e.getMessage());
+                        continue;
+                    }
+                }
+            }
+            
+            // If all attempts fail
+            ParseOutcome outcome = new ParseOutcome();
+            outcome.error = "PARSING_FAILED";
+            outcome.items = List.of();
+            return outcome;
+            
+        } catch (Exception e) {
+            ParseOutcome outcome = new ParseOutcome();
+            outcome.error = "JSON_PARSE_ERROR";
+            outcome.items = List.of();
+            return outcome;
+        }
+    }
+
+    /**
+     * Alternative JSON extraction with regex patterns
+     */
+    private String extractJsonWithFallback(String text) {
+        if (text == null) return null;
+        
+        // Try various JSON extraction patterns
+        String[] patterns = {
+            "\\{.*?\"items\".*?\\}",
+            "```json\\s*({.*?})\\s*```",
+            "```\\s*({.*?})\\s*```",
+            "({\\s*\"items\".*?})"
+        };
+        
+        for (String pattern : patterns) {
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern, 
+                    java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+                java.util.regex.Matcher m = p.matcher(text);
+                if (m.find()) {
+                    String extracted = m.group(1);
+                    if (extracted != null && extracted.trim().startsWith("{")) {
+                        return extracted.trim();
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Pattern {} failed: {}", pattern, e.getMessage());
+            }
+        }
+        
         return null;
     }
 

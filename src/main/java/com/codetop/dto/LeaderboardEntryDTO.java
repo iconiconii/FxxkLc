@@ -18,7 +18,5 @@ public class LeaderboardEntryDTO {
     private String username;
     private String avatarUrl;
     private Long totalReviews;
-    private Long correctReviews;
-    private Double accuracy;
     private Integer streak;
 }

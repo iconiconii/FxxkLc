@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap, StickyNote, Globe, CheckCircle } from "lucide-react"
+import { BarChart3, Trophy, RefreshCw, Settings, HelpCircle, Menu, Code, Zap, StickyNote, Globe, CheckCircle, Brain, History } from "lucide-react"
 
 import { Home } from "lucide-react"
 import Link from "next/link"
@@ -131,12 +131,26 @@ export default function Sidebar() {
                   </NavItem>
                 </div>
               </div>
+
+              <div>
+                <div className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  AI 推荐
+                </div>
+                <div className="space-y-1">
+                  <NavItem href="/dashboard/recommendations" icon={Brain}>
+                    智能推荐
+                  </NavItem>
+                  <NavItem href="/dashboard/history" icon={History}>
+                    推荐历史
+                  </NavItem>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="px-4 py-4 border-t border-gray-200 dark:border-[#1F1F23]">
             <div className="space-y-1">
-              <NavItem href="#" icon={Settings}>
+              <NavItem href="/dashboard/preferences" icon={Settings}>
                 设置
               </NavItem>
               <NavItem href="#" icon={HelpCircle}>

@@ -49,7 +49,7 @@ export interface UserStatistics {
   easyProblemsSolved: number
   mediumProblemsSolved: number
   hardProblemsSolved: number
-  overallAccuracy: number
+  overallMasteryScore: number
   currentStreak: number
   longestStreak: number
   totalReviewTime: number
@@ -72,7 +72,7 @@ export interface UserProblemStatus {
   lastAttemptDate?: string
   lastConsideredDate?: string
   attemptCount: number
-  accuracy: number
+  masteryScore: number
   notes?: string
 }
 
@@ -86,7 +86,7 @@ export interface ProblemMastery {
   problemId: number
   masteryLevel: number // 0-3
   attemptCount: number
-  accuracy: number
+  masteryScore: number
   lastAttemptDate?: string
   nextReviewDate?: string
   difficulty: string

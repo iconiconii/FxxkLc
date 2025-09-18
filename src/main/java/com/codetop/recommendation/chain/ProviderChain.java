@@ -8,6 +8,8 @@ import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.function.Supplier;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 public class ProviderChain {
+    private static final Logger log = LoggerFactory.getLogger(ProviderChain.class);
     private final Map<String, LlmProvider> catalog = new HashMap<>();
     private final LlmProperties properties;
     private final LlmProvider defaultProvider;
@@ -88,6 +91,13 @@ public Result execute(RequestContext ctx, List<LlmProvider.ProblemCandidate> can
             if (res != null && res.success) {
                 return Result.success(res, hops);
             }
+            // Log detailed failure information for debugging
+            if (res != null) {
+                log.warn("Provider {} failed: error={}, model={}, latency={}ms", 
+                    provider.name(), res.error, res.model, res.latencyMs);
+            } else {
+                log.warn("Provider {} returned null result", provider.name());
+            }
             // Check if error should trigger fallback to next node
             if (res != null && !shouldFallbackToNext(node, res.error)) {
                 // This error type should not fallback - return default result
@@ -97,6 +107,8 @@ public Result execute(RequestContext ctx, List<LlmProvider.ProblemCandidate> can
             }
         } catch (Exception ex) {
             String errorType = classifyException((Throwable)ex);
+            log.warn("Provider {} threw exception: type={}, message={}", 
+                provider.name(), errorType, ex.getMessage(), ex);
             if (!shouldFallbackToNext(node, errorType)) {
                 // This error type should not fallback - return default result
                 hops.add("default");
@@ -191,6 +203,9 @@ public java.util.concurrent.CompletableFuture<Result> executeAsync(RequestContex
                 if (ex != null) {
                     Throwable cause = ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null ? ex.getCause() : ex;
                     String errorType = classifyException(cause);
+                    // Enhanced logging for async exceptions
+                    log.warn("Provider {} threw async exception: type={}, message={}", 
+                        provider.name(), errorType, cause.getMessage(), cause);
                     if (!shouldFallbackToNext(node, errorType)) {
                         // This error type should not fallback - return default result
                         hops.add("default");
@@ -203,6 +218,14 @@ public java.util.concurrent.CompletableFuture<Result> executeAsync(RequestContex
                 
                 if (r != null && r.success) {
                     return Result.success(r, hops);
+                }
+                
+                // Enhanced logging for async failures
+                if (r != null) {
+                    log.warn("Provider {} failed async: error={}, model={}, latency={}ms", 
+                        provider.name(), r.error, r.model, r.latencyMs);
+                } else {
+                    log.warn("Provider {} returned null result in async execution", provider.name());
                 }
                 
                 // Check if error should trigger fallback to next node
@@ -322,6 +345,17 @@ public java.util.concurrent.CompletableFuture<Result> executeAsync(RequestContex
 
     private boolean isRetryableError(String errorType) {
         if (errorType == null) return true;
+        
+        // Fast failure strategy: These errors should directly fallback to default provider
+        // instead of trying next node in the chain
+        if (errorType.contains("API_KEY_MISSING") || 
+            errorType.contains("UNAUTHORIZED") || 
+            errorType.contains("BAD_REQUEST") ||
+            errorType.contains("FORBIDDEN")) {
+            return false; // Don't retry/fallback to next node, go directly to default
+        }
+        
+        // These errors are retryable - can try next node in chain
         return errorType.contains("TIMEOUT") || 
                errorType.contains("HTTP_429") || 
                errorType.contains("HTTP_5") ||  // 5xx errors

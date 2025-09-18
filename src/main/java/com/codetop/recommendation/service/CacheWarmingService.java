@@ -37,7 +37,7 @@ public class CacheWarmingService {
     private final RecommendationStrategyResolver strategyResolver;
     
     // Configuration
-    @Value("${recommendation.cache-warming.enabled:true}")
+    @Value("${recommendation.cache-warming.enabled:false}")  // DISABLED by default for MVP
     private boolean warmingEnabled;
     
     @Value("${recommendation.cache-warming.active-user-days:7}")
@@ -74,16 +74,7 @@ public class CacheWarmingService {
         this.warmingExecutor = Executors.newFixedThreadPool(Math.max(1, maxConcurrentWarmups));
     }
 
-    // Backward-compatible constructor for existing tests
-    public CacheWarmingService(
-            UserMapper userMapper,
-            ReviewLogMapper reviewLogMapper,
-            CacheService cacheService,
-            UserProfilingService userProfilingService,
-            AIRecommendationService aiRecommendationService,
-            RecommendationStrategyResolver strategyResolver) {
-        this(userMapper, reviewLogMapper, cacheService, userProfilingService, aiRecommendationService, strategyResolver, 5);
-    }
+    
     
     /**
      * Scheduled cache warming during low-traffic periods.

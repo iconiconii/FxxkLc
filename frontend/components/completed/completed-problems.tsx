@@ -18,6 +18,7 @@ interface CompletedProblem {
   lastAttemptDate: string | null
   attemptCount: number
   accuracy: number
+  masteryScore?: number
 }
 
 interface PagedResponse<T> {
@@ -160,8 +161,7 @@ export default function CompletedProblems() {
         // For demo: add more mock data on load more
         const moreData = mockData.content.map(item => ({
           ...item,
-          problemId: item.problemId + 10,
-          title: `[页面${pageNum + 1}] ${item.title}`
+          problemId: item.problemId + 10
         }))
         setProblems(prev => [...prev, ...moreData])
       } else {
@@ -338,7 +338,15 @@ export default function CompletedProblems() {
                           <span>完成于 {formatDate(problem.lastAttemptDate)}</span>
                         </div>
                         <div>复习 {problem.attemptCount} 次</div>
-                        <div>正确率 {Math.round(problem.accuracy * 100)}%</div>
+                        <div>
+                          掌握度 {
+                            (() => {
+                              const value = problem.masteryScore ?? problem.accuracy
+                              const percent = value <= 1 ? Math.round(value * 100) : Math.round(value)
+                              return `${percent}%`
+                            })()
+                          }
+                        </div>
                       </div>
                     </div>
 

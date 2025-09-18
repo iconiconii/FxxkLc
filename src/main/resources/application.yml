@@ -223,6 +223,19 @@ cache:
       analytics: 3600      # 1 hour
       leaderboard: 1800    # 30 minutes
       similarProblems: 900 # 15 minutes - from rec.similarity.cache.ttl-minutes
+      # Intermediate caching for AI recommendations
+      user-profile: 600    # 10 minutes - user analytics and preferences
+      candidates: 60       # 1 minute - reusable candidate sets
+      prompt-variables: 300 # 5 minutes - cached prompt variables for template assembly
+
+# Recommendation Cache Warming Configuration - ENABLED for performance optimization
+recommendation:
+  cache-warming:
+    enabled: true                     # ENABLED: Cache warming for active users
+    active-user-days: 7              # Days to look back for active users
+    min-reviews: 5                   # Minimum reviews for a user to be considered active
+    batch-size: 50                   # Batch size for warming operations
+    max-concurrent: 5                # Maximum concurrent warming threads
 
 # User Profiling Configuration
 user-profiling:
@@ -239,7 +252,7 @@ user-profiling:
     beta-smoothing-beta: 1.0           # Beta distribution smoothing parameter beta
     difficulty-trend-threshold: 0.15   # 15% change threshold for trend detection
   cache:
-    ttl: PT1H                    # Cache TTL (ISO 8601 duration: PT1H = 1 hour)
+    ttl: PT10M                   # Cache TTL (ISO 8601 duration: PT10M = 10 minutes for frequent updates)
     enabled: true                # Enable/disable caching
   tag-domain-mapping:
     # Core data structures
@@ -310,9 +323,9 @@ rec:
       fsrs-weight: 0.3                # Weight for FSRS score in hybrid (deprecated - use rec.hybrid)
       similarity-weight: 0.2          # Weight for similarity score in hybrid (deprecated - use rec.hybrid)
   
-  # Hybrid ranking configuration (v3 enhancement)
+  # Hybrid ranking configuration (v3 enhancement) - DISABLED for MVP
   hybrid:
-    enabled: true                     # Enable hybrid ranking that combines LLM, FSRS, similarity, and personalization signals
+    enabled: false                    # DISABLED: Enable hybrid ranking that combines LLM, FSRS, similarity, and personalization signals
     weights:
       llm: 0.45                      # Weight for LLM score in final ranking (0.0-1.0)
       fsrs: 0.30                     # Weight for FSRS urgency score (0.0-1.0)
@@ -378,9 +391,9 @@ rec:
         enable-category-caching: true       # Enable caching of categorized candidates
         category-cache-ttl-seconds: 300     # Cache TTL for categorized candidates in seconds
 
-  # Confidence calibration configuration (v3 enhancement)  
+  # Confidence calibration configuration (v3 enhancement) - DISABLED for MVP
   confidence:
-    enabled: true                    # Enable confidence calibration for recommendation quality assessment
+    enabled: false                   # DISABLED: Enable confidence calibration for recommendation quality assessment
     weights:
       # Component weights for confidence calculation (should sum to 1.0)
       llm-quality: 0.25             # Weight for LLM response quality indicators
@@ -444,11 +457,19 @@ llm:
   provider: chain
   defaultChainId: main   # Default chain when no routing rules match
   
+  # Metrics collection configuration - SIMPLIFIED for MVP
+  metrics:
+    enabled: true                           # Enable basic metrics
+    detailed-metrics: false                 # DISABLED: Avoid detailed metrics complexity
+    cache-metrics: false                    # DISABLED: Avoid cache warming metrics 
+    token-tracking: false                   # DISABLED: Avoid detailed token usage tracking
+    chain-hop-tracking: false              # DISABLED: Avoid complex chain tracking
+  
   # External prompt template configuration for A/B testing
   prompt:
     templates:
       defaultVersion: v3                    # Default prompt version
-      cacheEnabled: true                    # Enable template caching
+      cacheEnabled: true                    # Enable template caching - ENABLED for performance
       cacheTimeoutMinutes: 60              # Cache TTL in minutes
       templateBasePath: prompts            # Base path in resources
       
@@ -461,22 +482,24 @@ llm:
         v2.user: prompts/user-advanced.txt
         v3.user: prompts/user-advanced.txt
       
-      # A/B testing configuration for template selection
+      # A/B testing configuration for template selection - DISABLED for MVP
       abTests:
-        premium-users:                      # Test name
-          tiers: [GOLD, PLATINUM]          # User tiers that get this version
+        # DISABLED: All A/B testing disabled to reduce complexity
+        # All users get defaultVersion (v3) for consistency
+        premium-users:                      # Test name - DISABLED
+          tiers: []                        # DISABLED: Empty tiers
           version: v3                       # Prompt version for these users
-          weight: 100                       # Selection weight (0-100)
+          weight: 0                         # DISABLED: 0 weight
         
-        beta-testers:
-          abGroups: [beta, experimental]   # AB groups that get this version
+        beta-testers:                       # DISABLED
+          abGroups: []                      # DISABLED: Empty groups
           version: v3
-          weight: 100
+          weight: 0                         # DISABLED: 0 weight
         
-        ai-route-test:
-          routes: [ai-recommendations]     # Routes that get this version
-          version: v2                       # Use v2 for AI recommendation route
-          weight: 70                        # 70% of traffic gets v2, rest gets default
+        ai-route-test:                      # DISABLED
+          routes: []                        # DISABLED: Empty routes
+          version: v2                       
+          weight: 0                         # DISABLED: 0 weight
   
   # Multiple chains for different user segments
   chains:
@@ -484,7 +507,7 @@ llm:
       nodes:
         - name: openai   # DeepSeek via OpenAI-compatible API
           enabled: true
-          timeoutMs: 1800
+          timeoutMs: 45000  # Increased for DeepSeek API response time
           retry:
             attempts: 1
           onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
@@ -502,7 +525,7 @@ llm:
       nodes:
         - name: openai
           enabled: true
-          timeoutMs: 1200           # Faster timeout for premium
+          timeoutMs: 45000           # Increased for DeepSeek API response time
           retry:
             attempts: 2             # More retries for premium
           rateLimit:
@@ -511,11 +534,11 @@ llm:
       defaultProvider:
         strategy: fsrs_fallback
         
-    experimental:                       # Experimental chain for A/B testing
+    experimental:                       # Experimental chain - DISABLED for MVP
       nodes:
         - name: openai
-          enabled: true
-          timeoutMs: 1500
+          enabled: false                # DISABLED: Avoid experimental complexity
+          timeoutMs: 45000
           retry:
             attempts: 1
       defaultProvider:
@@ -527,7 +550,7 @@ llm:
     nodes:
       - name: openai
         enabled: true
-        timeoutMs: 1800
+        timeoutMs: 45000
         retry:
           attempts: 1
         onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
@@ -537,15 +560,16 @@ llm:
     defaultProvider:
       strategy: fsrs_fallback
       
-  # Routing rules for chain selection (evaluated in order, first match wins)
+  # Routing rules for chain selection - SIMPLIFIED for MVP
   routing:
     rules:
+      # SIMPLIFIED: All users use main chain for consistency
       - when:
-          tier: [GOLD, PLATINUM]    # Premium users get enhanced chain
-        useChain: premium
+          tier: [GOLD, PLATINUM]    # Premium users use main chain (not premium chain)
+        useChain: main              # CHANGED: Use main instead of premium
       - when:
-          abGroup: [experimental]   # Experimental AB group
-        useChain: experimental
+          abGroup: [experimental]   # Experimental group uses main chain
+        useChain: main              # CHANGED: Use main instead of experimental  
       - when:
           route: [ai-recommendations]  # Default route uses main chain
         useChain: main
@@ -573,8 +597,10 @@ llm:
   openai:
     baseUrl: https://api.deepseek.com/v1
     model: deepseek-chat
+    # SECURITY: Never hardcode API keys in configuration files!
+    # Set environment variable: export DEEPSEEK_API_KEY=your_actual_api_key
     apiKeyEnv: DEEPSEEK_API_KEY
-    timeoutMs: 1800
+    timeoutMs: 4500  # Increased for DeepSeek API response time
     
   # Async concurrency limits
   asyncLimits:
@@ -631,6 +657,10 @@ logging:
     com.codetop.logging: DEBUG
     com.codetop.controller: INFO
     com.codetop.service: INFO
+    com.codetop.recommendation: DEBUG
+    com.codetop.recommendation.provider: DEBUG
+    com.codetop.recommendation.provider.impl.OpenAiProvider: DEBUG
+    com.codetop.recommendation.chain.ProviderChain: DEBUG
     com.codetop.algorithm: DEBUG
     com.codetop.mapper: DEBUG
     org.springframework.security: WARN
@@ -654,7 +684,7 @@ spring:
   # Development MongoDB Configuration
   data:
     mongodb:
-      uri: mongodb://localhost:27017/codetop_notes_dev
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://root:root@localhost:27018/codetop_notes_dev?authSource=admin}
       auto-index-creation: true
 
 # Development CORS settings
@@ -673,6 +703,7 @@ app:
       same-site: Lax
       secure: false
     ai-recs-public: true
+    demo-user-id: 999999  # Demo user ID for anonymous access in dev environment
   cache:
     double-delete-delay-millis: 500
 
@@ -820,8 +851,10 @@ llm:
   openai:
     baseUrl: ${LLM_BASE_URL:https://api.deepseek.com/v1}
     model: ${LLM_MODEL:deepseek-chat}
+    # SECURITY: Never hardcode API keys! Use environment variable instead:
+    # export DEEPSEEK_API_KEY=your_actual_api_key
     apiKeyEnv: DEEPSEEK_API_KEY  # Environment variable name
-    timeoutMs: ${LLM_TIMEOUT:2000}
+    timeoutMs: ${LLM_TIMEOUT:45000}
 
 # Harden actuator exposure in production
 management:

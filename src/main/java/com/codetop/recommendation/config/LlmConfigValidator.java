@@ -36,9 +36,13 @@ public class LlmConfigValidator {
         List<String> warnings = new ArrayList<>();
 
         validateChainConfiguration(errors, warnings);
+        validateProviderConfiguration(errors, warnings);
         validateRoutingRules(errors, warnings);
         validateFeatureToggles(errors, warnings);
         validateAllowListMode(errors, warnings);
+        
+        // Enhanced startup validation for API keys
+        validateApiKeysOnStartup(errors, warnings);
         
         // Log all findings
         if (!warnings.isEmpty()) {
@@ -87,6 +91,51 @@ public class LlmConfigValidator {
             boolean hasEnabledNode = chain.getNodes().stream().anyMatch(LlmProperties.Node::isEnabled);
             if (!hasEnabledNode) {
                 warnings.add(String.format("Chain '%s' has no enabled nodes", chainId));
+            }
+        }
+    }
+
+    private void validateProviderConfiguration(List<String> errors, List<String> warnings) {
+        // Validate OpenAI/DeepSeek configuration
+        LlmProperties.OpenAi openAiConfig = llmProperties.getOpenai();
+        if (openAiConfig != null) {
+            // Validate API key environment variable
+            String apiKeyEnv = openAiConfig.getApiKeyEnv();
+            if (apiKeyEnv == null || apiKeyEnv.trim().isEmpty()) {
+                errors.add("OpenAI provider apiKeyEnv is not configured");
+            } else {
+                String apiKey = System.getenv(apiKeyEnv.trim());
+                if (apiKey == null || apiKey.trim().isEmpty()) {
+                    errors.add(String.format("Environment variable '%s' for OpenAI API key is not set or empty", apiKeyEnv));
+                } else if (apiKey.length() < 20) {
+                    warnings.add("OpenAI API key seems too short, please verify it's correct");
+                } else {
+                    log.info("OpenAI API key validation passed (length: {} characters)", apiKey.length());
+                }
+            }
+            
+            // Validate base URL
+            String baseUrl = openAiConfig.getBaseUrl();
+            if (baseUrl == null || baseUrl.trim().isEmpty()) {
+                warnings.add("OpenAI provider baseUrl is not configured, will use default");
+            } else if (!baseUrl.startsWith("https://")) {
+                warnings.add("OpenAI provider baseUrl should use HTTPS for security");
+            }
+            
+            // Validate model name
+            String model = openAiConfig.getModel();
+            if (model == null || model.trim().isEmpty()) {
+                errors.add("OpenAI provider model is not configured");
+            }
+            
+            // Validate timeout configuration
+            Integer timeout = openAiConfig.getTimeoutMs();
+            if (timeout != null) {
+                if (timeout < 500) {
+                    warnings.add("OpenAI provider timeout is very low (<500ms), may cause frequent timeouts");
+                } else if (timeout > 5000) {
+                    warnings.add("OpenAI provider timeout is very high (>5s), may cause poor user experience");
+                }
             }
         }
     }
@@ -186,6 +235,71 @@ public class LlmConfigValidator {
             toggles.getAllowUserIds() != null && 
             toggles.getAllowUserIds().size() < 10) {
             warnings.add("allowListMode 'whitelist' with small allowUserIds list may be overly restrictive in production");
+        }
+    }
+
+    /**
+     * Enhanced API key validation with clear startup messages
+     * Security: Validate DEEPSEEK_API_KEY is properly configured
+     */
+    private void validateApiKeysOnStartup(List<String> errors, List<String> warnings) {
+        LlmProperties.OpenAi openAiConfig = llmProperties.getOpenai();
+        if (openAiConfig == null) {
+            warnings.add("No OpenAI/DeepSeek provider configuration found");
+            return;
+        }
+
+        String apiKeyEnv = openAiConfig.getApiKeyEnv();
+        if (apiKeyEnv == null || apiKeyEnv.trim().isEmpty()) {
+            errors.add("OpenAI provider apiKeyEnv is not configured - please set environment variable name");
+            return;
+        }
+
+        // Check for DEEPSEEK_API_KEY specifically
+        if ("DEEPSEEK_API_KEY".equals(apiKeyEnv.trim())) {
+            String apiKey = System.getenv("DEEPSEEK_API_KEY");
+            
+            if (apiKey == null || apiKey.trim().isEmpty()) {
+                log.error("===============================================");
+                log.error("  DEEPSEEK_API_KEY NOT FOUND");
+                log.error("===============================================");
+                log.error("Environment variable DEEPSEEK_API_KEY is required");
+                log.error("Please set: export DEEPSEEK_API_KEY=your_api_key");
+                log.error("Or update application.yml to use a different env var");
+                log.error("===============================================");
+                errors.add("DEEPSEEK_API_KEY environment variable is not set or empty");
+                return;
+            }
+
+            // Validate API key format and length
+            String trimmedKey = apiKey.trim();
+            if (trimmedKey.startsWith("sk-")) {
+                if (trimmedKey.length() < 20) {
+                    warnings.add("DEEPSEEK_API_KEY seems too short, please verify it's correct");
+                } else if (trimmedKey.length() > 200) {
+                    warnings.add("DEEPSEEK_API_KEY seems unusually long, please verify it's correct");
+                } else {
+                    log.info("DEEPSEEK_API_KEY validation passed (length: {} characters)", trimmedKey.length());
+                }
+            } else {
+                warnings.add("DEEPSEEK_API_KEY doesn't start with 'sk-', please verify it's a valid DeepSeek API key");
+            }
+
+        } else {
+            // Using a different environment variable
+            String apiKey = System.getenv(apiKeyEnv.trim());
+            if (apiKey == null || apiKey.trim().isEmpty()) {
+                log.warn("===============================================");
+                log.warn("  API KEY NOT FOUND: {}", apiKeyEnv);
+                log.warn("===============================================");
+                log.warn("Environment variable {} is not set", apiKeyEnv);
+                log.warn("Please set: export {}=your_api_key", apiKeyEnv);
+                log.warn("===============================================");
+                errors.add(String.format("Environment variable '%s' for API key is not set or empty", apiKeyEnv));
+            } else {
+                log.info("API key validation passed for {} (length: {} characters)", 
+                    apiKeyEnv, apiKey.trim().length());
+            }
         }
     }
 }

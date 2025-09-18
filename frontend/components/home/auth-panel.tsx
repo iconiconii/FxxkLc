@@ -26,57 +26,40 @@ export default function AuthPanel() {
   // If user is not authenticated, show auth options
   return (
     <div className="h-full space-y-6">
-      {/* 欢迎卡片 */}
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl p-8 border border-white/20 dark:border-gray-700/50 shadow-xl text-center">
-        <div className="w-16 h-16 bg-gradient-to-br from-blue-400/20 to-indigo-400/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
+      {/* 登录/注册卡片 */}
+      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl p-6 border border-white/20 dark:border-gray-700/50 shadow-xl text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-blue-400/20 to-indigo-400/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
           <Sparkles className="w-8 h-8 text-blue-500" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-3">
-          开始你的算法之旅
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
+          加入 OLIVER
         </h2>
-        <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-          加入 OLIVER 社区，与万千程序员一起刷题，提升编程技能，冲刺大厂面试
+        <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-6">
+          体验智能复习算法，提升编程技能
         </p>
-      </div>
-
-      {/* 登录卡片 */}
-      <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl p-6 border border-white/20 dark:border-gray-700/50 shadow-xl">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-green-400/20 to-emerald-400/20 rounded-2xl flex items-center justify-center">
-            <LogIn className="w-6 h-6 text-green-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-800 dark:text-white">已有账户？</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">继续你的学习进度</p>
-          </div>
+        
+        <div className="space-y-3">
+          <Link href="/login">
+            <Button 
+              className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-2xl py-3 shadow-lg hover:shadow-xl transition-all duration-200 group"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              <span>登录</span>
+              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </Link>
+          
+          <Link href="/register">
+            <Button 
+              variant="outline"
+              className="w-full border-2 border-blue-200 hover:border-blue-300 hover:bg-blue-50 dark:border-blue-700 dark:hover:border-blue-600 dark:hover:bg-blue-900/20 rounded-2xl py-3 transition-all duration-200 group"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              <span>注册</span>
+              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </Link>
         </div>
-        <Link href="/login">
-          <Button 
-            className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl py-3 shadow-lg hover:shadow-xl transition-all duration-200 group"
-          >
-            <span>立即登录</span>
-            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-          </Button>
-        </Link>
-      </div>
-
-      {/* 注册暂时关闭 */}
-      <div className="bg-yellow-50/80 dark:bg-yellow-900/20 backdrop-blur-xl rounded-3xl p-6 border border-yellow-200/50 dark:border-yellow-800/50 shadow-xl">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400/20 to-orange-400/20 rounded-2xl flex items-center justify-center">
-            <UserPlus className="w-6 h-6 text-yellow-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-800 dark:text-white">注册功能暂时关闭</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">系统维护中，暂时无法注册新账户</p>
-          </div>
-        </div>
-        <Button 
-          disabled
-          className="w-full bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed rounded-2xl py-3"
-        >
-          <span>注册暂时关闭</span>
-        </Button>
       </div>
 
       {/* FSRS 核心功能介绍 */}

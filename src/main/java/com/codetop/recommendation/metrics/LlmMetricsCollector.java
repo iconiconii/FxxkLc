@@ -213,4 +213,247 @@ public class LlmMetricsCollector {
                 .record(responseTime.toNanos(), TimeUnit.NANOSECONDS);
         }
     }
+
+    
+    /**
+     * Record LLM provider latency with percentile tracking (p50/p95).
+     */
+    public void recordLlmLatency(String provider, String model, String chainId, String abGroup, 
+                               String route, long latencyMs, boolean success, String errorReason) {
+        Tags tags = Tags.of(
+            "provider", provider != null ? provider : "unknown",
+            "model", model != null ? model : "unknown", 
+            "chain_id", chainId != null ? chainId : "unknown",
+            "ab_group", abGroup != null ? abGroup : "unknown",
+            "route", route != null ? route : "unknown",
+            "success", String.valueOf(success)
+        );
+        
+        if (!success && errorReason != null) {
+            tags = tags.and("error_reason", errorReason);
+        }
+        
+        Timer.builder("llm.latency_ms")
+            .description("LLM provider latency in milliseconds")
+            .tags(tags)
+            .register(meterRegistry)
+            .record(latencyMs, TimeUnit.MILLISECONDS);
+    }
+    
+    /**
+     * Record fallback ratio by provider and reason.
+     */
+    public void recordFallbackRatio(String provider, String model, String chainId, String reason) {
+        // Track total requests
+        Counter.builder("llm.requests.total")
+            .description("Total LLM requests by provider")
+            .tags(Tags.of(
+                "provider", provider != null ? provider : "unknown",
+                "model", model != null ? model : "unknown",
+                "chain_id", chainId != null ? chainId : "unknown"
+            ))
+            .register(meterRegistry)
+            .increment();
+            
+        // Track fallback requests  
+        Counter.builder("llm.fallback.total")
+            .description("Total LLM fallback events by provider and reason")
+            .tags(Tags.of(
+                "provider", provider != null ? provider : "unknown",
+                "model", model != null ? model : "unknown", 
+                "chain_id", chainId != null ? chainId : "unknown",
+                "reason", reason != null ? reason : "unknown"
+            ))
+            .register(meterRegistry)
+            .increment();
+    }
+    
+    /**
+     * Record cache hit ratio with enhanced granularity.
+     */
+    public void recordCacheHitRatio(String tier, String abGroup, String route, String chainId, boolean hit) {
+        // Track total cache requests
+        Counter.builder("rec.cache.requests.total")
+            .description("Total recommendation cache requests")
+            .tags(Tags.of(
+                "tier", tier != null ? tier : "unknown",
+                "ab_group", abGroup != null ? abGroup : "unknown",
+                "route", route != null ? route : "unknown",
+                "chain_id", chainId != null ? chainId : "unknown"
+            ))
+            .register(meterRegistry)
+            .increment();
+            
+        // Track cache hits
+        if (hit) {
+            Counter.builder("rec.cache.hits.total")
+                .description("Total recommendation cache hits")
+                .tags(Tags.of(
+                    "tier", tier != null ? tier : "unknown",
+                    "ab_group", abGroup != null ? abGroup : "unknown",
+                    "route", route != null ? route : "unknown",
+                    "chain_id", chainId != null ? chainId : "unknown"
+                ))
+                .register(meterRegistry)
+                .increment();
+        }
+    }
+    
+    /**
+     * Record chain hop counts and routing decisions.
+     */
+    public void recordChainHops(String chainId, String tier, String abGroup, int hopCount, 
+                               String finalProvider, String[] failedProviders, Duration totalLatency) {
+        // Record chain hop count
+        Timer.builder("llm.chain.hops")
+            .description("Number of hops in LLM provider chain")
+            .tags(Tags.of(
+                "chain_id", chainId != null ? chainId : "unknown",
+                "tier", tier != null ? tier : "unknown",
+                "ab_group", abGroup != null ? abGroup : "unknown",
+                "final_provider", finalProvider != null ? finalProvider : "none",
+                "hop_count", String.valueOf(hopCount)
+            ))
+            .register(meterRegistry)
+            .record(hopCount, TimeUnit.SECONDS); // Using seconds as unit for hop count
+            
+        // Record total chain latency 
+        if (totalLatency != null) {
+            Timer.builder("llm.chain.total_latency")
+                .description("Total latency for complete provider chain execution")
+                .tags(Tags.of(
+                    "chain_id", chainId != null ? chainId : "unknown",
+                    "hop_count", String.valueOf(hopCount),
+                    "success", finalProvider != null ? "true" : "false"
+                ))
+                .register(meterRegistry)
+                .record(totalLatency.toMillis(), TimeUnit.MILLISECONDS);
+        }
+        
+        // Record failed providers in chain
+        if (failedProviders != null) {
+            for (String failedProvider : failedProviders) {
+                Counter.builder("llm.chain.provider_failure")
+                    .description("Provider failures in chain execution")
+                    .tags(Tags.of(
+                        "chain_id", chainId != null ? chainId : "unknown",
+                        "provider", failedProvider != null ? failedProvider : "unknown"
+                    ))
+                    .register(meterRegistry)
+                    .increment();
+            }
+        }
+    }
+    
+    /**
+     * Record detailed error reasons with dimensional breakdown.
+     */
+    public void recordErrorReasons(String provider, String model, String chainId, String errorCode, 
+                                 String errorCategory, String httpStatus, Duration latency) {
+        Tags tags = Tags.of(
+            "provider", provider != null ? provider : "unknown",
+            "model", model != null ? model : "unknown",
+            "chain_id", chainId != null ? chainId : "unknown",
+            "error_code", errorCode != null ? errorCode : "unknown",
+            "error_category", errorCategory != null ? errorCategory : "unknown"
+        );
+        
+        if (httpStatus != null) {
+            tags = tags.and("http_status", httpStatus);
+        }
+        
+        Counter.builder("llm.errors.total")
+            .description("LLM errors by detailed reason codes")
+            .tags(tags)
+            .register(meterRegistry)
+            .increment();
+            
+        // Record error latency (time to fail)
+        if (latency != null) {
+            Timer.builder("llm.errors.latency")
+                .description("Time to failure for LLM requests")
+                .tags(tags)
+                .register(meterRegistry)
+                .record(latency.toMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+    
+    /**
+     * Record recommendation quality metrics.
+     */
+    public void recordRecommendationQuality(String provider, String model, String chainId,
+                                          int recommendationCount, double avgConfidence, 
+                                          double avgScore, String userTier) {
+        // Record recommendation count
+        Gauge.builder("llm.recommendations.count", () -> (double) recommendationCount)
+            .description("Number of recommendations returned")
+            .tags(Tags.of(
+                "provider", provider != null ? provider : "unknown",
+                "model", model != null ? model : "unknown",
+                "chain_id", chainId != null ? chainId : "unknown",
+                "user_tier", userTier != null ? userTier : "unknown"
+            ))
+            .register(meterRegistry);
+            
+        // Record average confidence
+        Gauge.builder("llm.recommendations.avg_confidence", () -> avgConfidence)
+            .description("Average confidence score of recommendations")
+            .tags(Tags.of(
+                "provider", provider != null ? provider : "unknown",
+                "model", model != null ? model : "unknown", 
+                "chain_id", chainId != null ? chainId : "unknown"
+            ))
+            .register(meterRegistry);
+            
+        // Record average score
+        Gauge.builder("llm.recommendations.avg_score", () -> avgScore)
+            .description("Average recommendation score")
+            .tags(Tags.of(
+                "provider", provider != null ? provider : "unknown",
+                "model", model != null ? model : "unknown",
+                "chain_id", chainId != null ? chainId : "unknown"
+            ))
+            .register(meterRegistry);
+    }
+    
+    /**
+     * Record token usage and cost estimation metrics.
+     */
+    public void recordTokenUsage(String provider, String model, String chainId, 
+                               int promptTokens, int completionTokens, int totalTokens, 
+                               double estimatedCost) {
+        Tags baseTags = Tags.of(
+            "provider", provider != null ? provider : "unknown",
+            "model", model != null ? model : "unknown",
+            "chain_id", chainId != null ? chainId : "unknown"
+        );
+        
+        // Record token counts
+        Counter.builder("llm.tokens.prompt")
+            .description("Prompt tokens consumed")
+            .tags(baseTags)
+            .register(meterRegistry)
+            .increment(promptTokens);
+            
+        Counter.builder("llm.tokens.completion")
+            .description("Completion tokens consumed")
+            .tags(baseTags)
+            .register(meterRegistry)
+            .increment(completionTokens);
+            
+        Counter.builder("llm.tokens.total")
+            .description("Total tokens consumed")
+            .tags(baseTags)
+            .register(meterRegistry)
+            .increment(totalTokens);
+            
+        // Record estimated cost
+        if (estimatedCost > 0) {
+            Counter.builder("llm.cost.estimated_usd")
+                .description("Estimated cost in USD")
+                .tags(baseTags)
+                .register(meterRegistry)
+                .increment(estimatedCost);
+        }
+    }
 }

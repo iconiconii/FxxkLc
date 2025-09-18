@@ -20,6 +20,7 @@ import com.codetop.service.cache.CacheService;
 import org.springframework.context.ApplicationEventPublisher;
 import com.codetop.event.Events;
 import com.codetop.util.CacheHelper;
+import com.codetop.recommendation.service.RecommendationCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -62,6 +63,7 @@ public class FSRSService {
     private final CacheService cacheService;
     private final CacheHelper cacheHelper;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecommendationCacheInvalidationService recommendationCacheInvalidationService;
     
     // 缓存相关常量
     private static final String CACHE_PREFIX_FSRS_QUEUE = "fsrs-queue";
@@ -267,6 +269,13 @@ public class FSRSService {
                     result.getNewState(), isLapse, result.getNextReviewTime(), result.getIntervalDays(),
                     totalDuration, algorithmDuration, dbUpdateDuration);
 
+            // Invalidate recommendation caches after review completion
+            try {
+                recommendationCacheInvalidationService.onReviewCompleted(userId);
+            } catch (Exception cacheEx) {
+                log.warn("Failed to invalidate recommendation caches for user {}: {}", userId, cacheEx.getMessage());
+            }
+            
             // Publish domain event for review completion (AFTER_COMMIT invalidation will handle cache)
             try {
                 eventPublisher.publishEvent(new Events.ReviewEvent(
@@ -451,6 +460,18 @@ public class FSRSService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Failed to get all due problems: userId={}, limit={}, duration={}ms, error={}", 
                     userId, limit, duration, e.getMessage(), e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Get upcoming cards scheduled in the future (not yet due), excluding those reviewed today.
+     */
+    public List<FSRSCardMapper.ReviewQueueCard> getUpcomingCards(Long userId, int limit) {
+        try {
+            return fsrsCardMapper.findUpcomingCards(userId, LocalDateTime.now(), limit);
+        } catch (Exception e) {
+            log.warn("Failed to get upcoming cards for user {}, returning empty list: {}", userId, e.getMessage());
             return List.of();
         }
     }

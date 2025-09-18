@@ -82,8 +82,13 @@ public class HybridRankingService {
             
             scoredItems.add(hybridItem);
             
-            log.debug("Hybrid scoring for problem {}: LLM={:.3f}, FSRS={:.3f}, Sim={:.3f}, Pers={:.3f}, Final={:.3f}",
-                item.getProblemId(), llmScore, fsrsScore, similarityScore, personalizationScore, finalScore);
+            log.debug("Hybrid scoring for problem {}: LLM={}, FSRS={}, Sim={}, Pers={}, Final={}",
+                item.getProblemId(), 
+                String.format("%.3f", llmScore),
+                String.format("%.3f", fsrsScore),
+                String.format("%.3f", similarityScore),
+                String.format("%.3f", personalizationScore),
+                String.format("%.3f", finalScore));
         }
         
         // Sort by final score (descending)

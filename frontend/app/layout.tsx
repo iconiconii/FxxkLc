@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
+import { RecommendationProvider } from "@/lib/recommendation-context"
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 
@@ -33,7 +34,9 @@ export default function RootLayout({
         <QueryClientProvider client={queryClient}>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <AuthProvider>
-              {children}
+              <RecommendationProvider>
+                {children}
+              </RecommendationProvider>
             </AuthProvider>
           </ThemeProvider>
         </QueryClientProvider>

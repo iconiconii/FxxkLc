@@ -68,7 +68,7 @@ function ReviewProblemRow({
   const [showNotes, setShowNotes] = useState(false)
   
   // Get user notes for this problem
-  const { userNote, isLoading: isNotesLoading } = useNotes(problem.id)
+  const { userNote, isLoading: isNotesLoading } = useNotes(problem.id, showNotes)
 
   const handleComplete = () => {
     // Open the assessment modal instead of directly submitting
@@ -83,8 +83,18 @@ function ReviewProblemRow({
 
   // 计算到期时间显示
   const getDueDisplay = () => {
+    if (!problem.dueDate) {
+      return "暂无安排"
+    }
+    
     const dueDate = new Date(problem.dueDate)
     const now = new Date()
+    
+    // 检查日期是否有效
+    if (isNaN(dueDate.getTime())) {
+      return "日期无效"
+    }
+    
     const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     
     if (diffDays < 0) {
@@ -128,7 +138,7 @@ function ReviewProblemRow({
             {getDueDisplay()}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-            {problem.dueDate.split('T')[0]}
+            {problem.dueDate ? problem.dueDate.split('T')[0] : 'N/A'}
           </div>
         </td>
         <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
@@ -353,12 +363,23 @@ export default function ReviewPage() {
     )
   }
 
-  const allProblems = [
+  // 合并并去重（按 problemId）以避免重复 key 警告
+  const rawProblems = [
     ...reviewQueue?.newCards || [],
     ...reviewQueue?.learningCards || [],
     ...reviewQueue?.reviewCards || [],
     ...reviewQueue?.relearningCards || [],
   ].map(transformReviewCard)
+
+  // 先按优先级排序，再按 problemId 去重，保留优先级更高的一条
+  const seenIds = new Set<number>()
+  const allProblems = rawProblems
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .filter(p => {
+      if (seenIds.has(p.id)) return false
+      seenIds.add(p.id)
+      return true
+    })
 
   // 如果使用服务端分页，直接使用返回的数据
   let displayProblems = allProblems

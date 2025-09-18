@@ -86,15 +86,15 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
     @Insert("""
             INSERT INTO user_statistics (
                 user_id, total_problems, problems_mastered, problems_learning, 
-                problems_new, problems_relearning, total_reviews, correct_reviews,
+                problems_new, problems_relearning, total_reviews,
                 total_study_time_ms, current_streak_days, longest_streak_days,
-                last_review_date, overall_accuracy_rate, average_response_time_ms,
+                last_review_date, average_response_time_ms,
                 retention_rate, daily_review_target, preferred_review_time
             ) VALUES (
                 #{userId}, #{totalProblems}, #{problemsMastered}, #{problemsLearning},
-                #{problemsNew}, #{problemsRelearning}, #{totalReviews}, #{correctReviews},
+                #{problemsNew}, #{problemsRelearning}, #{totalReviews},
                 #{totalStudyTimeMs}, #{currentStreakDays}, #{longestStreakDays},
-                #{lastReviewDate}, #{overallAccuracyRate}, #{averageResponseTimeMs},
+                #{lastReviewDate}, #{averageResponseTimeMs},
                 #{retentionRate}, #{dailyReviewTarget}, #{preferredReviewTime}
             )
             ON DUPLICATE KEY UPDATE
@@ -104,12 +104,10 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
                 problems_new = VALUES(problems_new),
                 problems_relearning = VALUES(problems_relearning),
                 total_reviews = VALUES(total_reviews),
-                correct_reviews = VALUES(correct_reviews),
                 total_study_time_ms = VALUES(total_study_time_ms),
                 current_streak_days = VALUES(current_streak_days),
                 longest_streak_days = VALUES(longest_streak_days),
                 last_review_date = VALUES(last_review_date),
-                overall_accuracy_rate = VALUES(overall_accuracy_rate),
                 average_response_time_ms = VALUES(average_response_time_ms),
                 retention_rate = VALUES(retention_rate),
                 updated_at = CURRENT_TIMESTAMP
@@ -165,12 +163,10 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
                 problems_new,
                 problems_relearning,
                 total_reviews,
-                correct_reviews,
                 total_study_time_ms,
                 current_streak_days,
                 longest_streak_days,
                 last_review_date,
-                overall_accuracy_rate,
                 average_response_time_ms,
                 retention_rate,
                 daily_review_target,
@@ -191,8 +187,6 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
                 u.username,
                 u.avatar_url as avatarUrl,
                 us.total_reviews,
-                us.correct_reviews,
-                us.overall_accuracy_rate as accuracy,
                 us.current_streak_days as streak,
                 ROW_NUMBER() OVER (ORDER BY #{orderBy} DESC) as rank
             FROM users u
@@ -223,7 +217,7 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
                 COUNT(DISTINCT u.id) as totalUsers,
                 COUNT(DISTINCT CASE WHEN us.last_review_date >= CURDATE() - INTERVAL 7 DAY THEN u.id END) as weeklyActiveUsers,
                 COUNT(DISTINCT CASE WHEN us.current_streak_days > 0 THEN u.id END) as usersWithStreak,
-                AVG(COALESCE(us.overall_accuracy_rate, 0)) as averageAccuracy,
+                0.0 as averageAccuracy,
                 MAX(COALESCE(us.current_streak_days, 0)) as maxCurrentStreak,
                 MAX(COALESCE(us.longest_streak_days, 0)) as maxLongestStreak,
                 SUM(COALESCE(us.total_reviews, 0)) as totalReviews
@@ -272,10 +266,10 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
                 u.username,
                 u.avatar_url as avatarUrl,
                 us.total_reviews,
-                us.overall_accuracy_rate as currentAccuracy,
-                prev_stats.accuracy as previousAccuracy,
-                (us.overall_accuracy_rate - COALESCE(prev_stats.accuracy, 0)) as improvement,
-                ROW_NUMBER() OVER (ORDER BY (us.overall_accuracy_rate - COALESCE(prev_stats.accuracy, 0)) DESC) as rank
+                0.0 as currentAccuracy,
+                0.0 as previousAccuracy,
+                0.0 as improvement,
+                ROW_NUMBER() OVER (ORDER BY us.total_reviews DESC) as rank
             FROM users u
             INNER JOIN user_statistics us ON u.id = us.user_id
             LEFT JOIN (
@@ -289,7 +283,6 @@ public interface UserStatisticsMapper extends BaseMapper<UserStatistics> {
             WHERE u.is_active = true 
             AND u.deleted = 0
             AND us.total_reviews >= 50
-            AND prev_stats.accuracy IS NOT NULL
             ORDER BY improvement DESC
             LIMIT #{limit}
             """)

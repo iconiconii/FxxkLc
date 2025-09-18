@@ -18,6 +18,14 @@ public class RequestContext {
     private DifficultyPreference desiredDifficulty; // Desired difficulty level (EASY, MEDIUM, HARD)
     private Integer timeboxMinutes; // Optional time constraint for practice session
     private String promptVersion; // Prompt template version for A/B testing
+    
+    // Cache control
+    private boolean forceRefresh; // Skip cache and force fresh generation
+    
+    // Chain execution metadata for observability
+    private String chainId; // Selected chain ID
+    private List<String> chainHops; // List of provider hops in execution
+    private String fallbackReason; // Reason for fallback if applicable
 
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
@@ -45,5 +53,17 @@ public class RequestContext {
     public void setTimeboxMinutes(Integer timeboxMinutes) { this.timeboxMinutes = timeboxMinutes; }
     public String getPromptVersion() { return promptVersion; }
     public void setPromptVersion(String promptVersion) { this.promptVersion = promptVersion; }
+    
+    // Chain metadata getters and setters
+    public String getChainId() { return chainId; }
+    public void setChainId(String chainId) { this.chainId = chainId; }
+    public List<String> getChainHops() { return chainHops; }
+    public void setChainHops(List<String> chainHops) { this.chainHops = chainHops; }
+    public String getFallbackReason() { return fallbackReason; }
+    public void setFallbackReason(String fallbackReason) { this.fallbackReason = fallbackReason; }
+    
+    // Cache control getters and setters
+    public boolean isForceRefresh() { return forceRefresh; }
+    public void setForceRefresh(boolean forceRefresh) { this.forceRefresh = forceRefresh; }
 }
 
