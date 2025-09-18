@@ -1,0 +1,71 @@
+package com.codetop.recommendation.monitoring;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuator.health.Health;
+import org.springframework.boot.actuator.health.HealthIndicator;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Simple health monitor for LLM recommendations - MVP implementation
+ * 
+ * Tracks only essential metrics for basic monitoring:
+ * - Request success/failure counts
+ * - Basic response time tracking
+ * - Simple health status
+ * 
+ * Exposes via Spring Boot Actuator /actuator/health endpoint
+ */
+@Component
+@Slf4j
+public class SimpleHealthMonitor implements HealthIndicator {
+
+    private final AtomicLong totalRequests = new AtomicLong(0);
+    private final AtomicLong successfulRequests = new AtomicLong(0);
+    private final AtomicLong failedRequests = new AtomicLong(0);
+    private final AtomicLong lastResponseTime = new AtomicLong(0);
+    private volatile boolean systemHealthy = true;
+    private volatile String lastError = null;
+
+    public void recordSuccess(long responseTimeMs) {
+        totalRequests.incrementAndGet();
+        successfulRequests.incrementAndGet();
+        lastResponseTime.set(responseTimeMs);
+        systemHealthy = true;
+        lastError = null;
+    }
+
+    public void recordFailure(String error) {
+        totalRequests.incrementAndGet();
+        failedRequests.incrementAndGet();
+        systemHealthy = false;
+        lastError = error;
+        log.warn("LLM recommendation failure: {}", error);
+    }
+
+    @Override
+    public Health health() {
+        long total = totalRequests.get();
+        long successful = successfulRequests.get();
+        long failed = failedRequests.get();
+        
+        double successRate = total > 0 ? (double) successful / total : 0.0;
+        
+        if (systemHealthy && successRate > 0.8) {
+            return Health.up()
+                .withDetail("total_requests", total)
+                .withDetail("success_rate", String.format("%.2f", successRate))
+                .withDetail("last_response_time_ms", lastResponseTime.get())
+                .build();
+        } else {
+            return Health.down()
+                .withDetail("total_requests", total)
+                .withDetail("failed_requests", failed)
+                .withDetail("success_rate", String.format("%.2f", successRate))
+                .withDetail("last_error", lastError)
+                .build();
+        }
+    }
+}

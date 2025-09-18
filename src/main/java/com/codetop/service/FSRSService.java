@@ -20,6 +20,7 @@ import com.codetop.service.cache.CacheService;
 import org.springframework.context.ApplicationEventPublisher;
 import com.codetop.event.Events;
 import com.codetop.util.CacheHelper;
+import com.codetop.recommendation.service.RecommendationCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -62,6 +63,7 @@ public class FSRSService {
     private final CacheService cacheService;
     private final CacheHelper cacheHelper;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecommendationCacheInvalidationService recommendationCacheInvalidationService;
     
     // 缓存相关常量
     private static final String CACHE_PREFIX_FSRS_QUEUE = "fsrs-queue";
@@ -149,7 +151,7 @@ public class FSRSService {
         TraceContext.setUserId(userId);
         
         long startTime = System.currentTimeMillis();
-        log.info("Processing FSRS review: userId={}, problemId={}, rating={}, reviewType={}", 
+        log.debug("Processing FSRS review: userId={}, problemId={}, rating={}, reviewType={}", 
                 userId, problemId, rating, reviewType);
 
         try {
@@ -238,20 +240,20 @@ public class FSRSService {
             log.info("Review log inserted successfully: userId={}, problemId={}, cardId={}", userId, problemId, card.getId());
 
             // Update user parameters review count
-            log.info("Starting to update review count: userId={}", userId);
+            log.debug("Starting to update review count: userId={}", userId);
             try {
                 userParametersService.updateReviewCount(userId, 1);
-                log.info("Review count updated successfully: userId={}", userId);
+                log.debug("Review count updated successfully: userId={}", userId);
             } catch (Exception e) {
                 log.error("Failed to update review count: userId={}, error={}", userId, e.getMessage(), e);
                 throw e;
             }
 
             // Clear cache for user's review queue
-            log.info("Starting to clear review queue cache: userId={}", userId);
+            log.debug("Starting to clear review queue cache: userId={}", userId);
             try {
                 clearUserReviewQueueCache(userId);
-                log.info("Review queue cache cleared successfully: userId={}", userId);
+                log.debug("Review queue cache cleared successfully: userId={}", userId);
             } catch (Exception e) {
                 log.error("Failed to clear review queue cache: userId={}, error={}", userId, e.getMessage(), e);
                 throw e;
@@ -260,13 +262,20 @@ public class FSRSService {
             long totalDuration = System.currentTimeMillis() - startTime;
             
             // Business metrics logging
-            log.info("FSRS review completed successfully: userId={}, problemId={}, cardId={}, " +
+            log.debug("FSRS review completed successfully: userId={}, problemId={}, cardId={}, " +
                     "rating={}, reviewType={}, oldState={}, newState={}, isLapse={}, " +
                     "nextReview={}, intervalDays={}, totalDuration={}ms, algorithmDuration={}ms, dbDuration={}ms", 
                     userId, problemId, card.getId(), rating, reviewType, oldState, 
                     result.getNewState(), isLapse, result.getNextReviewTime(), result.getIntervalDays(),
                     totalDuration, algorithmDuration, dbUpdateDuration);
 
+            // Invalidate recommendation caches after review completion
+            try {
+                recommendationCacheInvalidationService.onReviewCompleted(userId);
+            } catch (Exception cacheEx) {
+                log.warn("Failed to invalidate recommendation caches for user {}: {}", userId, cacheEx.getMessage());
+            }
+            
             // Publish domain event for review completion (AFTER_COMMIT invalidation will handle cache)
             try {
                 eventPublisher.publishEvent(new Events.ReviewEvent(
@@ -328,7 +337,7 @@ public class FSRSService {
                 TraceContext.setUserId(userId);
                 
                 long startTime = System.currentTimeMillis();
-                log.info("Cache MISS - Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
+                log.debug("Cache MISS - Generating FSRS review queue: userId={}, requestedLimit={}", userId, limit);
                 
                 try {
                     LocalDateTime now = LocalDateTime.now();
@@ -370,7 +379,7 @@ public class FSRSService {
                     long totalDuration = System.currentTimeMillis() - startTime;
                     
                     // Business metrics logging
-                    log.info("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
+                    log.debug("Review queue generated successfully: userId={}, requestedLimit={}, actualCards={}, " +
                             "totalDuration={}ms, dbDuration={}ms, cacheHit={}", 
                             userId, limit, actualCardCount, totalDuration, dbDuration, false);
                     
@@ -451,6 +460,18 @@ public class FSRSService {
             long duration = System.currentTimeMillis() - startTime;
             log.error("Failed to get all due problems: userId={}, limit={}, duration={}ms, error={}", 
                     userId, limit, duration, e.getMessage(), e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Get upcoming cards scheduled in the future (not yet due), excluding those reviewed today.
+     */
+    public List<FSRSCardMapper.ReviewQueueCard> getUpcomingCards(Long userId, int limit) {
+        try {
+            return fsrsCardMapper.findUpcomingCards(userId, LocalDateTime.now(), limit);
+        } catch (Exception e) {
+            log.warn("Failed to get upcoming cards for user {}, returning empty list: {}", userId, e.getMessage());
             return List.of();
         }
     }

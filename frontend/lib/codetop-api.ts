@@ -19,6 +19,7 @@ export interface ProblemRankingDTO {
   lastConsideredDate?: string        // Next review date for FSRS
   attemptCount?: number              // Number of times user attempted this problem
   accuracy?: number                  // User's accuracy rate for this problem
+  masteryScore?: number              // FSRS-estimated mastery score (0-100)
   
   // Frequency statistics
   frequencyScore: number

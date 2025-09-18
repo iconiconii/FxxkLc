@@ -49,6 +49,11 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
     @Select("SELECT * FROM fsrs_cards WHERE user_id = #{userId} AND state = #{state} ORDER BY next_review_at ASC")
     List<FSRSCard> findByUserIdAndState(@Param("userId") Long userId, @Param("state") String state);
     
+    /**
+     * Find cards by user ID and problem IDs (delegated to XML mapper for dynamic SQL).
+     */
+    List<FSRSCard> findByUserIdAndProblemIds(@Param("userId") Long userId, @Param("problemIds") List<Long> problemIds);
+    
     // Review queue generation queries
     
     /**
@@ -186,6 +191,9 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
 
     /**
      * Get all problems that need review today or are overdue, excluding those reviewed today.
+     * This intentionally EXCLUDES future-scheduled LEARNING/RELEARNING cards to avoid overlap
+     * with the upcoming list. Only LEARNING/RELEARNING with next_review_at <= now (or NULL)
+     * are included here.
      * Ordered by next review time ascending to prioritize urgent reviews.
      */
     @Select("""
@@ -209,7 +217,7 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
             AND today_reviews.card_id IS NULL
             AND (
                 fc.state = 'NEW' OR 
-                fc.state IN ('LEARNING', 'RELEARNING') OR
+                (fc.state IN ('LEARNING', 'RELEARNING') AND (fc.next_review_at IS NULL OR fc.next_review_at <= #{now})) OR
                 (fc.state = 'REVIEW' AND fc.next_review_at <= #{now})
             )
             ORDER BY 
@@ -218,6 +226,35 @@ public interface FSRSCardMapper extends BaseMapper<FSRSCard> {
             LIMIT #{limit}
             """)
     List<ReviewQueueCard> getAllDueProblems(@Param("userId") Long userId,
+                                           @Param("now") LocalDateTime now,
+                                           @Param("limit") int limit);
+
+    /**
+     * Find upcoming cards (scheduled in the future), excluding those reviewed today.
+     * Includes LEARNING, RELEARNING and REVIEW states with next_review_at > now.
+     * Ordered by next review time ascending.
+     */
+    @Select("""
+            SELECT fc.*, p.title as problem_title, p.difficulty as problem_difficulty, 4 as priority
+            FROM fsrs_cards fc
+            INNER JOIN problems p ON fc.problem_id = p.id
+            LEFT JOIN (
+                SELECT DISTINCT card_id 
+                FROM review_logs 
+                WHERE user_id = #{userId} 
+                AND DATE(reviewed_at) = CURDATE()
+            ) today_reviews ON fc.id = today_reviews.card_id
+            WHERE fc.user_id = #{userId}
+            AND p.deleted = 0
+            AND today_reviews.card_id IS NULL
+            AND (
+                (fc.state IN ('LEARNING', 'RELEARNING') AND fc.next_review_at > #{now}) OR
+                (fc.state = 'REVIEW' AND fc.next_review_at > #{now})
+            )
+            ORDER BY fc.next_review_at ASC
+            LIMIT #{limit}
+            """)
+    List<ReviewQueueCard> findUpcomingCards(@Param("userId") Long userId,
                                            @Param("now") LocalDateTime now,
                                            @Param("limit") int limit);
     

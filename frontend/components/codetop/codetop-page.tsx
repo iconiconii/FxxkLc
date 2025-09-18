@@ -9,11 +9,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import AIBadge from "@/components/recommendation/AIBadge"
 import ProblemAssessmentModal from "@/components/modals/problem-assessment-modal"
 import { filterApi, type Company, type Department, type Position } from "@/lib/filter-api"
 import { problemsApi, type EnhancedSearchRequest } from "@/lib/problems-api"
 import { codeTopApi, type ProblemRankingDTO, type OliverFilterRequest, type OliverFilterResponse } from "@/lib/codetop-api"
 import { useAuth } from "@/lib/auth-context"
+import { useRecommendationsPrefetch } from "@/hooks/useRecommendationsPrefetch"
 
 interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
   difficulty: "easy" | "medium" | "hard"
@@ -39,6 +41,12 @@ export default function OliverPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedProblem, setSelectedProblem] = useState<DisplayProblem | null>(null)
+  
+  // Prefetch recommendations for badge display
+  useRecommendationsPrefetch({ 
+    enabled: isAuthenticated && !authLoading,
+    limit: 20 // More problems visible in table view
+  })
   
   // Advanced filters state
   const [difficultyFilters, setDifficultyFilters] = useState<string[]>([])
@@ -973,14 +981,17 @@ export default function OliverPage() {
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">
                       <div className="font-medium text-gray-900 dark:text-gray-100">
-                        <a 
-                          href={problem.problemUrl || `https://leetcode.cn/problems/problem-${problem.problemId}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                        >
-                          {problem.problemId}. {problem.title}
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <a 
+                            href={problem.problemUrl || `https://leetcode.cn/problems/problem-${problem.problemId}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                          >
+                            {problem.problemId}. {problem.title}
+                          </a>
+                          <AIBadge problemId={problem.problemId} size="sm" />
+                        </div>
                       </div>
                     </div>
                   </td>

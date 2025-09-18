@@ -173,6 +173,54 @@ public interface ProblemCategoryMapper extends BaseMapper<ProblemCategory> {
             """)
     int batchUpdateRelevanceScores(@Param("updates") List<RelevanceScoreUpdate> updates);
 
+    /**
+     * Get categories by names (for domain mapping lookup).
+     */
+    @Select("""
+            SELECT id, name, display_name
+            FROM categories 
+            WHERE name IN 
+            <foreach collection="categoryNames" item="categoryName" open="(" separator="," close=")">
+                #{categoryName}
+            </foreach>
+            AND deleted = 0
+            """)
+    @Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "name", property = "name"),
+        @Result(column = "display_name", property = "displayName")
+    })
+    List<CategoryBasic> findCategoriesByNames(@Param("categoryNames") List<String> categoryNames);
+
+    /**
+     * Get all categories with name to ID mapping.
+     */
+    @Select("SELECT id, name FROM categories WHERE deleted = 0")
+    @Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "name", property = "name")
+    })
+    List<CategoryNameId> findAllCategoryNameIds();
+
+    /**
+     * Batch query existing problem-category associations.
+     */
+    @Select("""
+            <script>
+            SELECT problem_id, category_id
+            FROM problem_categories 
+            WHERE problem_id IN 
+            <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
+                #{problemId}
+            </foreach>
+            </script>
+            """)
+    @Results({
+        @Result(column = "problem_id", property = "problemId"),
+        @Result(column = "category_id", property = "categoryId")
+    })
+    List<ProblemCategoryAssociation> findExistingAssociationsByProblemIds(@Param("problemIds") List<Long> problemIds);
+
     // Helper classes for complex query results
 
     /**
@@ -287,5 +335,50 @@ public interface ProblemCategoryMapper extends BaseMapper<ProblemCategory> {
         public void setCategoryId(Long categoryId) { this.categoryId = categoryId; }
         public Double getRelevanceScore() { return relevanceScore; }
         public void setRelevanceScore(Double relevanceScore) { this.relevanceScore = relevanceScore; }
+    }
+
+    /**
+     * Basic category info for domain mapping.
+     */
+    class CategoryBasic {
+        private Long id;
+        private String name;
+        private String displayName;
+        
+        // Getters and setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getDisplayName() { return displayName; }
+        public void setDisplayName(String displayName) { this.displayName = displayName; }
+    }
+
+    /**
+     * Category name to ID mapping.
+     */
+    class CategoryNameId {
+        private Long id;
+        private String name;
+        
+        // Getters and setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+    }
+
+    /**
+     * Problem-category association for batch queries.
+     */
+    class ProblemCategoryAssociation {
+        private Long problemId;
+        private Long categoryId;
+        
+        // Getters and setters
+        public Long getProblemId() { return problemId; }
+        public void setProblemId(Long problemId) { this.problemId = problemId; }
+        public Long getCategoryId() { return categoryId; }
+        public void setCategoryId(Long categoryId) { this.categoryId = categoryId; }
     }
 }

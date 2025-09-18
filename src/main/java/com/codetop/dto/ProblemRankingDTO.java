@@ -37,7 +37,7 @@ public class ProblemRankingDTO {
     private LocalDateTime lastAttemptDate;      // Last time user attempted this problem
     private LocalDateTime lastConsideredDate;  // Next review date for FSRS
     private Integer attemptCount;               // Number of times user attempted this problem
-    private Double accuracy;                    // User's accuracy rate for this problem
+    private Double masteryScore;                // FSRS-estimated mastery score (0-100)
 
     // Frequency statistics
     private BigDecimal frequencyScore;
@@ -92,7 +92,7 @@ public class ProblemRankingDTO {
             @JsonProperty("lastAttemptDate") LocalDateTime lastAttemptDate,
             @JsonProperty("lastConsideredDate") LocalDateTime lastConsideredDate,
             @JsonProperty("attemptCount") Integer attemptCount,
-            @JsonProperty("accuracy") Double accuracy,
+            @JsonProperty("masteryScore") Double masteryScore,
             @JsonProperty("frequencyScore") BigDecimal frequencyScore,
             @JsonProperty("interviewCount") Integer interviewCount,
             @JsonProperty("frequencyRank") Integer frequencyRank,
@@ -130,7 +130,7 @@ public class ProblemRankingDTO {
         this.lastAttemptDate = lastAttemptDate;
         this.lastConsideredDate = lastConsideredDate;
         this.attemptCount = attemptCount;
-        this.accuracy = accuracy;
+        this.masteryScore = masteryScore;
         this.frequencyScore = frequencyScore;
         this.interviewCount = interviewCount;
         this.frequencyRank = frequencyRank;

@@ -78,7 +78,7 @@ export default defineConfig({
   // },
 
   /* Global setup and teardown */
-  globalSetup: './tests/e2e/global-setup.ts',
+  // globalSetup: './tests/e2e/global-setup.ts', // Temporarily disabled
   
   /* Test timeout */
   timeout: 30 * 1000,

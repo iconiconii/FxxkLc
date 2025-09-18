@@ -135,4 +135,9 @@ export class AuthHelper {
       await this.login();
     }
   }
+
+  async loginWithValidCredentials() {
+    // Alias for login method to match test expectations
+    await this.login();
+  }
 }

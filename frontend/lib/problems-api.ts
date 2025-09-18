@@ -59,7 +59,7 @@ export interface UserProblemStatus {
   lastAttemptDate?: string
   lastConsideredDate?: string
   attemptCount: number
-  accuracy?: number
+  masteryScore?: number
   notes?: string
 }
 

@@ -1,0 +1,376 @@
+package com.codetop.recommendation.monitoring;
+
+import com.codetop.recommendation.metrics.LlmMetricsCollector;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuator.health.Health;
+import org.springframework.boot.actuator.health.HealthIndicator;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.DoubleAdder;
+
+/**
+ * Prometheus metrics exporter for LLM Recommendation System
+ * 
+ * Exports comprehensive metrics for monitoring and alerting:
+ * - Request rates and response times
+ * - Error rates and failure patterns
+ * - Cache hit ratios and performance
+ * - LLM provider usage and costs
+ * - Fallback activation rates
+ * - System resource utilization
+ * 
+ * Integrates with Spring Boot Actuator and Micrometer for:
+ * - /actuator/prometheus endpoint exposure
+ * - Grafana dashboard integration
+ * - Alert manager rule evaluation
+ * - Custom business metrics
+ * 
+ * Key metrics exported:
+ * - llm_recommendations_requests_total
+ * - llm_recommendations_response_time
+ * - llm_recommendations_errors_total  
+ * - llm_recommendations_cache_hits
+ * - llm_recommendations_cost_usd
+ * - llm_recommendations_fallback_activations
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class LlmMetricsExporter implements HealthIndicator {
+
+    private final MeterRegistry meterRegistry;
+    private final LlmMetricsCollector metricsCollector;
+    
+    // Request metrics
+    private Counter requestsTotal;
+    private Counter errorsTotal;
+    private Timer responseTime;
+    
+    // Business metrics
+    private Counter cacheHitsTotal;
+    private Counter cacheMissesTotal;
+    private Gauge currentCacheHitRatio;
+    private Counter fallbackActivationsTotal;
+    private Gauge costUsdTotal;
+    
+    // Provider-specific metrics
+    private final Map<String, Counter> providerRequestCounts = new ConcurrentHashMap<>();
+    private final Map<String, Counter> providerErrorCounts = new ConcurrentHashMap<>();
+    private final Map<String, Timer> providerResponseTimes = new ConcurrentHashMap<>();
+    
+    // Internal tracking
+    private final AtomicLong totalRequests = new AtomicLong(0);
+    private final AtomicLong totalCacheHits = new AtomicLong(0);
+    private final AtomicLong totalCacheMisses = new AtomicLong(0);
+    private final DoubleAdder totalCostUsd = new DoubleAdder();
+    
+    // Health monitoring
+    private volatile boolean systemHealthy = true;
+    private volatile String lastErrorMessage = null;
+    private volatile long lastErrorTimestamp = 0;
+
+    @PostConstruct
+    public void initializeMetrics() {
+        log.info("Initializing LLM Recommendation metrics for Prometheus export");
+        
+        // Core request metrics
+        requestsTotal = Counter.builder("llm_recommendations_requests_total")
+                .description("Total number of recommendation requests")
+                .tag("endpoint", "ai_recommendations")
+                .register(meterRegistry);
+                
+        errorsTotal = Counter.builder("llm_recommendations_errors_total")
+                .description("Total number of recommendation errors")
+                .tag("endpoint", "ai_recommendations")
+                .register(meterRegistry);
+                
+        responseTime = Timer.builder("llm_recommendations_response_time")
+                .description("Response time for recommendation requests")
+                .tag("endpoint", "ai_recommendations")
+                .register(meterRegistry);
+        
+        // Cache metrics
+        cacheHitsTotal = Counter.builder("llm_recommendations_cache_hits_total")
+                .description("Total cache hits for recommendations")
+                .register(meterRegistry);
+                
+        cacheMissesTotal = Counter.builder("llm_recommendations_cache_misses_total")
+                .description("Total cache misses for recommendations")
+                .register(meterRegistry);
+                
+        currentCacheHitRatio = Gauge.builder("llm_recommendations_cache_hit_ratio")
+                .description("Current cache hit ratio (0.0 to 1.0)")
+                .register(meterRegistry, this, LlmMetricsExporter::getCurrentCacheHitRatio);
+        
+        // Business metrics
+        fallbackActivationsTotal = Counter.builder("llm_recommendations_fallback_activations_total")
+                .description("Total fallback activations due to LLM failures")
+                .register(meterRegistry);
+                
+        costUsdTotal = Gauge.builder("llm_recommendations_cost_usd_total")
+                .description("Total cost in USD for LLM API calls")
+                .register(meterRegistry, this, LlmMetricsExporter::getTotalCostUsd);
+        
+        // Provider-specific metrics initialization
+        initializeProviderMetrics("openai");
+        initializeProviderMetrics("deepseek");
+        initializeProviderMetrics("fallback");
+        
+        log.info("LLM Recommendation metrics initialized successfully");
+    }
+    
+    private void initializeProviderMetrics(String provider) {
+        providerRequestCounts.put(provider,
+            Counter.builder("llm_recommendations_provider_requests_total")
+                .description("Total requests per LLM provider")
+                .tag("provider", provider)
+                .register(meterRegistry));
+                
+        providerErrorCounts.put(provider,
+            Counter.builder("llm_recommendations_provider_errors_total")
+                .description("Total errors per LLM provider")
+                .tag("provider", provider)
+                .register(meterRegistry));
+                
+        providerResponseTimes.put(provider,
+            Timer.builder("llm_recommendations_provider_response_time")
+                .description("Response time per LLM provider")
+                .tag("provider", provider)
+                .register(meterRegistry));
+    }
+
+    /**
+     * Record successful recommendation request
+     */
+    public void recordRequest(String provider, Duration responseTime, boolean cacheHit, double costUsd) {
+        try {
+            // Core metrics
+            requestsTotal.increment();
+            this.responseTime.record(responseTime);
+            totalRequests.incrementAndGet();
+            
+            // Cache metrics
+            if (cacheHit) {
+                cacheHitsTotal.increment();
+                totalCacheHits.incrementAndGet();
+            } else {
+                cacheMissesTotal.increment();
+                totalCacheMisses.incrementAndGet();
+            }
+            
+            // Cost tracking
+            if (costUsd > 0) {
+                totalCostUsd.add(costUsd);
+            }
+            
+            // Provider-specific metrics
+            Counter providerCounter = providerRequestCounts.get(provider);
+            if (providerCounter != null) {
+                providerCounter.increment();
+            }
+            
+            Timer providerTimer = providerResponseTimes.get(provider);
+            if (providerTimer != null) {
+                providerTimer.record(responseTime);
+            }
+            
+            systemHealthy = true;
+            lastErrorMessage = null;
+            
+        } catch (Exception e) {
+            log.error("Error recording request metrics", e);
+            recordInternalError("metrics_recording_error", e.getMessage());
+        }
+    }
+
+    /**
+     * Record error in recommendation request
+     */
+    public void recordError(String provider, String errorType, String errorMessage) {
+        try {
+            // Core error metrics
+            errorsTotal.increment();
+            
+            // Provider-specific error metrics
+            Counter providerErrorCounter = providerErrorCounts.get(provider);
+            if (providerErrorCounter != null) {
+                providerErrorCounter.increment();
+            }
+            
+            // Health status
+            systemHealthy = false;
+            lastErrorMessage = errorMessage;
+            lastErrorTimestamp = System.currentTimeMillis();
+            
+            log.warn("Recorded error metric: provider={}, type={}, message={}", 
+                provider, errorType, errorMessage);
+                
+        } catch (Exception e) {
+            log.error("Error recording error metrics", e);
+        }
+    }
+
+    /**
+     * Record fallback activation
+     */
+    public void recordFallbackActivation(String reason) {
+        try {
+            fallbackActivationsTotal.increment();
+            
+            // Add custom gauge for recent fallback rate
+            Gauge.builder("llm_recommendations_fallback_rate_recent")
+                .description("Recent fallback activation rate")
+                .tag("reason", reason)
+                .register(meterRegistry, this, LlmMetricsExporter::getRecentFallbackRate);
+                
+            log.info("Recorded fallback activation: reason={}", reason);
+            
+        } catch (Exception e) {
+            log.error("Error recording fallback metrics", e);
+            recordInternalError("fallback_metrics_error", e.getMessage());
+        }
+    }
+
+    /**
+     * Get current cache hit ratio
+     */
+    private double getCurrentCacheHitRatio() {
+        long hits = totalCacheHits.get();
+        long misses = totalCacheMisses.get();
+        long total = hits + misses;
+        
+        return total > 0 ? (double) hits / total : 0.0;
+    }
+
+    /**
+     * Get total cost in USD
+     */
+    private double getTotalCostUsd() {
+        return totalCostUsd.sum();
+    }
+
+    /**
+     * Get recent fallback rate (last 5 minutes)
+     */
+    private double getRecentFallbackRate() {
+        // This would typically be calculated from time-windowed data
+        // For now, return a simple ratio
+        long totalReqs = totalRequests.get();
+        double fallbackCount = fallbackActivationsTotal.count();
+        
+        return totalReqs > 0 ? fallbackCount / totalReqs : 0.0;
+    }
+
+    /**
+     * Record internal monitoring system errors
+     */
+    private void recordInternalError(String errorType, String message) {
+        try {
+            Counter.builder("llm_recommendations_monitoring_errors_total")
+                .description("Internal monitoring system errors")
+                .tag("error_type", errorType)
+                .register(meterRegistry)
+                .increment();
+                
+        } catch (Exception e) {
+            log.error("Failed to record internal error metric", e);
+        }
+    }
+
+    /**
+     * Periodic health check and metric validation
+     */
+    @Scheduled(fixedRate = 60000) // Every minute
+    public void performHealthCheck() {
+        try {
+            // Validate metric consistency
+            long totalRequests = this.totalRequests.get();
+            long totalCacheOperations = totalCacheHits.get() + totalCacheMisses.get();
+            
+            if (totalRequests > 0 && totalCacheOperations == 0) {
+                log.warn("Inconsistent metrics: {} requests but no cache operations", totalRequests);
+                systemHealthy = false;
+                lastErrorMessage = "Inconsistent cache metrics";
+                lastErrorTimestamp = System.currentTimeMillis();
+            }
+            
+            // Check for metric staleness (no requests in last 10 minutes during business hours)
+            long timeSinceLastError = System.currentTimeMillis() - lastErrorTimestamp;
+            if (timeSinceLastError > Duration.ofMinutes(10).toMillis()) {
+                systemHealthy = true;
+                lastErrorMessage = null;
+            }
+            
+            // Log periodic summary
+            if (totalRequests > 0 && totalRequests % 1000 == 0) {
+                double cacheHitRatio = getCurrentCacheHitRatio();
+                double totalCost = getTotalCostUsd();
+                
+                log.info("Metrics summary: requests={}, cache_hit_ratio={:.2f}, total_cost_usd={:.4f}", 
+                    totalRequests, cacheHitRatio, totalCost);
+            }
+            
+        } catch (Exception e) {
+            log.error("Error during health check", e);
+            systemHealthy = false;
+            lastErrorMessage = "Health check failed: " + e.getMessage();
+            lastErrorTimestamp = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Spring Boot Actuator health indicator
+     */
+    @Override
+    public Health health() {
+        try {
+            if (systemHealthy) {
+                return Health.up()
+                    .withDetail("total_requests", totalRequests.get())
+                    .withDetail("cache_hit_ratio", String.format("%.2f", getCurrentCacheHitRatio()))
+                    .withDetail("total_cost_usd", String.format("%.4f", getTotalCostUsd()))
+                    .withDetail("last_check", System.currentTimeMillis())
+                    .build();
+            } else {
+                return Health.down()
+                    .withDetail("error_message", lastErrorMessage)
+                    .withDetail("error_timestamp", lastErrorTimestamp)
+                    .withDetail("total_requests", totalRequests.get())
+                    .build();
+            }
+        } catch (Exception e) {
+            return Health.down()
+                .withDetail("health_check_error", e.getMessage())
+                .build();
+        }
+    }
+
+    /**
+     * Get current metrics summary for debugging
+     */
+    public Map<String, Object> getMetricsSummary() {
+        Map<String, Object> summary = new ConcurrentHashMap<>();
+        
+        summary.put("total_requests", totalRequests.get());
+        summary.put("total_cache_hits", totalCacheHits.get());
+        summary.put("total_cache_misses", totalCacheMisses.get());
+        summary.put("cache_hit_ratio", getCurrentCacheHitRatio());
+        summary.put("total_cost_usd", getTotalCostUsd());
+        summary.put("fallback_activations", fallbackActivationsTotal.count());
+        summary.put("system_healthy", systemHealthy);
+        summary.put("last_error_message", lastErrorMessage);
+        
+        return summary;
+    }
+}

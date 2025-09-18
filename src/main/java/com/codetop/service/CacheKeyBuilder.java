@@ -136,11 +136,6 @@ public class CacheKeyBuilder {
         return buildKey("leaderboard", "monthly", "limit" + PARAM_DELIMITER + limit);
     }
     
-    public static String leaderboardAccuracy(Integer limit, Integer days) {
-        return buildKey("leaderboard", "accuracy", 
-                "limit" + PARAM_DELIMITER + limit,
-                "days" + PARAM_DELIMITER + days);
-    }
     
     public static String leaderboardStreak(Integer limit) {
         return buildKey("leaderboard", "streak", "limit" + PARAM_DELIMITER + limit);

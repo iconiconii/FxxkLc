@@ -300,7 +300,7 @@ public class UserParametersService {
         // 2. Use gradient descent or other optimization algorithms
         // 3. Validate against a holdout set
         
-        log.info("Performing optimization with {} review records", reviewHistory.size());
+        log.debug("Performing optimization with {} review records", reviewHistory.size());
         
         // Simulate optimization result
         double[] optimizedWeights = currentParams.getParameterArray();

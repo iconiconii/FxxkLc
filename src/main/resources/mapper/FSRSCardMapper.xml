@@ -5,4 +5,41 @@
     <!-- This mapper file is kept for future complex queries that might need XML configuration -->
     <!-- Current simple queries are defined using annotations in the mapper interface -->
 
+    <!-- Result Map for FSRSCard -->
+    <resultMap id="FSRSCardResultMap" type="com.codetop.entity.FSRSCard">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="problem_id" property="problemId"/>
+        <result column="state" property="state"/>
+        <result column="difficulty" property="difficulty"/>
+        <result column="stability" property="stability"/>
+        <result column="review_count" property="reviewCount"/>
+        <result column="lapses" property="lapses"/>
+        <result column="last_review_at" property="lastReview"/>
+        <result column="next_review_at" property="nextReview"/>
+        <result column="interval_days" property="intervalDays"/>
+        <result column="ease_factor" property="easeFactor"/>
+        <result column="elapsed_days" property="elapsedDays"/>
+        <result column="scheduled_days" property="scheduledDays"/>
+        <result column="reps" property="reps"/>
+        <result column="grade" property="grade"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <!-- Find cards by user ID and problem IDs with dynamic SQL -->
+    <select id="findByUserIdAndProblemIds" resultMap="FSRSCardResultMap">
+        SELECT id, user_id, problem_id, state, difficulty, stability, review_count, lapses,
+               last_review_at, next_review_at, interval_days, ease_factor, elapsed_days, 
+               scheduled_days, reps, grade, created_at, updated_at
+        FROM fsrs_cards 
+        WHERE user_id = #{userId}
+        <if test="problemIds != null and problemIds.size() > 0">
+            AND problem_id IN
+            <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
+                #{problemId}
+            </foreach>
+        </if>
+    </select>
+
 </mapper>

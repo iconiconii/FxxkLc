@@ -23,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,8 +57,26 @@ public class ReviewController {
         
         if (showAll) {
             // Show all due problems without mixed card type optimization
-            List<FSRSCardMapper.ReviewQueueCard> cards = fsrsService.getAllDueProblems(
-                    userPrincipal.getId(), Math.min(limit, 200));
+            int cappedLimit = Math.min(limit, 200);
+            List<FSRSCardMapper.ReviewQueueCard> dueCards = fsrsService.getAllDueProblems(
+                    userPrincipal.getId(), cappedLimit);
+
+            // If not enough due/overdue cards to fill the limit, include upcoming (future scheduled) cards
+            java.util.List<FSRSCardMapper.ReviewQueueCard> cards = new java.util.ArrayList<>(dueCards);
+            int remaining = cappedLimit - cards.size();
+            if (remaining > 0) {
+                List<FSRSCardMapper.ReviewQueueCard> upcoming = fsrsService.getUpcomingCards(userPrincipal.getId(), remaining);
+                cards.addAll(upcoming);
+            }
+
+            // Defensive de-duplication by problemId to avoid any overlap from data anomalies
+            java.util.LinkedHashMap<Long, FSRSCardMapper.ReviewQueueCard> dedup = new java.util.LinkedHashMap<>();
+            for (FSRSCardMapper.ReviewQueueCard c : cards) {
+                if (!dedup.containsKey(c.getProblemId())) {
+                    dedup.put(c.getProblemId(), c);
+                }
+            }
+            cards = new java.util.ArrayList<>(dedup.values());
             
             // Convert to VO format
             List<ReviewQueueCardVO> cardVOs = cards.stream()
@@ -91,7 +110,16 @@ public class ReviewController {
             
             com.codetop.dto.FSRSReviewQueueDTO queue = fsrsService.generateReviewQueue(
                     userPrincipal.getId(), actualLimit);
-            FSRSReviewQueueVO response = convertReviewQueueToVO(queue);
+            
+            // Update the queue with filtered cards
+            com.codetop.dto.FSRSReviewQueueDTO filteredQueue = com.codetop.dto.FSRSReviewQueueDTO.builder()
+                    .cards(queue.getCards())
+                    .totalCount(queue.getCards().size())
+                    .stats(queue.getStats())
+                    .generatedAt(queue.getGeneratedAt())
+                    .build();
+            
+            FSRSReviewQueueVO response = convertReviewQueueToVO(filteredQueue);
             
             // 如果请求指定了分页参数且不是第一页或者pageSize不等于limit，则进行客户端分页处理
             if (page > 1 || pageSize < actualLimit) {
@@ -294,13 +322,21 @@ public class ReviewController {
      * Convert ReviewQueueCard to simplified VO.
      */
     private ReviewQueueCardVO convertToCardVO(FSRSCardMapper.ReviewQueueCard card) {
+        // Ensure dueDate is populated from nextReview if present
+        LocalDate dueDate = null;
+        if (card.getNextReview() != null) {
+            dueDate = card.getNextReview().toLocalDate();
+        } else if (card.getDueDate() != null) {
+            dueDate = card.getDueDate();
+        }
+
         return ReviewQueueCardVO.builder()
                 .id(card.getId())
                 .problemId(card.getProblemId())
                 .problemTitle(card.getProblemTitle())
                 .problemDifficulty(card.getProblemDifficulty())
                 .state(card.getState().name())
-                .dueDate(card.getDueDate())
+                .dueDate(dueDate)
                 .intervalDays(card.getIntervalDays())
                 .priority(card.getPriority())
                 .difficulty(card.getDifficulty() != null ? card.getDifficulty().doubleValue() : 0.0)

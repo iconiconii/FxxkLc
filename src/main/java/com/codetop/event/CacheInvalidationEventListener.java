@@ -107,7 +107,7 @@ public class CacheInvalidationEventListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleReviewEvent(ReviewEvent event) {
-        log.info("Synchronously handling review event: type={}, userId={}, problemId={}", 
+        log.debug("Synchronously handling review event: type={}, userId={}, problemId={}", 
                 event.getType(), event.getUserId(), event.getProblemId());
         
         try {

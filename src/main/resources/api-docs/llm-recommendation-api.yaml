@@ -1,0 +1,777 @@
+openapi: 3.0.3
+info:
+  title: LLM Recommendation API
+  description: |
+    AI-powered recommendation system for algorithm problems with FSRS integration.
+    
+    ## Features
+    - Intelligent problem ranking via LLM providers (DeepSeek, OpenAI)
+    - FSRS-based spaced repetition scheduling
+    - Cost control and budget management
+    - A/B testing support
+    - Comprehensive observability and metrics
+    
+    ## Error Handling
+    All endpoints return structured error responses with consistent HTTP status codes:
+    - 400: Bad Request - Invalid parameters or request format
+    - 401: Unauthorized - Missing or invalid authentication
+    - 403: Forbidden - Insufficient permissions
+    - 429: Too Many Requests - Rate limit exceeded
+    - 503: Service Unavailable - System overloaded or maintenance
+    
+    ## Rate Limiting
+    - Global: 1000 requests/minute per IP
+    - Per-user: 100 requests/minute
+    - LLM requests have additional budget controls
+    
+    ## Caching
+    Responses are cached for performance. Cache-related headers:
+    - X-Cache-Hit: "true" if served from cache
+    - X-Cache-TTL: Remaining cache lifetime in seconds
+    
+  version: "1.0.0"
+  contact:
+    name: CodeTop FSRS Backend Team
+    email: team@codetop.example
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.codetop.example/api/v1
+    description: Production server
+  - url: https://dev-api.codetop.example/api/v1
+    description: Development server
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+paths:
+  /problems/ai-recommendations:
+    get:
+      summary: Get AI-powered problem recommendations
+      description: |
+        Returns personalized algorithm problem recommendations using LLM intelligence.
+        Falls back to FSRS-based recommendations if LLM is unavailable or disabled.
+        
+        ## Features
+        - Intelligent ranking via LLM providers
+        - Personalized based on user learning patterns
+        - Learning objective targeting
+        - Cost-controlled execution
+        - Comprehensive caching
+        
+        ## Fallback Strategy
+        1. LLM-powered recommendations (primary)
+        2. FSRS urgency-based ranking (fallback)
+        3. Static mock data (emergency fallback)
+        
+      operationId: getAiRecommendations
+      tags:
+        - Recommendations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of recommendations to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+            example: 10
+        
+        - name: objective
+          in: query
+          description: Learning objective for targeted recommendations
+          required: false
+          schema:
+            type: string
+            enum: [SKILL_BUILDING, INTERVIEW_PREP, CONTEST_TRAINING, REVIEW_WEAK_AREAS, EXPLORE_NEW_TOPICS]
+            example: "SKILL_BUILDING"
+        
+        - name: target_domains
+          in: query
+          description: Comma-separated list of target domains/topics
+          required: false
+          schema:
+            type: string
+            example: "数组,哈希表,动态规划"
+        
+        - name: difficulty_preference
+          in: query
+          description: Preferred difficulty level
+          required: false
+          schema:
+            type: string
+            enum: [EASY_FOCUS, MEDIUM_FOCUS, HARD_FOCUS, ADAPTIVE, PROGRESSIVE]
+            example: "ADAPTIVE"
+        
+        - name: timebox_minutes
+          in: query
+          description: Available time for practice session in minutes
+          required: false
+          schema:
+            type: integer
+            minimum: 5
+            maximum: 480
+            example: 60
+        
+        - name: force_refresh
+          in: query
+          description: Force refresh cache and regenerate recommendations
+          required: false
+          schema:
+            type: boolean
+            default: false
+        
+        # NOTE: userId parameter removed for security - API always uses authenticated user
+        # Recommendations are personalized based on JWT token user identity
+        
+        - name: ab_group
+          in: query
+          description: A/B testing group assignment for recommendation experiments
+          required: false
+          schema:
+            type: string
+            enum: [control, treatment, advanced]
+            example: "control"
+        
+        - name: recommendation_type
+          in: query
+          description: Type of recommendation strategy to use
+          required: false
+          schema:
+            type: string
+            enum: [AI, FSRS, HYBRID, AUTO]
+            default: "HYBRID"
+            example: "HYBRID"
+
+      responses:
+        '200':
+          description: Successful response with AI recommendations
+          headers:
+            X-Trace-Id:
+              description: Unique trace identifier for request tracking
+              schema:
+                type: string
+                example: "550e8400-e29b-41d4-a716-446655440000"
+            X-Rec-Source:
+              description: Source of recommendations (LLM/FSRS/CACHE)
+              schema:
+                type: string
+                enum: [LLM, FSRS, CACHE, MOCK]
+                example: "LLM"
+            X-Cache-Hit:
+              description: Whether response was served from cache
+              schema:
+                type: string
+                enum: ["true", "false"]
+                example: "false"
+            X-Provider-Chain:
+              description: Comma-separated list of providers used
+              schema:
+                type: string
+                example: "openai,deepseek"
+            X-Recommendation-Type:
+              description: Type of recommendation strategy used
+              schema:
+                type: string
+                example: "ai_enhanced"
+            X-Chain-Id:
+              description: Provider chain configuration used
+              schema:
+                type: string
+                example: "premium_chain"
+            X-Cost-Estimate:
+              description: Estimated cost in USD for this request
+              schema:
+                type: string
+                example: "0.002"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiRecommendationResponse'
+              examples:
+                llm_success:
+                  summary: Successful LLM-powered recommendations
+                  value:
+                    data:
+                      items:
+                        - problemId: 1
+                          title: "Two Sum"
+                          difficulty: "easy"
+                          reason: "Strong foundation in array manipulation needed for your learning pattern"
+                          estimatedTime: 25
+                          confidence: 0.85
+                          score: 0.82
+                          strategy: "progressive"
+                          source: "LLM"
+                          model: "deepseek-chat"
+                          promptVersion: "v2.1"
+                        - problemId: 15
+                          title: "Valid Parentheses"
+                          difficulty: "easy"
+                          reason: "Hash table mastery aligns with your skill-building objective"
+                          estimatedTime: 20
+                          confidence: 0.78
+                          score: 0.75
+                          strategy: "targeted"
+                          source: "LLM"
+                          model: "deepseek-chat"
+                          promptVersion: "v2.1"
+                      meta:
+                        total: 2
+                        limit: 10
+                        traceId: "550e8400-e29b-41d4-a716-446655440000"
+                        generatedAt: "2025-01-15T10:30:00Z"
+                        cached: false
+                        busy: false
+                        strategy: "normal"
+                        chainHops: ["openai", "deepseek"]
+                        fallbackReason: null
+                        chainId: "premium_chain"
+                        userProfileSummary: "ADAPTIVE|M:78%|A:85%|Q:92%|W:动态规划,图论"
+                        recommendationType: "HYBRID"
+                
+                fsrs_fallback:
+                  summary: FSRS fallback when LLM unavailable
+                  value:
+                    data:
+                      items:
+                        - problemId: 42
+                          title: "Maximum Subarray"
+                          difficulty: "medium"
+                          reason: "FSRS fallback: urgency 0.85, 65% accuracy, 2.1 days overdue"
+                          estimatedTime: 35
+                          confidence: 0.85
+                          score: 0.85
+                          strategy: "fsrs"
+                          source: "FSRS"
+                          model: "local"
+                          promptVersion: "v2.1"
+                      meta:
+                        total: 1
+                        limit: 10
+                        traceId: "550e8400-e29b-41d4-a716-446655440001"
+                        generatedAt: "2025-01-15T10:30:05Z"
+                        cached: false
+                        busy: false
+                        strategy: "fsrs_fallback"
+                        chainHops: ["provider_timeout"]
+                        fallbackReason: "HTTP_503"
+                        chainId: "standard_chain"
+                        userProfileSummary: "STRUGGLING|M:45%|A:60%|Q:85%"
+                        recommendationType: "FSRS"
+
+        '400':
+          description: Bad Request - Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "INVALID_PARAMETER"
+                  message: "Invalid limit parameter: must be between 1 and 50"
+                  details:
+                    parameter: "limit"
+                    provided: "100"
+                    valid_range: "1-50"
+                  timestamp: "2025-01-15T10:30:00Z"
+                  traceId: "550e8400-e29b-41d4-a716-446655440002"
+
+        '401':
+          description: Unauthorized - Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "AUTHENTICATION_REQUIRED"
+                  message: "Valid JWT token required in Authorization header"
+                  timestamp: "2025-01-15T10:30:00Z"
+                  traceId: "550e8400-e29b-41d4-a716-446655440003"
+
+        '403':
+          description: Forbidden - User tier insufficient for AI recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "TIER_INSUFFICIENT"
+                  message: "AI recommendations require SILVER tier or higher"
+                  details:
+                    user_tier: "BRONZE"
+                    required_tier: "SILVER"
+                    upgrade_url: "https://codetop.example/upgrade"
+                  timestamp: "2025-01-15T10:30:00Z"
+                  traceId: "550e8400-e29b-41d4-a716-446655440004"
+
+        '429':
+          description: Too Many Requests - Rate limit exceeded
+          headers:
+            X-Rate-Limit-Limit:
+              description: Request limit per window
+              schema:
+                type: integer
+                example: 100
+            X-Rate-Limit-Remaining:
+              description: Remaining requests in current window
+              schema:
+                type: integer
+                example: 0
+            X-Rate-Limit-Reset:
+              description: Unix timestamp when rate limit resets
+              schema:
+                type: integer
+                example: 1705312200
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+                example: 60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "Request rate limit exceeded: 100 requests per minute"
+                  details:
+                    limit: 100
+                    window: "1 minute"
+                    reset_at: "2025-01-15T10:31:00Z"
+                  timestamp: "2025-01-15T10:30:00Z"
+                  traceId: "550e8400-e29b-41d4-a716-446655440005"
+
+        '503':
+          description: Service Unavailable - System overloaded or in maintenance
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+                example: 300
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "SERVICE_UNAVAILABLE" 
+                  message: "LLM service temporarily unavailable, falling back to FSRS"
+                  details:
+                    fallback_active: true
+                    estimated_recovery: "2025-01-15T10:35:00Z"
+                  timestamp: "2025-01-15T10:30:00Z"
+                  traceId: "550e8400-e29b-41d4-a716-446655440006"
+
+  /problems/{problemId}/recommendation-feedback:
+    post:
+      summary: Submit feedback on recommendation quality
+      description: |
+        Submits user feedback on recommendation quality to improve future recommendations.
+        Feedback is used for:
+        - LLM prompt optimization
+        - Model fine-tuning data collection
+        - Recommendation algorithm improvement
+        - A/B testing evaluation
+        
+      operationId: submitRecommendationFeedback
+      tags:
+        - Recommendations
+        - Feedback
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: problemId
+          in: path
+          description: ID of the problem that was recommended
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            example: 1
+      
+      requestBody:
+        description: Feedback data for the recommendation
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationFeedback'
+            examples:
+              positive_feedback:
+                summary: Positive feedback on recommendation
+                value:
+                  traceId: "550e8400-e29b-41d4-a716-446655440000"
+                  rating: 5
+                  action: "ATTEMPTED"
+                  feedback: "Perfect difficulty level for my current skill"
+                  tags: ["appropriate_difficulty", "good_timing"]
+                  timeSpentMinutes: 25
+                  solved: true
+                  
+              negative_feedback:
+                summary: Negative feedback on recommendation  
+                value:
+                  traceId: "550e8400-e29b-41d4-a716-446655440000"
+                  rating: 2
+                  action: "SKIPPED"
+                  feedback: "Too advanced for my current level"
+                  tags: ["too_difficult", "poor_timing"]
+                  timeSpentMinutes: 5
+                  solved: false
+
+      responses:
+        '200':
+          description: Feedback successfully recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+              example:
+                success: true
+                message: "Feedback recorded successfully"
+                feedbackId: "fb_550e8400-e29b-41d4"
+                timestamp: "2025-01-15T10:30:00Z"
+
+        '400':
+          description: Bad Request - Invalid feedback data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '404':
+          description: Problem not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from authentication endpoints.
+        Include in requests as: `Authorization: Bearer <token>`
+
+  schemas:
+    ApiRecommendationResponse:
+      type: object
+      description: API wrapper response for AI recommendations that matches contract test expectations
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/AIRecommendationResponse'
+
+    AIRecommendationResponse:
+      type: object
+      description: Response containing AI-powered problem recommendations
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          description: List of recommended problems
+          items:
+            $ref: '#/components/schemas/RecommendationItem'
+          minItems: 0
+          maxItems: 50
+        meta:
+          $ref: '#/components/schemas/RecommendationMetadata'
+
+    RecommendationItem:
+      type: object
+      description: Single problem recommendation with AI-generated reasoning
+      required:
+        - problemId
+        - title
+        - difficulty
+        - reason
+        - confidence
+        - score
+        - strategy
+        - source
+        - estimatedTime
+      properties:
+        problemId:
+          type: integer
+          format: int64
+          description: Unique identifier of the recommended problem
+          minimum: 1
+          example: 1
+        title:
+          type: string
+          description: Title of the recommended problem
+          minLength: 1
+          maxLength: 200
+          example: "Two Sum"
+        difficulty:
+          type: string
+          description: Difficulty level of the problem
+          enum: [easy, medium, hard]
+          example: "easy"
+        reason:
+          type: string
+          description: AI-generated explanation for why this problem was recommended
+          minLength: 10
+          maxLength: 500
+          example: "Strong foundation in array manipulation needed for your learning pattern"
+        estimatedTime:
+          type: integer
+          description: Estimated time to solve in minutes
+          minimum: 1
+          maximum: 240
+          example: 25
+        confidence:
+          type: number
+          format: double
+          description: AI confidence score in recommendation quality (0.0 to 1.0)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.85
+        score:
+          type: number
+          format: double
+          description: Overall recommendation score (0.0 to 1.0)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.82
+        strategy:
+          type: string
+          description: Recommendation strategy used
+          enum: [progressive, targeted, review, challenge, fsrs, hybrid]
+          example: "progressive"
+        source:
+          type: string
+          description: Source system that generated this recommendation
+          enum: [LLM, FSRS, CACHE, MOCK]
+          example: "LLM"
+        model:
+          type: string
+          description: AI model used for recommendation generation
+          example: "deepseek-chat"
+        promptVersion:
+          type: string
+          description: Version of prompt template used
+          example: "v2.1"
+
+    RecommendationMetadata:
+      type: object
+      description: Metadata about the recommendation generation process
+      required:
+        - total
+        - limit
+        - traceId
+        - generatedAt
+        - cached
+        - busy
+        - strategy
+      properties:
+        total:
+          type: integer
+          description: Total number of recommendations returned
+          minimum: 0
+          example: 10
+        limit:
+          type: integer
+          description: Maximum number of recommendations requested
+          minimum: 1
+          maximum: 50
+          example: 10
+        traceId:
+          type: string
+          description: Unique trace identifier for debugging and support
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        generatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when recommendations were generated
+          example: "2025-01-15T10:30:00Z"
+        cached:
+          type: boolean
+          description: Whether response was served from cache
+          example: false
+        busy:
+          type: boolean
+          description: Whether system was overloaded (affects recommendation quality)
+          example: false
+        strategy:
+          type: string
+          description: Overall strategy used for recommendation generation
+          enum: [normal, fsrs_fallback, busy_message, cost_control_fallback]
+          example: "normal"
+        chainHops:
+          type: array
+          description: List of provider chain hops attempted
+          items:
+            type: string
+          example: ["openai", "deepseek"]
+        fallbackReason:
+          type: string
+          description: Reason for fallback if primary strategy failed
+          nullable: true
+          example: "HTTP_503"
+        chainId:
+          type: string
+          description: Provider chain configuration used
+          example: "premium_chain"
+        chainVersion:
+          type: string
+          description: Version of the chain configuration used
+          example: "v1.2.3"
+        policyId:
+          type: string
+          description: Policy identifier for recommendation generation
+          example: "policy_001"
+        userProfileSummary:
+          type: string
+          description: Condensed user profile summary for diagnostics
+          nullable: true
+          example: "ADAPTIVE|M:78%|A:85%|Q:92%|W:动态规划,图论"
+        recommendationType:
+          type: string
+          description: Type of recommendation strategy used
+          example: "HYBRID"
+
+    RecommendationFeedback:
+      type: object
+      description: User feedback on recommendation quality
+      required:
+        - rating
+        - action
+      properties:
+        traceId:
+          type: string
+          description: Trace ID from original recommendation request
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        rating:
+          type: integer
+          description: User rating of recommendation quality (1-5 stars)
+          minimum: 1
+          maximum: 5
+          example: 5
+        action:
+          type: string
+          description: User action taken on recommendation
+          enum: [ATTEMPTED, SOLVED, SKIPPED, BOOKMARKED, REPORTED]
+          example: "ATTEMPTED"
+        feedback:
+          type: string
+          description: Optional textual feedback
+          maxLength: 1000
+          example: "Perfect difficulty level for my current skill"
+        tags:
+          type: array
+          description: Structured feedback tags
+          items:
+            type: string
+            enum: [
+              appropriate_difficulty, too_easy, too_difficult,
+              good_timing, poor_timing, relevant_topic, irrelevant_topic,
+              clear_explanation, confusing_explanation, helpful, not_helpful
+            ]
+          example: ["appropriate_difficulty", "good_timing"]
+        timeSpentMinutes:
+          type: integer
+          description: Time spent on problem in minutes
+          minimum: 0
+          maximum: 480
+          example: 25
+        solved:
+          type: boolean
+          description: Whether user successfully solved the problem
+          example: true
+
+    FeedbackResponse:
+      type: object
+      description: Response to feedback submission
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          description: Whether feedback was successfully recorded
+          example: true
+        message:
+          type: string
+          description: Human-readable response message
+          example: "Feedback recorded successfully"
+        feedbackId:
+          type: string
+          description: Unique identifier for the feedback record
+          example: "fb_550e8400-e29b-41d4"
+        timestamp:
+          type: string
+          format: date-time
+          description: When feedback was processed
+          example: "2025-01-15T10:30:00Z"
+
+    ErrorResponse:
+      type: object
+      description: Standard error response format
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - timestamp
+            - traceId
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              enum: [
+                INVALID_PARAMETER, AUTHENTICATION_REQUIRED, TIER_INSUFFICIENT,
+                RATE_LIMIT_EXCEEDED, SERVICE_UNAVAILABLE, INTERNAL_ERROR,
+                RESOURCE_NOT_FOUND, VALIDATION_FAILED
+              ]
+              example: "INVALID_PARAMETER"
+            message:
+              type: string
+              description: Human-readable error description
+              example: "Invalid limit parameter: must be between 1 and 50"
+            details:
+              type: object
+              description: Additional error context
+              additionalProperties: true
+              example:
+                parameter: "limit"
+                provided: "100"
+                valid_range: "1-50"
+            timestamp:
+              type: string
+              format: date-time
+              description: When error occurred
+              example: "2025-01-15T10:30:00Z"
+            traceId:
+              type: string
+              description: Trace ID for debugging
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440002"
+
+tags:
+  - name: Recommendations
+    description: AI-powered problem recommendation operations
+  - name: Feedback
+    description: User feedback collection for recommendation improvement

@@ -16,6 +16,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -47,6 +49,8 @@ public class SecurityConfig {
     private final RateLimitFilter rateLimitFilter;
     @Value("${app.docs.enabled:false}")
     private boolean docsEnabled;
+    @Value("${app.security.ai-recs-public:false}")
+    private boolean aiRecsPublic;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -59,6 +63,15 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/codetop/problems/global").permitAll()
                         .requestMatchers(HttpMethod.GET, "/filter/companies").permitAll()
+                        // AI recommendations endpoints - public only when explicitly allowed (dev)
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations")
+                            .access((auth, ctx) -> aiRecsPublic
+                                    ? new AuthorizationDecision(true)
+                                    : new AuthorizationDecision(auth.get() != null && auth.get().isAuthenticated()))
+                        .requestMatchers(HttpMethod.POST, "/problems/*/recommendation-feedback")
+                            .access((auth, ctx) -> aiRecsPublic
+                                    ? new AuthorizationDecision(true)
+                                    : new AuthorizationDecision(auth.get() != null && auth.get().isAuthenticated()))
                         // API docs - dev enabled or restrict to ADMIN
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                             .access((auth, ctx) -> {
@@ -73,7 +86,13 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/codetop/health").permitAll()
 
-                        // Admin endpoints
+                        // Async AI recommendations endpoints - MUST be EXACT matches and come FIRST
+                        .requestMatchers(HttpMethod.POST, "/problems/ai-recommendations/async").authenticated()
+                        // Allow nested segments just in case (safer for PathPattern semantics)
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations/async/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/problems/ai-recommendations/daily-limit").authenticated()
+
+                        // Admin endpoints - general patterns AFTER specific ones
                         .requestMatchers("/druid/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/problems/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/problems/**").hasRole("ADMIN")

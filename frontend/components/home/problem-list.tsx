@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import { ExternalLink, Star } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import AIBadge from "@/components/recommendation/AIBadge"
 import { codeTopApi, type ProblemRankingDTO, type OliverFilterResponse } from "@/lib/codetop-api"
 import { useAuth } from "@/lib/auth-context"
+import { useRecommendationsPrefetch } from "@/hooks/useRecommendationsPrefetch"
 
 interface DisplayProblem extends Omit<ProblemRankingDTO, 'difficulty'> {
   difficulty: "easy" | "medium" | "hard"
@@ -30,6 +32,12 @@ export default function ProblemList() {
   const [problems, setProblems] = useState<DisplayProblem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Prefetch recommendations for badge display
+  useRecommendationsPrefetch({ 
+    enabled: isAuthenticated && !authLoading,
+    limit: 15 // Prefetch a few more than visible to ensure good coverage
+  })
   
   const [pagination, setPagination] = useState({
     current: 1,
@@ -167,6 +175,7 @@ export default function ProblemList() {
                       >
                         {problem.problemId}. {problem.title}
                       </a>
+                      <AIBadge problemId={problem.problemId} size="sm" />
                       <ExternalLink className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     

@@ -10,22 +10,11 @@ export interface LeaderboardEntry {
   username: string
   avatarUrl?: string
   totalReviews: number
-  correctReviews: number
-  accuracy: number
+  masteryScore: number
   streak: number
   badge?: string
 }
 
-export interface AccuracyLeaderboardEntry {
-  rank: number
-  userId: number
-  username: string
-  avatarUrl?: string
-  totalReviews: number
-  correctReviews: number
-  accuracy: number
-  badge?: string
-}
 
 export interface StreakLeaderboardEntry {
   rank: number
@@ -42,7 +31,6 @@ export interface UserRankInfo {
   globalRank: number
   weeklyRank: number
   monthlyRank: number
-  accuracyRank: number
   streakRank: number
   overallRank?: number
   percentile?: number
@@ -51,7 +39,6 @@ export interface UserRankInfo {
 
 export interface TopPerformersSummary {
   topByVolume: LeaderboardEntry[]
-  topByAccuracy: AccuracyLeaderboardEntry[]
   topByStreak: StreakLeaderboardEntry[]
 }
 
@@ -59,7 +46,6 @@ export interface LeaderboardStats {
   totalUsers: number
   weeklyActiveUsers: number
   usersWithStreak: number
-  averageAccuracy: number
   maxCurrentStreak: number
   maxLongestStreak: number
   totalReviews: number
@@ -99,20 +85,6 @@ export const leaderboardApi = {
     return await apiRequest<LeaderboardEntry[]>(`/leaderboard/monthly?${params}`)
   },
 
-  /**
-   * Get accuracy leaderboard
-   */
-  async getAccuracyLeaderboard(
-    limit: number = 50, 
-    days: number = 30
-  ): Promise<AccuracyLeaderboardEntry[]> {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      days: days.toString(),
-    })
-
-    return await apiRequest<AccuracyLeaderboardEntry[]>(`/leaderboard/accuracy?${params}`)
-  },
 
   /**
    * Get streak leaderboard

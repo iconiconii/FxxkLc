@@ -74,7 +74,7 @@ spring:
     
     # MongoDB Configuration
     mongodb:
-      uri: mongodb://localhost:27018/codetop_notes
+      uri: mongodb://root:root@localhost:27018/codetop_notes?authSource=admin
       auto-index-creation: true
   
   # Cache Configuration
@@ -155,7 +155,7 @@ mybatis-plus:
 
 # JWT Configuration - REQUIRES ENVIRONMENT VARIABLES IN PRODUCTION
 jwt:
-  secret: ${JWT_SECRET:}
+  secret: ${JWT_SECRET:test_secret}
   expiration: ${JWT_EXPIRATION:86400000}  # 24 hours in milliseconds
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 days in milliseconds
   
@@ -222,6 +222,218 @@ cache:
       review-queue: 1800   # 30 minutes
       analytics: 3600      # 1 hour
       leaderboard: 1800    # 30 minutes
+      similarProblems: 900 # 15 minutes - from rec.similarity.cache.ttl-minutes
+      # Intermediate caching for AI recommendations
+      user-profile: 600    # 10 minutes - user analytics and preferences
+      candidates: 60       # 1 minute - reusable candidate sets
+      prompt-variables: 300 # 5 minutes - cached prompt variables for template assembly
+
+# Recommendation Cache Warming Configuration - ENABLED for performance optimization
+recommendation:
+  cache-warming:
+    enabled: true                     # ENABLED: Cache warming for active users
+    active-user-days: 7              # Days to look back for active users
+    min-reviews: 5                   # Minimum reviews for a user to be considered active
+    batch-size: 50                   # Batch size for warming operations
+    max-concurrent: 5                # Maximum concurrent warming threads
+
+# User Profiling Configuration
+user-profiling:
+  windows:
+    recent-days: 90              # Analysis window in days
+    half-life-days: 30.0         # Time decay half-life for recency weighting
+    default-review-limit: 2000   # Maximum reviews to fetch from database
+    trend-comparison-days: 30    # Window size for difficulty trend computation
+  thresholds:
+    min-samples-for-reliability: 10    # Minimum samples needed for reliable skill assessment
+    weak-skill-threshold: 0.45         # Below this score = weak skill
+    strong-skill-threshold: 0.75       # Above this score = strong skill
+    beta-smoothing-alpha: 1.0          # Beta distribution smoothing parameter alpha
+    beta-smoothing-beta: 1.0           # Beta distribution smoothing parameter beta
+    difficulty-trend-threshold: 0.15   # 15% change threshold for trend detection
+  cache:
+    ttl: PT10M                   # Cache TTL (ISO 8601 duration: PT10M = 10 minutes for frequent updates)
+    enabled: true                # Enable/disable caching
+  tag-domain-mapping:
+    # Core data structures
+    array: arrays
+    linked-list: linked_lists
+    hash-table: hash_tables
+    string: strings
+    matrix: matrices
+    # Two pointers and sliding window
+    two-pointers: two_pointers
+    sliding-window: sliding_window
+    # Search and sort
+    binary-search: binary_search
+    sorting: sorting
+    # Advanced algorithms
+    backtracking: backtracking
+    divide-and-conquer: divide_conquer
+    greedy: greedy
+    dynamic-programming: dynamic_programming
+    # Graph and tree algorithms  
+    graph: graph
+    tree: trees
+    binary-tree: binary_trees
+    trie: tries
+    union-find: union_find
+    # Heap and priority queue
+    heap: heaps
+    priority-queue: heaps
+    # Stack and queue
+    stack: stacks_queues
+    queue: stacks_queues
+    monotonic-stack: monotonic_stack
+    # Mathematical and bit manipulation
+    bit-manipulation: bit_manipulation
+    math: math
+    geometry: geometry
+    prefix-sum: prefix_sum
+    # System design and simulation
+    design: system_design
+    simulation: simulation
+
+# Similarity-based recommendation configuration
+rec:
+  similarity:
+    weights:
+      tags-weight: 0.4          # Weight for Jaccard tag similarity
+      categories-weight: 0.3    # Weight for shared categories similarity  
+      difficulty-weight: 0.3    # Weight for difficulty matching
+      diversity-weight: 0.2     # Weight for diversity in selection
+    thresholds:
+      min-similarity-score: 0.3      # Minimum similarity to include
+      empty-feature-similarity: 0.0  # Similarity when both features are empty (OPT-2)
+      max-similar-problems: 5         # Max similar problems to find per candidate
+      min-shared-categories: 1        # Min shared categories for category-based search
+    cache:
+      enabled: true
+      ttl-minutes: 15           # Cache TTL for similar problems
+      max-entries: 1000         # Max cached entries
+    batch:
+      insert-batch-size: 200    # Batch size for category assignments
+      batch-timeout-ms: 5000    # Timeout for batch operations
+    integration:
+      pre-filter-enabled: true        # Enable similarity-based pre-filtering
+      hybrid-scoring-enabled: false   # Enable hybrid LLM+FSRS+similarity scoring
+      pre-filter-limit: 30            # Max candidates after pre-filtering
+      max-candidates-for-similarity: 50  # Performance guardrail: Skip similarity enhancement above this threshold
+      llm-weight: 0.5                 # Weight for LLM score in hybrid (deprecated - use rec.hybrid)
+      fsrs-weight: 0.3                # Weight for FSRS score in hybrid (deprecated - use rec.hybrid)
+      similarity-weight: 0.2          # Weight for similarity score in hybrid (deprecated - use rec.hybrid)
+  
+  # Hybrid ranking configuration (v3 enhancement) - DISABLED for MVP
+  hybrid:
+    enabled: false                    # DISABLED: Enable hybrid ranking that combines LLM, FSRS, similarity, and personalization signals
+    weights:
+      llm: 0.45                      # Weight for LLM score in final ranking (0.0-1.0)
+      fsrs: 0.30                     # Weight for FSRS urgency score (0.0-1.0)
+      similarity: 0.15               # Weight for similarity-based score (0.0-1.0)
+      personalization: 0.10          # Weight for personalization score (0.0-1.0)
+    # Note: Weights should sum to 1.0 for proper normalization
+    fallback:
+      on-error: llm-only             # Fallback strategy when hybrid ranking fails: llm-only, fsrs-only, disabled
+    performance:
+      max-candidates: 50             # Maximum candidates to process for hybrid ranking
+      timeout-ms: 500                # Timeout for hybrid ranking operations
+
+  # Multi-dimensional strategy mixing configuration (v3 enhancement)
+  strategy:
+    mix:
+      enabled: true                  # Enable multi-dimensional recommendation mixing
+      quotas:
+        # Default quota ratios for different learning objectives (should sum to 1.0)
+        weakness-focus:
+          weakness: 0.6              # Focus on weak domains
+          progressive: 0.2           # Some progressive difficulty
+          coverage: 0.2              # Minimal topic coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        progressive-difficulty:
+          weakness: 0.3              # Address weaknesses
+          progressive: 0.5           # Main focus on progression
+          coverage: 0.2              # Some topic coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        topic-coverage:
+          weakness: 0.2              # Some weakness focus
+          progressive: 0.3           # Some progression
+          coverage: 0.5              # Main focus on coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.0               # No mastery refresh
+        
+        exam-prep:
+          weakness: 0.25             # Address key weaknesses
+          progressive: 0.0           # No progressive learning
+          coverage: 0.0              # No general coverage
+          exam: 0.6                  # Main focus on exam prep
+          refresh: 0.15              # Some mastery refresh
+        
+        refresh-mastered:
+          weakness: 0.0              # No weakness focus
+          progressive: 0.15          # Minimal progression
+          coverage: 0.25             # Some coverage
+          exam: 0.0                  # No exam-specific content
+          refresh: 0.6               # Main focus on refresh
+      
+      adaptive:
+        enabled: true                # Enable adaptive quota adjustment based on user profile
+        min-mastery-level: 0.3       # Minimum mastery level to enable adaptive adjustments
+        max-adjustment-factor: 0.2   # Maximum quota adjustment factor (20% adjustment)
+        recent-sessions-window: 10   # Number of recent sessions to consider for adaptiveness
+      
+      performance:
+        max-candidates-per-strategy: 100    # Maximum candidates to process in each strategy category
+        timeout-ms: 300                     # Timeout for mixing operations in milliseconds
+        enable-category-caching: true       # Enable caching of categorized candidates
+        category-cache-ttl-seconds: 300     # Cache TTL for categorized candidates in seconds
+
+  # Confidence calibration configuration (v3 enhancement) - DISABLED for MVP
+  confidence:
+    enabled: false                   # DISABLED: Enable confidence calibration for recommendation quality assessment
+    weights:
+      # Component weights for confidence calculation (should sum to 1.0)
+      llm-quality: 0.25             # Weight for LLM response quality indicators
+      fsrs-data: 0.20               # Weight for FSRS data completeness and reliability
+      profile-relevance: 0.20       # Weight for user profile relevance matching
+      historical-accuracy: 0.15     # Weight for historical recommendation accuracy
+      cross-signal-consensus: 0.10  # Weight for consensus between different signals
+      context-quality: 0.10         # Weight for overall system context quality
+    
+    thresholds:
+      high-confidence: 0.8          # Threshold for high confidence classification
+      medium-confidence: 0.6        # Threshold for medium confidence classification  
+      low-confidence: 0.4           # Threshold for low confidence classification
+      minimum-show: 0.2             # Minimum confidence required to show a recommendation
+      min-llm-quality: 0.3          # Minimum LLM quality score to trust LLM recommendations
+      min-fsrs-quality: 0.4         # Minimum FSRS data quality to use FSRS signals
+      min-profile-completeness: 0.3 # Minimum profile completeness to use personalization
+    
+    display:
+      include-in-reason: true       # Include confidence level in recommendation reason
+      include-factors: false        # Include specific confidence factors in reason
+      show-warnings: true           # Show confidence warnings for low-quality recommendations
+      confidence-format: "[%s Confidence]"  # Format for confidence display in reasons
+      show-numeric-score: false     # Show confidence score numerically
+      numeric-precision: 2          # Number of decimal places for numeric confidence scores
+    
+    performance:
+      enable-caching: true          # Cache confidence calculations
+      cache-ttl-seconds: 600        # TTL for confidence cache in seconds (10 minutes)
+      max-cache-size: 1000          # Maximum items to cache
+      calculation-timeout-ms: 200   # Timeout for confidence calculation in milliseconds
+      enable-async-calculation: false  # Enable async confidence calculation
+      batch-size: 50                # Batch size for bulk confidence calculations
+    
+    historical:
+      enabled: true                 # Enable historical accuracy tracking
+      window-days: 30               # Window size in days for historical accuracy calculation
+      min-samples: 5                # Minimum feedback samples needed for reliable historical accuracy
+      decay-factor: 0.95            # Weight decay for older feedback samples
+      update-frequency: daily       # Update frequency: daily, hourly, realtime
 
 # API Documentation
 springdoc:
@@ -238,6 +450,177 @@ springdoc:
     title: CodeTop FSRS Backend API
     description: Intelligent algorithm problem management with FSRS spaced repetition
     version: 1.0.0
+
+# LLM configuration with segmented routing and feature toggles
+llm:
+  enabled: ${LLM_ENABLED:false}  # Global LLM toggle, disabled by default
+  provider: chain
+  defaultChainId: main   # Default chain when no routing rules match
+  
+  # Metrics collection configuration - SIMPLIFIED for MVP
+  metrics:
+    enabled: true                           # Enable basic metrics
+    detailed-metrics: false                 # DISABLED: Avoid detailed metrics complexity
+    cache-metrics: false                    # DISABLED: Avoid cache warming metrics 
+    token-tracking: false                   # DISABLED: Avoid detailed token usage tracking
+    chain-hop-tracking: false              # DISABLED: Avoid complex chain tracking
+  
+  # External prompt template configuration for A/B testing
+  prompt:
+    templates:
+      defaultVersion: v3                    # Default prompt version
+      cacheEnabled: true                    # Enable template caching - ENABLED for performance
+      cacheTimeoutMinutes: 60              # Cache TTL in minutes
+      templateBasePath: prompts            # Base path in resources
+      
+      # Template file mappings (key format: "{version}.{type}")
+      templateFiles:
+        v1.system: prompts/system-v1.txt
+        v2.system: prompts/system-v2.txt
+        v3.system: prompts/system-v3.txt
+        v1.user: prompts/user-basic.txt
+        v2.user: prompts/user-advanced.txt
+        v3.user: prompts/user-advanced.txt
+      
+      # A/B testing configuration for template selection - DISABLED for MVP
+      abTests:
+        # DISABLED: All A/B testing disabled to reduce complexity
+        # All users get defaultVersion (v3) for consistency
+        premium-users:                      # Test name - DISABLED
+          tiers: []                        # DISABLED: Empty tiers
+          version: v3                       # Prompt version for these users
+          weight: 0                         # DISABLED: 0 weight
+        
+        beta-testers:                       # DISABLED
+          abGroups: []                      # DISABLED: Empty groups
+          version: v3
+          weight: 0                         # DISABLED: 0 weight
+        
+        ai-route-test:                      # DISABLED
+          routes: []                        # DISABLED: Empty routes
+          version: v2                       
+          weight: 0                         # DISABLED: 0 weight
+  
+  # Multiple chains for different user segments
+  chains:
+    main:                               # Standard chain for most users
+      nodes:
+        - name: openai   # DeepSeek via OpenAI-compatible API
+          enabled: true
+          timeoutMs: 45000  # Increased for DeepSeek API response time
+          retry:
+            attempts: 1
+          onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
+          rateLimit:
+            rps: 5
+            perUserRps: 1
+        - name: mock
+          enabled: false
+      defaultProvider:
+        strategy: fsrs_fallback   # Fallback to FSRS on failure
+        message: "系统繁忙，请稍后重试"
+        httpStatus: 503
+        
+    premium:                            # Enhanced chain for premium users
+      nodes:
+        - name: openai
+          enabled: true
+          timeoutMs: 45000           # Increased for DeepSeek API response time
+          retry:
+            attempts: 2             # More retries for premium
+          rateLimit:
+            rps: 10                 # Higher rate limits
+            perUserRps: 3
+      defaultProvider:
+        strategy: fsrs_fallback
+        
+    experimental:                       # Experimental chain - DISABLED for MVP
+      nodes:
+        - name: openai
+          enabled: false                # DISABLED: Avoid experimental complexity
+          timeoutMs: 45000
+          retry:
+            attempts: 1
+      defaultProvider:
+        strategy: busy_message
+        message: "实验功能暂不可用"
+  
+  # Legacy single chain (for backward compatibility)
+  chain:
+    nodes:
+      - name: openai
+        enabled: true
+        timeoutMs: 45000
+        retry:
+          attempts: 1
+        onErrorsToNext: [TIMEOUT, HTTP_429, HTTP_5XX, PARSING_ERROR, CIRCUIT_OPEN]
+        rateLimit:
+          rps: 5
+          perUserRps: 1
+    defaultProvider:
+      strategy: fsrs_fallback
+      
+  # Routing rules for chain selection - SIMPLIFIED for MVP
+  routing:
+    rules:
+      # SIMPLIFIED: All users use main chain for consistency
+      - when:
+          tier: [GOLD, PLATINUM]    # Premium users use main chain (not premium chain)
+        useChain: main              # CHANGED: Use main instead of premium
+      - when:
+          abGroup: [experimental]   # Experimental group uses main chain
+        useChain: main              # CHANGED: Use main instead of experimental  
+      - when:
+          route: [ai-recommendations]  # Default route uses main chain
+        useChain: main
+        
+  # Feature toggles per user segment
+  toggles:
+    byTier:                       # Enable/disable by user tier
+      FREE: false                 # FREE users cannot use LLM
+      BRONZE: true                # BRONZE and above can use LLM
+      SILVER: true
+      GOLD: true
+      PLATINUM: true
+    byAbGroup:                    # Enable/disable by A/B testing group
+      A: true
+      B: true
+      experimental: true
+      default: true
+    byRoute:                      # Enable/disable by API route
+      ai-recommendations: true
+      legacy-recommendations: false
+    allowUserIds: []              # Always allow these user IDs (overrides other toggles)
+    denyUserIds: []               # Always deny these user IDs (highest priority)
+    
+  # Provider configurations
+  openai:
+    baseUrl: https://api.deepseek.com/v1
+    model: deepseek-chat
+    # SECURITY: Never hardcode API keys in configuration files!
+    # Set environment variable: export DEEPSEEK_API_KEY=your_actual_api_key
+    apiKeyEnv: DEEPSEEK_API_KEY
+    timeoutMs: 4500  # Increased for DeepSeek API response time
+    
+  # Async concurrency limits
+  asyncLimits:
+    globalConcurrency: 10         # Maximum concurrent async requests globally
+    perUserConcurrency: 2         # Maximum concurrent async requests per user  
+    acquireTimeoutMs: 100         # Timeout to acquire rate limit permit
+
+# Resilience4j configuration for LLM
+resilience4j:
+  ratelimiter:
+    instances:
+      llm-global:
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 0
+  retry:
+    instances:
+      llm-retry:
+        max-attempts: 2  # 1 retry
+        wait-duration: 150ms
     contact:
       name: CodeTop Team
       email: support@codetop.com
@@ -274,6 +657,10 @@ logging:
     com.codetop.logging: DEBUG
     com.codetop.controller: INFO
     com.codetop.service: INFO
+    com.codetop.recommendation: DEBUG
+    com.codetop.recommendation.provider: DEBUG
+    com.codetop.recommendation.provider.impl.OpenAiProvider: DEBUG
+    com.codetop.recommendation.chain.ProviderChain: DEBUG
     com.codetop.algorithm: DEBUG
     com.codetop.mapper: DEBUG
     org.springframework.security: WARN
@@ -290,11 +677,14 @@ spring:
   config:
     activate:
       on-profile: dev
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
   
   # Development MongoDB Configuration
   data:
     mongodb:
-      uri: mongodb://localhost:27017/codetop_notes_dev
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://root:root@localhost:27018/codetop_notes_dev?authSource=admin}
       auto-index-creation: true
 
 # Development CORS settings
@@ -312,6 +702,8 @@ app:
       refresh-name: REFRESH_TOKEN
       same-site: Lax
       secure: false
+    ai-recs-public: true
+    demo-user-id: 999999  # Demo user ID for anonymous access in dev environment
   cache:
     double-delete-delay-millis: 500
 
@@ -333,6 +725,10 @@ logging:
     com.codetop.fsrs: DEBUG
     org.springframework.web: DEBUG
 
+# Development LLM settings - enable for testing
+llm:
+  enabled: true  # Enable in dev for testing
+
 ---
 # Test Profile
 spring:
@@ -342,7 +738,7 @@ spring:
   
   datasource:
     druid:
-      url: jdbc:mysql://localhost:3306/codetop_fsrs_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      url: jdbc:mysql://localhost:3307/codetop_fsrs_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
   
   data:
     redis:
@@ -356,6 +752,10 @@ logging:
   level:
     root: WARN
     com.codetop.fsrs: INFO
+
+# Test LLM settings - disabled for testing stability  
+llm:
+  enabled: false  # Disable in test to focus on core functionality
 
 ---
 # Production Profile
@@ -435,6 +835,35 @@ jwt:
 logging:
   level:
     root: INFO
-    com.codetop.fsrs: INFO
+    com.codetop: INFO
+    org.springframework.web: WARN
+    com.baomidou.mybatisplus: INFO
+    org.apache.ibatis: WARN
+    org.redisson: INFO
+    com.alibaba.druid: WARN
   file:
     name: /var/log/codetop-fsrs-backend.log
+
+# Production LLM settings - must be explicitly enabled via environment
+# Production LLM settings - must be explicitly enabled via environment
+llm:
+  enabled: ${LLM_ENABLED:false}  # Must set LLM_ENABLED=true to enable
+  openai:
+    baseUrl: ${LLM_BASE_URL:https://api.deepseek.com/v1}
+    model: ${LLM_MODEL:deepseek-chat}
+    # SECURITY: Never hardcode API keys! Use environment variable instead:
+    # export DEEPSEEK_API_KEY=your_actual_api_key
+    apiKeyEnv: DEEPSEEK_API_KEY  # Environment variable name
+    timeoutMs: ${LLM_TIMEOUT:45000}
+
+# Harden actuator exposure in production
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    env:
+      enabled: false
+    loggers:
+      enabled: false

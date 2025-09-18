@@ -12,6 +12,16 @@ import com.codetop.enums.ReviewType;
 import com.codetop.enums.FSRSState;
 import com.codetop.service.cache.CacheService;
 import com.codetop.util.CacheHelper;
+import com.codetop.recommendation.config.LlmProperties;
+import com.codetop.recommendation.service.LlmToggleService;
+import com.codetop.recommendation.service.RecommendationStrategyResolver;
+import com.codetop.recommendation.service.RecommendationType;
+import com.codetop.recommendation.service.RecommendationStrategy;
+import com.codetop.recommendation.service.RequestContext;
+import com.codetop.recommendation.dto.AIRecommendationResponse;
+import com.codetop.recommendation.dto.RecommendationItemDTO;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -54,6 +64,17 @@ public class ProblemService {
     // 新增缓存相关依赖
     private final CacheService cacheService;
     private final CacheHelper cacheHelper;
+    
+    // AI 推荐相关依赖 (可选依赖)
+    @Autowired(required = false)
+    private RecommendationStrategyResolver recommendationStrategyResolver;
+    
+    // LLM Toggle Service for centralized feature control
+    @Autowired(required = false)
+    private LlmToggleService llmToggleService;
+    
+    @Autowired(required = false)
+    private LlmProperties llmProperties;
     
     // 缓存相关常量
     private static final String CACHE_PREFIX_PROBLEM_SINGLE = "problem-single";
@@ -784,7 +805,7 @@ public class ProblemService {
             // Determine status based on FSRS card state and metrics
             String status = determineStatusFromCard(card);
             Integer mastery = calculateMasteryLevel(card);
-            Double accuracy = calculateAccuracyFromFSRS(card);
+            Double accuracy = calculateMasteryFromFSRS(card);
             
             // Format dates for response
             String lastAttemptDate = card.getLastReview() != null ? 
@@ -801,7 +822,7 @@ public class ProblemService {
                     .lastAttemptDate(lastAttemptDate)
                     .lastConsideredDate(lastConsideredDate)
                     .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
-                    .accuracy(accuracy)
+                    .masteryScore(accuracy)
                     .notes(String.format("FSRS State: %s, Stability: %.1f days", 
                             card.getState().name(), card.getStabilityAsDouble()))
                     .build();
@@ -819,7 +840,7 @@ public class ProblemService {
                     .lastAttemptDate(null)
                     .lastConsideredDate(null)
                     .attemptCount(0)
-                    .accuracy(0.0)
+                    .masteryScore(0.0)
                     .notes("New problem - no attempts yet")
                     .build();
         }
@@ -873,14 +894,14 @@ public class ProblemService {
                                             .lastAttemptDate(null)
                                             .lastConsideredDate(null)
                                             .attemptCount(0)
-                                            .accuracy(0.0)
+                                            .masteryScore(0.0)
                                             .notes("")
                                             .build();
                                 } else {
                                     // User has a card for this problem - calculate status based on FSRS data
                                     String status = determineStatusFromFSRSCard(card);
                                     Integer mastery = calculateMasteryFromFSRSCard(card);
-                                    Double accuracy = calculateAccuracyFromFSRS(card);
+                                    Double accuracy = calculateMasteryFromFSRS(card);
                                     
                                     return UserProblemStatusDTO.builder()
                                             .problemId(problem.getId())
@@ -891,7 +912,7 @@ public class ProblemService {
                                             .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
                                             .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
                                             .attemptCount(card.getReviewCount())
-                                            .accuracy(accuracy)
+                                            .masteryScore(accuracy)
                                             .notes("")
                                             .build();
                                 }
@@ -934,9 +955,9 @@ public class ProblemService {
             FSRSCard card = reviewResult.getCard();
             
             // Calculate accuracy based on FSRS stability and difficulty
-            Double accuracy = calculateAccuracyFromFSRS(card);
+            Double accuracy = calculateMasteryFromFSRS(card);
             
-            log.info("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
+            log.debug("Updated problem {} status to {} for user {} with FSRS rating {} - next review: {}", 
                     problemId, request.getStatus(), userId, fsrsRating, reviewResult.getNextReviewTime());
             
             UserProblemStatusLegacyDTO result = UserProblemStatusLegacyDTO.builder()
@@ -949,7 +970,7 @@ public class ProblemService {
                     .lastConsideredDate(reviewResult.getNextReviewTime() != null ? 
                             reviewResult.getNextReviewTime().toString() : LocalDateTime.now().toString())
                     .attemptCount(card.getReviewCount())
-                    .accuracy(accuracy)
+                    .masteryScore(accuracy)
                     .notes(request.getNotes())
                     .build();
             
@@ -983,7 +1004,6 @@ public class ProblemService {
                     .lastAttemptDate(LocalDateTime.now().toString())
                     .lastConsideredDate(LocalDateTime.now().toString())
                     .attemptCount(1)
-                    .accuracy(0.0)
                     .notes(request.getNotes())
                     .build();
             
@@ -1040,7 +1060,7 @@ public class ProblemService {
                     Integer masteryLevel = calculateMasteryLevel(card);
                     
                     // Calculate accuracy from FSRS metrics
-                    Double accuracy = calculateAccuracyFromFSRS(card);
+                    Double accuracy = calculateMasteryFromFSRS(card);
                     
                     // Format dates for response
                     String lastAttemptDate = card.getLastReview() != null ? 
@@ -1052,7 +1072,7 @@ public class ProblemService {
                             .problemId(problemId)
                             .masteryLevel(masteryLevel)
                             .attemptCount(card.getReviewCount() != null ? card.getReviewCount() : 0)
-                            .accuracy(accuracy)
+                            .masteryScore(accuracy)
                             .lastAttemptDate(lastAttemptDate)
                             .nextReviewDate(nextReviewDate)
                             .difficulty(problem.getDifficulty().name())
@@ -1076,7 +1096,7 @@ public class ProblemService {
                             .problemId(problemId)
                             .masteryLevel(0)
                             .attemptCount(0)
-                            .accuracy(0.0)
+                            .masteryScore(0.0)
                             .lastAttemptDate(null)
                             .nextReviewDate(null)
                             .difficulty(problem.getDifficulty().name())
@@ -1179,9 +1199,91 @@ public class ProblemService {
     }
 
     /**
-     * Get recommended problems for user based on FSRS scheduling.
+     * Get recommended problems for user based on FSRS scheduling with optional AI enhancement.
      */
     public List<Problem> getRecommendedProblems(Long userId, int limit) {
+        return getRecommendedProblems(userId, limit, RecommendationType.AUTO);
+    }
+    
+    /**
+     * Check if AI recommendations are enabled using centralized toggle service
+     */
+    private boolean isAIRecommendationEnabled(Long userId) {
+        if (llmToggleService == null || llmProperties == null) {
+            return false; // Fallback to disabled if services not available
+        }
+        
+        try {
+            // Build request context for toggle evaluation
+            RequestContext ctx = new RequestContext();
+            ctx.setUserId(userId);
+            ctx.setTraceId(TraceContext.getTraceId());
+            
+            return llmToggleService.isEnabled(ctx, llmProperties);
+        } catch (Exception e) {
+            log.warn("Failed to check LLM toggle status for userId={}: {}", userId, e.getMessage());
+            return false; // Fail safe to disabled
+        }
+    }
+
+    /**
+     * Get recommended problems for user with specific recommendation type.
+     */
+    public List<Problem> getRecommendedProblems(Long userId, int limit, RecommendationType recommendationType) {
+        log.debug("Getting recommended problems for userId={}, limit={}, type={}", 
+                  userId, limit, recommendationType);
+        
+        // Check if AI recommendations are enabled and available using centralized toggle service
+        boolean useAI = isAIRecommendationEnabled(userId) && 
+                        recommendationStrategyResolver != null && 
+                        (recommendationType.requiresAI() || recommendationType == RecommendationType.AUTO);
+        
+        if (useAI) {
+            try {
+                // Use AI recommendation strategy
+                RecommendationStrategy strategy = recommendationStrategyResolver.resolveStrategy(
+                        recommendationType, userId, null);
+                
+                if (strategy != null && strategy.isAvailable()) {
+                    AIRecommendationResponse aiResponse = strategy.getRecommendations(
+                            userId, limit, null, null, null, null);
+                    
+                    if (aiResponse != null && 
+                        aiResponse.getItems() != null && 
+                        !aiResponse.getItems().isEmpty() && 
+                        (aiResponse.getMeta() == null || !aiResponse.getMeta().isBusy())) {
+                        
+                        // Convert AI recommendations to Problem objects
+                        List<Long> problemIds = aiResponse.getItems().stream()
+                                .map(RecommendationItemDTO::getProblemId)
+                                .toList();
+                        
+                        List<Problem> problems = problemIds.stream()
+                                .map(problemMapper::selectById)
+                                .filter(Objects::nonNull)
+                                .toList();
+                        
+                        if (!problems.isEmpty()) {
+                            log.debug("Successfully got {} AI-powered recommendations for userId={}", 
+                                      problems.size(), userId);
+                            return problems;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get AI recommendations for userId={}, falling back to FSRS: {}", 
+                         userId, e.getMessage());
+            }
+        }
+        
+        // Fallback to traditional FSRS recommendations
+        return getFsrsRecommendedProblems(userId, limit);
+    }
+    
+    /**
+     * Traditional FSRS-based recommendation logic (extracted for reuse).
+     */
+    private List<Problem> getFsrsRecommendedProblems(Long userId, int limit) {
         try {
             // Get FSRS review queue
             var reviewQueue = fsrsService.generateReviewQueue(userId, limit);
@@ -1206,7 +1308,7 @@ public class ProblemService {
                     .toList();
                     
         } catch (Exception e) {
-            log.error("Failed to get recommended problems for user {}: {}", userId, e.getMessage());
+            log.error("Failed to get FSRS recommended problems for user {}: {}", userId, e.getMessage());
             // Fallback to random problems
             return findProblemsForUser(userId, null, null)
                     .stream()
@@ -1260,11 +1362,11 @@ public class ProblemService {
         // For "done" status, we need to be more careful about rating assignment
         if (isDone) {
             return switch (mastery) {
-                case 0 -> 2;  // No mastery but done = Hard (attempted but struggled)
-                case 1 -> 2;  // Low mastery + done = Hard (attempted but struggled) 
+                case 0 -> 3;  // Adjusted: ensure NEW -> LEARNING on first completion
+                case 1 -> 3;  // Adjusted: treat low mastery completion as Good
                 case 2 -> 3;  // Medium mastery + done = Good
                 case 3 -> 4;  // High mastery + done = Easy
-                default -> 2; // Default to Hard for done status
+                default -> 3; // Default to Good for done status
             };
         }
         
@@ -1291,10 +1393,10 @@ public class ProblemService {
     }
 
     /**
-     * Calculate accuracy percentage based on FSRS stability and difficulty.
-     * Higher stability and lower difficulty indicate better accuracy.
+     * Calculate mastery percentage based on FSRS stability and difficulty.
+     * Higher stability and lower difficulty indicate better mastery.
      */
-    private Double calculateAccuracyFromFSRS(FSRSCard card) {
+    private Double calculateMasteryFromFSRS(FSRSCard card) {
         if (card == null) {
             return 0.0;
         }
@@ -1304,23 +1406,23 @@ public class ProblemService {
         int reviewCount = card.getReviewCount() != null ? card.getReviewCount() : 0;
         int lapses = card.getLapses() != null ? card.getLapses() : 0;
 
-        // Base accuracy from stability (higher stability = higher accuracy)
+        // Base mastery from stability (higher stability = higher mastery)
         double stabilityScore = Math.min(stability / 30.0, 1.0); // Normalize to 0-1, 30 days = 100%
         
-        // Difficulty penalty (higher difficulty = lower accuracy)
+        // Difficulty penalty (higher difficulty = lower mastery)
         double difficultyPenalty = Math.min(difficulty / 10.0, 0.5); // Max 50% penalty
         
-        // Review experience bonus (more reviews = slight accuracy boost)
+        // Review experience bonus (more reviews = slight mastery boost)
         double experienceBonus = Math.min(reviewCount * 0.02, 0.2); // Max 20% bonus
         
-        // Lapse penalty (more lapses = lower accuracy)  
+        // Lapse penalty (more lapses = lower mastery)  
         double lapsePenalty = Math.min(lapses * 0.1, 0.4); // Max 40% penalty
 
-        // Calculate final accuracy (0.3-1.0 range)
-        double accuracy = 0.3 + (stabilityScore * 0.7) - difficultyPenalty + experienceBonus - lapsePenalty;
+        // Calculate final mastery (0.3-1.0 range)
+        double mastery = 0.3 + (stabilityScore * 0.7) - difficultyPenalty + experienceBonus - lapsePenalty;
         
         // Ensure bounds [0.0, 1.0] and convert to percentage
-        return Math.max(0.0, Math.min(1.0, accuracy)) * 100.0;
+        return Math.max(0.0, Math.min(1.0, mastery)) * 100.0;
     }
 
     /**
@@ -1565,7 +1667,7 @@ public class ProblemService {
                         
                         String status = determineStatusFromFSRSCard(card);
                         Integer mastery = calculateMasteryFromFSRSCard(card);
-                        Double accuracy = calculateAccuracyFromFSRS(card);
+                        Double accuracy = calculateMasteryFromFSRS(card);
                         
                         return UserProblemStatusDTO.builder()
                                 .problemId(problem.getId())
@@ -1576,7 +1678,7 @@ public class ProblemService {
                                 .lastAttemptDate(card.getLastReview() != null ? card.getLastReview().toString() : null)
                                 .lastConsideredDate(card.getNextReview() != null ? card.getNextReview().toString() : null)
                                 .attemptCount(card.getReviewCount())
-                                .accuracy(accuracy)
+                                .masteryScore(accuracy)
                                 .notes("")
                                 .build();
                     })

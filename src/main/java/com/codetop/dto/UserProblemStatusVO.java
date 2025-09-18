@@ -27,6 +27,7 @@ public class UserProblemStatusVO {
     private String lastAttemptDate;
     private String lastConsideredDate;
     private Integer attemptCount;
-    private Double accuracy;
+    // FSRS 估算的掌握度（0-100）。为避免误解，推荐前端展示该字段为“掌握度”。
+    private Double masteryScore;
     private String notes;
 }

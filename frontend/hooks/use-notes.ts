@@ -10,7 +10,7 @@ import { toast } from '@/hooks/use-toast';
 /**
  * Hook for managing notes for a specific problem
  */
-export function useNotes(problemId: number | null) {
+export function useNotes(problemId: number | null, enabled: boolean = true) {
   const queryClient = useQueryClient();
   
   // Get user's note for the specific problem
@@ -22,7 +22,7 @@ export function useNotes(problemId: number | null) {
   } = useQuery({
     queryKey: ['user-note', problemId],
     queryFn: () => problemId ? notesAPI.getUserNote(problemId) : null,
-    enabled: !!problemId,
+    enabled: !!problemId && enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });

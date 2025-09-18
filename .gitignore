@@ -94,9 +94,10 @@ README-TESTING.md
 response.json
 api-test-results.json
 
-# Java test files (root level)
+# Java test files (avoid ignoring under src/test/java)
 Test*.java
 *Test*.java
+!src/test/java/**
 # Serena cache
 .serena/
 

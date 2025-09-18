@@ -160,8 +160,19 @@ public interface ProblemMapper extends BaseMapper<Problem> {
     /**
      * Find recently added problems.
      */
-    @Select("SELECT * FROM problems WHERE deleted = 0 ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("SELECT * FROM problems WHERE deleted = false ORDER BY created_at DESC LIMIT #{limit}")
     List<Problem> findRecentProblems(@Param("limit") int limit);
+
+    /**
+     * Minimal projection for recent problems to avoid schema differences in dev/H2.
+     */
+    @Select("SELECT id, title, difficulty FROM problems WHERE deleted = false ORDER BY id DESC LIMIT #{limit}")
+    @Results({
+            @Result(column = "id", property = "id"),
+            @Result(column = "title", property = "title"),
+            @Result(column = "difficulty", property = "difficulty")
+    })
+    List<Problem> findRecentProblemsMinimal(@Param("limit") int limit);
     
     // Company association queries
     
@@ -242,6 +253,57 @@ public interface ProblemMapper extends BaseMapper<Problem> {
         @Result(column = "usage_count", property = "usageCount")
     })
     List<TagUsage> getTagUsageStatistics();
+
+    /**
+     * Load tags for multiple problems efficiently (for CandidateBuilder).
+     * Returns minimal projection: id and parsed tags array.
+     */
+    @Select("""
+            <script>
+            SELECT id, tags
+            FROM problems 
+            WHERE id IN 
+            <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
+                #{problemId}
+            </foreach>
+            AND deleted = 0 AND tags IS NOT NULL
+            </script>
+            """)
+    @Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "tags", property = "tags")
+    })
+    List<ProblemTagsMinimal> findTagsByProblemIds(@Param("problemIds") List<Long> problemIds);
+
+    /**
+     * Find all problems that have non-null tags for bulk category population.
+     */
+    @Select("SELECT id, tags FROM problems WHERE deleted = 0 AND tags IS NOT NULL AND JSON_LENGTH(tags) > 0")
+    @Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "tags", property = "tags")
+    })
+    List<ProblemTagsMinimal> findAllProblemsWithTags();
+
+    /**
+     * Find difficulties for multiple problem IDs (lightweight query).
+     */
+    @Select("""
+            <script>
+            SELECT id, difficulty
+            FROM problems 
+            WHERE id IN 
+            <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
+                #{problemId}
+            </foreach>
+            AND deleted = 0
+            </script>
+            """)
+    @Results({
+        @Result(column = "id", property = "id"),
+        @Result(column = "difficulty", property = "difficulty")
+    })
+    List<ProblemDifficultyMinimal> findDifficultiesByIds(@Param("problemIds") List<Long> problemIds);
     
     // Helper classes for complex query results
     
@@ -269,5 +331,33 @@ public interface ProblemMapper extends BaseMapper<Problem> {
         public void setTag(String tag) { this.tag = tag; }
         public Integer getUsageCount() { return usageCount; }
         public void setUsageCount(Integer usageCount) { this.usageCount = usageCount; }
+    }
+
+    /**
+     * Helper class for minimal problem tags projection.
+     */
+    class ProblemTagsMinimal {
+        private Long id;
+        private String tags; // JSON string
+        
+        // Getters and setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getTags() { return tags; }
+        public void setTags(String tags) { this.tags = tags; }
+    }
+
+    /**
+     * Helper class for minimal problem difficulty projection.
+     */
+    class ProblemDifficultyMinimal {
+        private Long id;
+        private String difficulty;
+        
+        // Getters and setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getDifficulty() { return difficulty; }
+        public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
     }
 }
