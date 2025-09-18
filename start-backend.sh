@@ -90,7 +90,11 @@ export SPRING_DATA_MONGODB_URI=mongodb://root:root@localhost:27018/codetop_notes
 export LLM_ENABLED=true
 export LLM_BASE_URL=https://api.deepseek.com/v1
 export LLM_MODEL=deepseek-chat
-export DEEPSEEK_API_KEY=sk-a77b899053c8497f9d8b5320b5339969
+# DEEPSEEK_API_KEY should be set in .env.dev or environment
+# Example: export DEEPSEEK_API_KEY=your_actual_api_key_here
+if [ -z "$DEEPSEEK_API_KEY" ]; then
+    echo -e "${YELLOW}⚠️  DEEPSEEK_API_KEY not set, LLM features will be disabled${NC}"
+fi
 export DRUID_SECURITY_ENABLED=false
 export PROMETHEUS_ENABLED=true
 
